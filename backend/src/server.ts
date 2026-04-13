@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
+import { createApplication } from "@/configuration/bootstrap/application.js";
 import { initializeContainer } from "@/configuration/bootstrap/container.js";
-import { createApplication } from "@/configuration/bootstrap/routes.js";
 import { loadEnvironment } from "@/configuration/environment/index.js";
 import {
   connectDatabase,

@@ -1,8 +1,7 @@
-import { Hono } from "hono";
+import type { Hono } from "hono";
 import { getContainer } from "@/configuration/bootstrap/container.js";
 
-export function createApplication(): Hono {
-  const app = new Hono();
+export function mountRoutes(app: Hono): Hono {
   const { authController } = getContainer();
 
   app.get("/", (context) => {
