@@ -1,17 +1,33 @@
 import type { Context } from "hono";
 import { AuthService } from "@/features/auth/auth.service.js";
+import type {
+  LocalAuthenticateRequest,
+  LocalSignupRequest,
+} from "@/features/auth/auth.model.js";
 
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   localAuthenticate = async (context: Context): Promise<Response> => {
-    const result = await this.authService.localAuthenticate();
-    return context.json(result);
+    try {
+      const input = (await context.req.json()) as LocalAuthenticateRequest;
+      const result = await this.authService.localAuthenticate(input);
+
+      return context.json(result);
+    } catch (error) {
+      return this.handleAuthError(context, error);
+    }
   };
 
   localSignup = async (context: Context): Promise<Response> => {
-    const result = await this.authService.localSignup();
-    return context.json(result);
+    try {
+      const input = (await context.req.json()) as LocalSignupRequest;
+      const result = await this.authService.localSignup(input);
+
+      return context.json(result, 201);
+    } catch (error) {
+      return this.handleAuthError(context, error);
+    }
   };
 
   localVerify = async (context: Context): Promise<Response> => {
@@ -53,4 +69,21 @@ export class AuthController {
     const result = await this.authService.devices();
     return context.json(result);
   };
+
+  private handleAuthError(context: Context, error: unknown): Response {
+    const message = error instanceof Error ? error.message : "Authentication request failed.";
+    const status =
+      message === "Invalid email or password."
+        ? 401
+        : message === "An account with this email already exists."
+          ? 409
+          : 400;
+
+    return context.json(
+      {
+        error: message,
+      },
+      status,
+    );
+  }
 }

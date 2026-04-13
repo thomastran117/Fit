@@ -1,6 +1,7 @@
 import { AuthController } from "@/features/auth/auth.controller.js";
 import { AuthRepository } from "@/features/auth/auth.repository.js";
 import { AuthService } from "@/features/auth/auth.service.js";
+import { getDatabaseClient } from "@/configuration/resources/database.js";
 import { TokenService } from "@/features/auth/token/token.service.js";
 import { CacheService } from "@/features/cache/cache.service.js";
 
@@ -19,7 +20,7 @@ function createContainer(): ApplicationContainer {
   const tokenService = new TokenService({
     cache: cacheService,
   });
-  const authRepository = new AuthRepository();
+  const authRepository = new AuthRepository(getDatabaseClient());
   const authService = AuthService.create({
     authRepository,
     tokenService,

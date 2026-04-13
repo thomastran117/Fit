@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json",
+    "migration:run": "tsx src/app/configuration/migrations/run-migrations.ts",
     "start": "node dist/server.js",
     "check": "tsc --noEmit --project tsconfig.json"
   },

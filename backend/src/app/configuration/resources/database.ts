@@ -1,9 +1,9 @@
 import { DataSource } from "typeorm";
 
-const DEFAULT_ENTITY_GLOBS = ["src/**/*.entity.ts", "dist/**/*.entity.js"];
+const DEFAULT_ENTITY_GLOBS = ["src/app/**/*.entity.ts", "dist/app/**/*.entity.js"];
 const DEFAULT_MIGRATION_GLOBS = [
-  "src/configuration/migrations/*.{ts,js}",
-  "dist/configuration/migrations/*.{ts,js}",
+  "src/app/configuration/migrations/*.{ts,js}",
+  "dist/app/configuration/migrations/*.{ts,js}",
 ];
 
 function readNumber(name: string, fallback: number): number {

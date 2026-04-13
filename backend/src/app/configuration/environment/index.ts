@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 import { fileURLToPath } from "node:url";
 
-const envFilePath = fileURLToPath(new URL("../../../.env", import.meta.url));
+const envFilePath = fileURLToPath(new URL("../../../../.env", import.meta.url));
 
 let isEnvironmentLoaded = false;
 
