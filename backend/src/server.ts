@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
 import { initializeContainer } from "@/configuration/bootstrap/container.js";
+import { createApplication } from "@/configuration/bootstrap/routes.js";
 import { loadEnvironment } from "@/configuration/environment/index.js";
 import {
   connectDatabase,
@@ -11,21 +11,6 @@ import {
   disconnectRedis,
 } from "@/configuration/resources/redis.js";
 
-const app = new Hono();
-
-app.get("/", (context) => {
-  return context.json({
-    message: "TypeScript Hono server is running",
-  });
-});
-
-app.get("/health", (context) => {
-  return context.json({
-    ok: true,
-    uptime: process.uptime(),
-  });
-});
-
 async function bootstrap(): Promise<void> {
   loadEnvironment();
 
@@ -34,6 +19,7 @@ async function bootstrap(): Promise<void> {
   await connectDatabase();
   await connectRedis();
   initializeContainer();
+  const app = createApplication();
 
   const server = serve(
     {
