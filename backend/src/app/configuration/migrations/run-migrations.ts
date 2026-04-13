@@ -1,5 +1,5 @@
-import { loadEnvironment } from "../environment/index.js";
-import { connectDatabase, disconnectDatabase } from "../resources/database.js";
+import { loadEnvironment } from "../environment/index";
+import { connectDatabase, disconnectDatabase } from "../resources/database";
 
 async function run(): Promise<void> {
   loadEnvironment();

@@ -1,6 +1,6 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { AuthRepository } from "@/features/auth/auth.repository.js";
+import { AuthRepository } from "@/features/auth/auth.repository";
 import {
   type AuthSessionRecord,
   type AuthTokenPairResponse,
@@ -8,8 +8,8 @@ import {
   type AuthUserRecord,
   type LocalAuthenticateRequest,
   type LocalSignupRequest,
-} from "@/features/auth/auth.model.js";
-import { TokenService } from "@/features/auth/token/token.service.js";
+} from "@/features/auth/auth.model";
+import { TokenService } from "@/features/auth/token/token.service";
 
 interface AuthServiceOptions {
   authRepository: AuthRepository;

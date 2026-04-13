@@ -1,4 +1,8 @@
 import { DataSource } from "typeorm";
+import {
+  databaseEntities,
+  databaseMigrations,
+} from "@/configuration/resources/database-artifacts";
 
 const DEFAULT_ENTITY_GLOBS = ["src/app/**/*.entity.ts", "dist/app/**/*.entity.js"];
 const DEFAULT_MIGRATION_GLOBS = [
@@ -43,8 +47,8 @@ function createDatabaseClient(): DataSource {
     username: process.env.DB_USERNAME ?? "root",
     password: process.env.DB_PASSWORD ?? "",
     database: process.env.DB_NAME ?? "fit",
-    entities: process.env.DB_ENTITIES?.split(",") ?? DEFAULT_ENTITY_GLOBS,
-    migrations: process.env.DB_MIGRATIONS?.split(",") ?? DEFAULT_MIGRATION_GLOBS,
+    entities: databaseEntities,
+    migrations: databaseMigrations,
     synchronize: readBoolean("DB_SYNCHRONIZE", false),
     logging: readBoolean("DB_LOGGING", false),
     charset: process.env.DB_CHARSET ?? "utf8mb4_unicode_ci",

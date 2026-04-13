@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { cacheService, type CacheService } from "@/features/cache/cache.service.js";
+import { cacheService, type CacheService } from "@/features/cache/cache.service";
 
 type RefreshTokenMode = "stateless" | "stateful";
 

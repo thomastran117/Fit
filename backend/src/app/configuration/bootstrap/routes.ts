@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { getContainer } from "@/configuration/bootstrap/container.js";
+import { getContainer } from "@/configuration/bootstrap/container";
 
 export function mountRoutes(app: Hono): Hono {
   const { authController } = getContainer();

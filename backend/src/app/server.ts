@@ -1,15 +1,15 @@
 import { serve } from "@hono/node-server";
-import { createApplication } from "@/configuration/bootstrap/application.js";
-import { initializeContainer } from "@/configuration/bootstrap/container.js";
-import { loadEnvironment } from "@/configuration/environment/index.js";
+import { createApplication } from "@/configuration/bootstrap/application";
+import { initializeContainer } from "@/configuration/bootstrap/container";
+import { loadEnvironment } from "@/configuration/environment/index";
 import {
   connectDatabase,
   disconnectDatabase,
-} from "@/configuration/resources/database.js";
+} from "@/configuration/resources/database";
 import {
   connectRedis,
   disconnectRedis,
-} from "@/configuration/resources/redis.js";
+} from "@/configuration/resources/redis";
 
 async function bootstrap(): Promise<void> {
   loadEnvironment();

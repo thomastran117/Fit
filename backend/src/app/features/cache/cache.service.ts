@@ -1,4 +1,4 @@
-import { getRedisClient, type redisClient } from "@/configuration/resources/redis.js";
+import { getRedisClient, type redisClient } from "@/configuration/resources/redis";
 
 type RedisClient = NonNullable<typeof redisClient>;
 

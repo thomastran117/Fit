@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { mountRoutes } from "@/configuration/bootstrap/routes.js";
+import { mountRoutes } from "@/configuration/bootstrap/routes";
 
 export function createApplication(): Hono {
   const app = new Hono();

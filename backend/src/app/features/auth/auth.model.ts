@@ -1,16 +1,24 @@
-export interface LocalSignupRequest {
-  email: string;
-  password: string;
-  firstName?: string;
-  lastName?: string;
-  deviceId?: string;
-}
+import { z } from "zod";
 
-export interface LocalAuthenticateRequest {
-  email: string;
-  password: string;
-  deviceId?: string;
-}
+const optionalTrimmedString = z.string().trim().min(1).optional();
+
+export const localSignupRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(8, "Password must be at least 8 characters long."),
+  firstName: optionalTrimmedString,
+  lastName: optionalTrimmedString,
+  deviceId: optionalTrimmedString,
+});
+
+export const localAuthenticateRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(1, "Password is required."),
+  deviceId: optionalTrimmedString,
+});
+
+export type LocalSignupRequest = z.infer<typeof localSignupRequestSchema>;
+
+export type LocalAuthenticateRequest = z.infer<typeof localAuthenticateRequestSchema>;
 
 export interface AuthUserRecord {
   id: string;

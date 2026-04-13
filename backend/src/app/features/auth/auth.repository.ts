@@ -3,12 +3,12 @@ import type { DataSource, Repository } from "typeorm";
 import {
   type AuthUserEntity,
   AuthUserEntitySchema,
-} from "@/features/auth/auth-user.entity.js";
+} from "@/features/auth/auth-user.entity";
 import {
   type AuthSessionRecord,
   type AuthUserRecord,
   type LocalSignupRequest,
-} from "@/features/auth/auth.model.js";
+} from "@/features/auth/auth.model";
 
 export class AuthRepository {
   private readonly userRepository: Repository<AuthUserEntity>;

@@ -1,16 +1,24 @@
 import type { Context } from "hono";
-import { AuthService } from "@/features/auth/auth.service.js";
+import {
+  parseRequestBody,
+  RequestValidationError,
+} from "@/configuration/validation/request";
+import { AuthService } from "@/features/auth/auth.service";
 import type {
   LocalAuthenticateRequest,
   LocalSignupRequest,
-} from "@/features/auth/auth.model.js";
+} from "@/features/auth/auth.model";
+import {
+  localAuthenticateRequestSchema,
+  localSignupRequestSchema,
+} from "@/features/auth/auth.model";
 
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   localAuthenticate = async (context: Context): Promise<Response> => {
     try {
-      const input = (await context.req.json()) as LocalAuthenticateRequest;
+      const input = await parseRequestBody(context, localAuthenticateRequestSchema);
       const result = await this.authService.localAuthenticate(input);
 
       return context.json(result);
@@ -21,7 +29,7 @@ export class AuthController {
 
   localSignup = async (context: Context): Promise<Response> => {
     try {
-      const input = (await context.req.json()) as LocalSignupRequest;
+      const input = await parseRequestBody(context, localSignupRequestSchema);
       const result = await this.authService.localSignup(input);
 
       return context.json(result, 201);
@@ -71,6 +79,16 @@ export class AuthController {
   };
 
   private handleAuthError(context: Context, error: unknown): Response {
+    if (error instanceof RequestValidationError) {
+      return context.json(
+        {
+          error: error.message,
+          details: error.details,
+        },
+        400,
+      );
+    }
+
     const message = error instanceof Error ? error.message : "Authentication request failed.";
     const status =
       message === "Invalid email or password."

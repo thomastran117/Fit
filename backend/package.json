@@ -7,8 +7,8 @@
   "type": "module",
   "main": "./dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json",
+    "dev": "tsx watch src/app/server.ts",
+    "build": "tsup src/app/server.ts --format esm --platform node --target node22 --out-dir dist --clean",
     "migration:run": "tsx src/app/configuration/migrations/run-migrations.ts",
     "start": "node dist/server.js",
     "check": "tsc --noEmit --project tsconfig.json"
@@ -22,11 +22,12 @@
     "hono": "^4.9.8",
     "mysql2": "^3.15.2",
     "redis": "^5.8.2",
-    "typeorm": "^0.3.27"
+    "typeorm": "^0.3.27",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
-    "tsc-alias": "^1.8.16",
+    "tsup": "^8.5.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"
   }

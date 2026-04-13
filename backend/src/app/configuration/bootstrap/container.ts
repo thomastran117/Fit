@@ -1,9 +1,9 @@
-import { AuthController } from "@/features/auth/auth.controller.js";
-import { AuthRepository } from "@/features/auth/auth.repository.js";
-import { AuthService } from "@/features/auth/auth.service.js";
-import { getDatabaseClient } from "@/configuration/resources/database.js";
-import { TokenService } from "@/features/auth/token/token.service.js";
-import { CacheService } from "@/features/cache/cache.service.js";
+import { getDatabaseClient } from "@/configuration/resources/database";
+import { AuthController } from "@/features/auth/auth.controller";
+import { AuthRepository } from "@/features/auth/auth.repository";
+import { AuthService } from "@/features/auth/auth.service";
+import { TokenService } from "@/features/auth/token/token.service";
+import { CacheService } from "@/features/cache/cache.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
