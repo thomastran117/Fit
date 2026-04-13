@@ -1,77 +1,25 @@
-import { DataSource } from "typeorm";
-import {
-  databaseEntities,
-  databaseMigrations,
-} from "@/configuration/resources/database-artifacts";
+import { PrismaClient } from "@prisma/client";
 
-const DEFAULT_ENTITY_GLOBS = ["src/app/**/*.entity.ts", "dist/app/**/*.entity.js"];
-const DEFAULT_MIGRATION_GLOBS = [
-  "src/app/configuration/migrations/*.{ts,js}",
-  "dist/app/configuration/migrations/*.{ts,js}",
-];
+let database: PrismaClient | null = null;
 
-function readNumber(name: string, fallback: number): number {
-  const value = process.env[name];
-
-  if (!value) {
-    return fallback;
-  }
-
-  const parsedValue = Number(value);
-
-  if (Number.isNaN(parsedValue)) {
-    throw new Error(`${name} must be a valid number.`);
-  }
-
-  return parsedValue;
+function createDatabaseClient(): PrismaClient {
+  return new PrismaClient();
 }
 
-function readBoolean(name: string, fallback: boolean): boolean {
-  const value = process.env[name];
+export let databaseClient: PrismaClient | null = null;
 
-  if (!value) {
-    return fallback;
-  }
-
-  return value === "true";
-}
-
-let database: DataSource | null = null;
-
-function createDatabaseClient(): DataSource {
-  return new DataSource({
-    type: "mysql",
-    url: process.env.DATABASE_URL,
-    host: process.env.DB_HOST ?? "localhost",
-    port: readNumber("DB_PORT", 3306),
-    username: process.env.DB_USERNAME ?? "root",
-    password: process.env.DB_PASSWORD ?? "",
-    database: process.env.DB_NAME ?? "fit",
-    entities: databaseEntities,
-    migrations: databaseMigrations,
-    synchronize: readBoolean("DB_SYNCHRONIZE", false),
-    logging: readBoolean("DB_LOGGING", false),
-    charset: process.env.DB_CHARSET ?? "utf8mb4_unicode_ci",
-  });
-}
-
-export let databaseClient: DataSource | null = null;
-
-export async function connectDatabase(): Promise<DataSource> {
+export async function connectDatabase(): Promise<PrismaClient> {
   if (!database) {
     database = createDatabaseClient();
     databaseClient = database;
   }
 
-  if (database.isInitialized) {
-    return database;
-  }
-
-  return database.initialize();
+  await database.$connect();
+  return database;
 }
 
-export function getDatabaseClient(): DataSource {
-  if (!database || !database.isInitialized) {
+export function getDatabaseClient(): PrismaClient {
+  if (!database) {
     throw new Error("Database has not been initialized. Call connectDatabase() first.");
   }
 
@@ -79,9 +27,9 @@ export function getDatabaseClient(): DataSource {
 }
 
 export async function disconnectDatabase(): Promise<void> {
-  if (!database || !database.isInitialized) {
+  if (!database) {
     return;
   }
 
-  await database.destroy();
+  await database.$disconnect();
 }

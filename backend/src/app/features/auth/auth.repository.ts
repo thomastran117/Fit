@@ -1,24 +1,28 @@
 import { randomUUID } from "node:crypto";
-import type { DataSource, Repository } from "typeorm";
-import {
-  type AuthUserEntity,
-  AuthUserEntitySchema,
-} from "@/features/auth/auth-user.entity";
+import type { PrismaClient } from "@prisma/client";
 import {
   type AuthSessionRecord,
   type AuthUserRecord,
   type LocalSignupRequest,
 } from "@/features/auth/auth.model";
 
-export class AuthRepository {
-  private readonly userRepository: Repository<AuthUserEntity>;
+type AuthUserPersistence = {
+  id: string;
+  email: string;
+  passwordHash: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  emailVerified: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
-  constructor(private readonly database: DataSource) {
-    this.userRepository = this.database.getRepository(AuthUserEntitySchema);
-  }
+export class AuthRepository {
+  constructor(private readonly database: PrismaClient) {}
 
   async findUserByEmail(email: string): Promise<AuthUserRecord | null> {
-    const user = await this.userRepository.findOne({
+    const user = await this.database.authUser.findUnique({
       where: {
         email: email.toLowerCase(),
       },
@@ -28,26 +32,26 @@ export class AuthRepository {
       return null;
     }
 
-    return this.mapUserEntity(user);
+    return this.mapUser(user);
   }
 
   async createLocalUser(
     input: LocalSignupRequest,
     passwordHash: string,
   ): Promise<AuthUserRecord> {
-    const user = this.userRepository.create({
-      id: randomUUID(),
-      email: input.email.toLowerCase(),
-      passwordHash,
-      firstName: input.firstName ?? null,
-      lastName: input.lastName ?? null,
-      role: "user",
-      emailVerified: false,
+    const user = await this.database.authUser.create({
+      data: {
+        id: randomUUID(),
+        email: input.email.toLowerCase(),
+        passwordHash,
+        firstName: input.firstName ?? null,
+        lastName: input.lastName ?? null,
+        role: "user",
+        emailVerified: false,
+      },
     });
 
-    const savedUser = await this.userRepository.save(user);
-
-    return this.mapUserEntity(savedUser);
+    return this.mapUser(user);
   }
 
   async createSession(user: AuthUserRecord, deviceId?: string): Promise<AuthSessionRecord> {
@@ -60,7 +64,7 @@ export class AuthRepository {
     };
   }
 
-  private mapUserEntity(user: AuthUserEntity): AuthUserRecord {
+  private mapUser(user: AuthUserPersistence): AuthUserRecord {
     return {
       id: user.id,
       email: user.email,
