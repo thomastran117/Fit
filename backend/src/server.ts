@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { initializeContainer } from "@/configuration/bootstrap/container.js";
 import { loadEnvironment } from "@/configuration/environment/index.js";
 import {
   connectDatabase,
@@ -32,6 +33,7 @@ async function bootstrap(): Promise<void> {
 
   await connectDatabase();
   await connectRedis();
+  initializeContainer();
 
   const server = serve(
     {
