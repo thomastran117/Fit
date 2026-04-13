@@ -20,7 +20,7 @@ export interface RefreshTokenPayload {
   [key: string]: string | number | boolean | null | undefined;
 }
 
-interface JwtClaims extends AccessTokenPayload {
+export interface JwtClaims extends AccessTokenPayload {
   iat: number;
   exp: number;
   iss?: string;

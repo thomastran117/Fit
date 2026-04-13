@@ -1,5 +1,6 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import {
   type AuthSessionRecord,
@@ -9,11 +10,16 @@ import {
   type LocalAuthenticateRequest,
   type LocalSignupRequest,
 } from "@/features/auth/auth.model";
-import { TokenService } from "@/features/auth/token/token.service";
+import { TokenService, type JwtClaims } from "@/features/auth/token/token.service";
 
 interface AuthServiceOptions {
   authRepository: AuthRepository;
   tokenService: TokenService;
+}
+
+interface AuthRequestContext {
+  auth: JwtClaims;
+  client: ClientRequestContext;
 }
 
 const scrypt = promisify(scryptCallback);
@@ -66,9 +72,25 @@ export class AuthService {
     return this.issueTokensForUser(user, input.deviceId);
   }
 
-  async localVerify(): Promise<{ verified: true }> {
+  async localVerify(context: AuthRequestContext): Promise<{
+    verified: true;
+    session: {
+      userId: string;
+      sessionId?: string;
+      deviceId?: string;
+      role?: string;
+    };
+    client: ClientRequestContext;
+  }> {
     return {
       verified: true,
+      session: {
+        userId: context.auth.sub,
+        sessionId: context.auth.sessionId,
+        deviceId: context.auth.deviceId,
+        role: context.auth.role,
+      },
+      client: context.client,
     };
   }
 
@@ -90,21 +112,63 @@ export class AuthService {
     };
   }
 
-  async logout(): Promise<{ loggedOut: true }> {
+  async logout(context: AuthRequestContext): Promise<{
+    loggedOut: true;
+    session: {
+      userId: string;
+      sessionId?: string;
+    };
+    client: ClientRequestContext;
+  }> {
     return {
       loggedOut: true,
+      session: {
+        userId: context.auth.sub,
+        sessionId: context.auth.sessionId,
+      },
+      client: context.client,
     };
   }
 
-  async deviceVerify(): Promise<{ verified: true }> {
+  async deviceVerify(context: AuthRequestContext): Promise<{
+    verified: true;
+    device: ClientRequestContext["device"];
+    session: {
+      userId: string;
+      sessionId?: string;
+      tokenDeviceId?: string;
+    };
+  }> {
     return {
       verified: true,
+      device: context.client.device,
+      session: {
+        userId: context.auth.sub,
+        sessionId: context.auth.sessionId,
+        tokenDeviceId: context.auth.deviceId,
+      },
     };
   }
 
-  async devices(): Promise<{ devices: never[] }> {
+  async devices(context: AuthRequestContext): Promise<{
+    devices: Array<{
+      current: true;
+      sessionId?: string;
+      tokenDeviceId?: string;
+      detectedDevice: ClientRequestContext["device"];
+      ip?: string;
+    }>;
+  }> {
     return {
-      devices: [],
+      devices: [
+        {
+          current: true,
+          sessionId: context.auth.sessionId,
+          tokenDeviceId: context.auth.deviceId,
+          detectedDevice: context.client.device,
+          ip: context.client.ip,
+        },
+      ],
     };
   }
 

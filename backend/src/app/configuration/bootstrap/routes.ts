@@ -1,8 +1,17 @@
 import type { Hono } from "hono";
+import type { AppBindings } from "@/configuration/http/bindings";
 import { getContainer } from "@/configuration/bootstrap/container";
+import { clientSignatureMiddleware } from "@/configuration/http/middleware/client-signature";
+import { jwtMiddleware } from "@/configuration/http/middleware/jwt";
 
-export function mountRoutes(app: Hono): Hono {
+export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   const { authController } = getContainer();
+
+  app.use("/auth/*", clientSignatureMiddleware);
+  app.use("/auth/local/verify", jwtMiddleware);
+  app.use("/auth/logout", jwtMiddleware);
+  app.use("/auth/device/verify", jwtMiddleware);
+  app.use("/auth/devices", jwtMiddleware);
 
   app.get("/", (context) => {
     return context.json({

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import { BaseRepository } from "@/features/base/base.repository";
 import {
   type AuthSessionRecord,
   type AuthUserRecord,
@@ -18,15 +18,15 @@ type AuthUserPersistence = {
   updatedAt: Date;
 };
 
-export class AuthRepository {
-  constructor(private readonly database: PrismaClient) {}
-
+export class AuthRepository extends BaseRepository {
   async findUserByEmail(email: string): Promise<AuthUserRecord | null> {
-    const user = await this.database.authUser.findUnique({
-      where: {
-        email: email.toLowerCase(),
-      },
-    });
+    const user = await this.executeAsync(() =>
+      this.prisma.user.findUnique({
+        where: {
+          email: email.toLowerCase(),
+        },
+      }),
+    );
 
     if (!user) {
       return null;
@@ -39,17 +39,19 @@ export class AuthRepository {
     input: LocalSignupRequest,
     passwordHash: string,
   ): Promise<AuthUserRecord> {
-    const user = await this.database.authUser.create({
-      data: {
-        id: randomUUID(),
-        email: input.email.toLowerCase(),
-        passwordHash,
-        firstName: input.firstName ?? null,
-        lastName: input.lastName ?? null,
-        role: "user",
-        emailVerified: false,
-      },
-    });
+    const user = await this.executeAsync(() =>
+      this.prisma.user.create({
+        data: {
+          id: randomUUID(),
+          email: input.email.toLowerCase(),
+          passwordHash,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
+          role: "user",
+          emailVerified: false,
+        },
+      }),
+    );
 
     return this.mapUser(user);
   }

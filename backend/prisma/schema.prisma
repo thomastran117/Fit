@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model AuthUser {
+model User {
   id            String   @id @db.VarChar(36)
   email         String   @unique @db.VarChar(255)
   passwordHash  String   @map("password_hash") @db.VarChar(255)
@@ -18,13 +18,5 @@ model AuthUser {
   createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(6)
 
-  @@map("auth_users")
-}
-
-model LegacyMigration {
-  id        Int    @id @default(autoincrement())
-  timestamp BigInt
-  name      String @db.VarChar(255)
-
-  @@map("migrations")
+  @@map("users")
 }
