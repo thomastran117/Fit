@@ -1,4 +1,6 @@
-import { createClient, type RedisClientType } from "redis";
+import { createClient } from "redis";
+
+type RedisClient = ReturnType<typeof createClient>;
 
 function readNumber(name: string, fallback: number): number {
   const value = process.env[name];
@@ -32,21 +34,32 @@ function buildRedisUrl(): string {
   return `redis://${host}:${port}`;
 }
 
-export const redis: RedisClientType = createClient({
-  url: buildRedisUrl(),
-  database: readNumber("REDIS_DB", 0),
-  socket: {
-    connectTimeout: readNumber("REDIS_CONNECT_TIMEOUT_MS", 10_000),
-  },
-});
+let redis: RedisClient | null = null;
 
-export const redisClient = redis;
+function createRedisClient(): RedisClient {
+  const client = createClient({
+    url: buildRedisUrl(),
+    database: readNumber("REDIS_DB", 0),
+    socket: {
+      connectTimeout: readNumber("REDIS_CONNECT_TIMEOUT_MS", 10_000),
+    },
+  });
 
-redis.on("error", (error: unknown) => {
-  console.error("Redis client error", error);
-});
+  client.on("error", (error: unknown) => {
+    console.error("Redis client error", error);
+  });
 
-export async function connectRedis(): Promise<RedisClientType> {
+  return client;
+}
+
+export let redisClient: RedisClient | null = null;
+
+export async function connectRedis(): Promise<RedisClient> {
+  if (!redis) {
+    redis = createRedisClient();
+    redisClient = redis;
+  }
+
   if (redis.isOpen) {
     return redis;
   }
@@ -55,8 +68,8 @@ export async function connectRedis(): Promise<RedisClientType> {
   return redis;
 }
 
-export function getRedisClient(): RedisClientType {
-  if (!redis.isOpen) {
+export function getRedisClient(): RedisClient {
+  if (!redis || !redis.isOpen) {
     throw new Error("Redis has not been initialized. Call connectRedis() first.");
   }
 
@@ -64,7 +77,7 @@ export function getRedisClient(): RedisClientType {
 }
 
 export async function disconnectRedis(): Promise<void> {
-  if (!redis.isOpen) {
+  if (!redis || !redis.isOpen) {
     return;
   }
 

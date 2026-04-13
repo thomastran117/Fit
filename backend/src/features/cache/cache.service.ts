@@ -1,16 +1,20 @@
 import { getRedisClient, type redisClient } from "@/configuration/resources/redis.js";
 
-type RedisClient = typeof redisClient;
+type RedisClient = NonNullable<typeof redisClient>;
 
 export class CacheService {
-  private readonly client: RedisClient;
+  private readonly client?: RedisClient;
 
-  constructor(client: RedisClient = getRedisClient()) {
+  constructor(client?: RedisClient) {
     this.client = client;
   }
 
+  private getClient(): RedisClient {
+    return this.client ?? getRedisClient();
+  }
+
   async get(key: string): Promise<string | null> {
-    return this.client.get(key);
+    return this.getClient().get(key);
   }
 
   async getJson<T>(key: string): Promise<T | null> {
@@ -25,11 +29,11 @@ export class CacheService {
 
   async set(key: string, value: string, ttlInSeconds?: number): Promise<void> {
     if (ttlInSeconds === undefined) {
-      await this.client.set(key, value);
+      await this.getClient().set(key, value);
       return;
     }
 
-    await this.client.set(key, value, {
+    await this.getClient().set(key, value, {
       EX: ttlInSeconds,
     });
   }
@@ -39,22 +43,22 @@ export class CacheService {
   }
 
   async delete(key: string): Promise<boolean> {
-    const deletedCount = await this.client.del(key);
+    const deletedCount = await this.getClient().del(key);
     return deletedCount > 0;
   }
 
   async exists(key: string): Promise<boolean> {
-    const exists = await this.client.exists(key);
+    const exists = await this.getClient().exists(key);
     return exists === 1;
   }
 
   async expire(key: string, ttlInSeconds: number): Promise<boolean> {
-    const wasUpdated = await this.client.expire(key, ttlInSeconds);
+    const wasUpdated = await this.getClient().expire(key, ttlInSeconds);
     return wasUpdated === 1;
   }
 
   async ttl(key: string): Promise<number> {
-    return this.client.ttl(key);
+    return this.getClient().ttl(key);
   }
 }
 

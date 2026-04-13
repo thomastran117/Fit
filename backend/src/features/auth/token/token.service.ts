@@ -98,27 +98,25 @@ function safeEquals(left: string, right: string): boolean {
 
 export class TokenService {
   private readonly cache: CacheService;
-  private readonly accessTokenSecret: string;
-  private readonly refreshTokenSecret: string;
-  private readonly accessTokenTtlSeconds: number;
-  private readonly refreshTokenTtlSeconds: number;
+  private readonly accessTokenSecret?: string;
+  private readonly refreshTokenSecret?: string;
+  private readonly accessTokenTtlSeconds?: number;
+  private readonly refreshTokenTtlSeconds?: number;
   private readonly issuer?: string;
   private readonly audience?: string;
-  private readonly refreshTokenMode: RefreshTokenMode;
-  private readonly refreshTokenCachePrefix: string;
+  private readonly refreshTokenMode?: RefreshTokenMode;
+  private readonly refreshTokenCachePrefix?: string;
 
   constructor(options: TokenServiceOptions = {}) {
     this.cache = options.cache ?? cacheService;
-    this.accessTokenSecret = options.accessTokenSecret ?? readRequiredSecret("ACCESS_TOKEN_SECRET", "development-access-secret");
-    this.refreshTokenSecret = options.refreshTokenSecret ?? readRequiredSecret("REFRESH_TOKEN_SECRET", "development-refresh-secret");
-    this.accessTokenTtlSeconds = options.accessTokenTtlSeconds ?? readNumber("ACCESS_TOKEN_TTL_SECONDS", 15 * 60);
-    this.refreshTokenTtlSeconds = options.refreshTokenTtlSeconds ?? readNumber("REFRESH_TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60);
-    this.issuer = options.issuer ?? process.env.TOKEN_ISSUER;
-    this.audience = options.audience ?? process.env.TOKEN_AUDIENCE;
-    this.refreshTokenMode =
-      options.refreshTokenMode ??
-      ((process.env.REFRESH_TOKEN_MODE as RefreshTokenMode | undefined) ?? "stateless");
-    this.refreshTokenCachePrefix = options.refreshTokenCachePrefix ?? process.env.REFRESH_TOKEN_CACHE_PREFIX ?? "auth:refresh";
+    this.accessTokenSecret = options.accessTokenSecret;
+    this.refreshTokenSecret = options.refreshTokenSecret;
+    this.accessTokenTtlSeconds = options.accessTokenTtlSeconds;
+    this.refreshTokenTtlSeconds = options.refreshTokenTtlSeconds;
+    this.issuer = options.issuer;
+    this.audience = options.audience;
+    this.refreshTokenMode = options.refreshTokenMode;
+    this.refreshTokenCachePrefix = options.refreshTokenCachePrefix;
   }
 
   createAccessToken(payload: AccessTokenPayload): string {
@@ -126,9 +124,9 @@ export class TokenService {
     const claims: JwtClaims = {
       ...payload,
       iat: now,
-      exp: now + this.accessTokenTtlSeconds,
-      ...(this.issuer ? { iss: this.issuer } : {}),
-      ...(this.audience ? { aud: this.audience } : {}),
+      exp: now + this.getAccessTokenTtlSeconds(),
+      ...(this.getIssuer() ? { iss: this.getIssuer() } : {}),
+      ...(this.getAudience() ? { aud: this.getAudience() } : {}),
     };
 
     return this.signJwt(claims);
@@ -139,7 +137,7 @@ export class TokenService {
   }
 
   async createRefreshToken(payload: RefreshTokenPayload): Promise<string> {
-    if (this.refreshTokenMode === "stateful") {
+    if (this.getRefreshTokenMode() === "stateful") {
       return this.createStatefulRefreshToken(payload);
     }
 
@@ -147,7 +145,7 @@ export class TokenService {
   }
 
   async verifyRefreshToken(token: string): Promise<RefreshTokenClaims> {
-    if (this.refreshTokenMode === "stateful") {
+    if (this.getRefreshTokenMode() === "stateful") {
       return this.verifyStatefulRefreshToken(token);
     }
 
@@ -155,7 +153,7 @@ export class TokenService {
   }
 
   async revokeRefreshToken(token: string): Promise<boolean> {
-    if (this.refreshTokenMode === "stateful") {
+    if (this.getRefreshTokenMode() === "stateful") {
       return this.revokeStatefulRefreshToken(token);
     }
 
@@ -165,7 +163,7 @@ export class TokenService {
   createStatelessRefreshToken(payload: RefreshTokenPayload): string {
     const claims = this.buildRefreshClaims(payload);
     const body = toBase64Url(JSON.stringify(claims));
-    const signature = signValue(body, this.refreshTokenSecret);
+    const signature = signValue(body, this.getRefreshTokenSecret());
 
     return `${REFRESH_TOKEN_VERSION}.${body}.${signature}`;
   }
@@ -177,7 +175,7 @@ export class TokenService {
       throw new Error("Invalid refresh token format.");
     }
 
-    const expectedSignature = signValue(body, this.refreshTokenSecret);
+    const expectedSignature = signValue(body, this.getRefreshTokenSecret());
 
     if (!safeEquals(signature, expectedSignature)) {
       throw new Error("Invalid refresh token signature.");
@@ -192,7 +190,7 @@ export class TokenService {
   async createStatefulRefreshToken(payload: RefreshTokenPayload): Promise<string> {
     const claims = this.buildRefreshClaims(payload);
     const body = toBase64Url(JSON.stringify(claims));
-    const signature = signValue(body, this.refreshTokenSecret);
+    const signature = signValue(body, this.getRefreshTokenSecret());
     const token = `${REFRESH_TOKEN_VERSION}.${body}.${signature}`;
     const cacheKey = this.getRefreshCacheKey(claims.jti);
     const session: StatefulRefreshSession = {
@@ -200,7 +198,7 @@ export class TokenService {
       signature,
     };
 
-    await this.cache.setJson(cacheKey, session, this.refreshTokenTtlSeconds);
+    await this.cache.setJson(cacheKey, session, this.getRefreshTokenTtlSeconds());
 
     return token;
   }
@@ -223,7 +221,7 @@ export class TokenService {
       throw new Error("Refresh token session not found.");
     }
 
-    const expectedSignature = signValue(body, this.refreshTokenSecret);
+    const expectedSignature = signValue(body, this.getRefreshTokenSecret());
 
     if (!safeEquals(signature, expectedSignature) || !safeEquals(signature, session.signature)) {
       throw new Error("Invalid refresh token signature.");
@@ -250,7 +248,7 @@ export class TokenService {
     const encodedHeader = toBase64Url(JSON.stringify(header));
     const encodedPayload = toBase64Url(JSON.stringify(payload));
     const unsignedToken = `${encodedHeader}.${encodedPayload}`;
-    const signature = signValue(unsignedToken, this.accessTokenSecret);
+    const signature = signValue(unsignedToken, this.getAccessTokenSecret());
 
     return `${unsignedToken}.${signature}`;
   }
@@ -264,7 +262,7 @@ export class TokenService {
 
     const expectedSignature = signValue(
       `${encodedHeader}.${encodedPayload}`,
-      this.accessTokenSecret,
+      this.getAccessTokenSecret(),
     );
 
     if (!safeEquals(signature, expectedSignature)) {
@@ -284,11 +282,11 @@ export class TokenService {
       throw new Error("Access token has expired.");
     }
 
-    if (this.issuer && claims.iss !== this.issuer) {
+    if (this.getIssuer() && claims.iss !== this.getIssuer()) {
       throw new Error("Access token issuer is invalid.");
     }
 
-    if (this.audience && claims.aud !== this.audience) {
+    if (this.getAudience() && claims.aud !== this.getAudience()) {
       throw new Error("Access token audience is invalid.");
     }
 
@@ -301,7 +299,7 @@ export class TokenService {
     return {
       ...payload,
       iat: now,
-      exp: now + this.refreshTokenTtlSeconds,
+      exp: now + this.getRefreshTokenTtlSeconds(),
       jti: randomBytes(32).toString("base64url"),
     };
   }
@@ -325,7 +323,39 @@ export class TokenService {
   }
 
   private getRefreshCacheKey(jti: string): string {
-    return `${this.refreshTokenCachePrefix}:${jti}`;
+    return `${this.getRefreshTokenCachePrefix()}:${jti}`;
+  }
+
+  private getAccessTokenSecret(): string {
+    return this.accessTokenSecret ?? readRequiredSecret("ACCESS_TOKEN_SECRET", "development-access-secret");
+  }
+
+  private getRefreshTokenSecret(): string {
+    return this.refreshTokenSecret ?? readRequiredSecret("REFRESH_TOKEN_SECRET", "development-refresh-secret");
+  }
+
+  private getAccessTokenTtlSeconds(): number {
+    return this.accessTokenTtlSeconds ?? readNumber("ACCESS_TOKEN_TTL_SECONDS", 15 * 60);
+  }
+
+  private getRefreshTokenTtlSeconds(): number {
+    return this.refreshTokenTtlSeconds ?? readNumber("REFRESH_TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60);
+  }
+
+  private getIssuer(): string | undefined {
+    return this.issuer ?? process.env.TOKEN_ISSUER;
+  }
+
+  private getAudience(): string | undefined {
+    return this.audience ?? process.env.TOKEN_AUDIENCE;
+  }
+
+  private getRefreshTokenMode(): RefreshTokenMode {
+    return this.refreshTokenMode ?? ((process.env.REFRESH_TOKEN_MODE as RefreshTokenMode | undefined) ?? "stateless");
+  }
+
+  private getRefreshTokenCachePrefix(): string {
+    return this.refreshTokenCachePrefix ?? process.env.REFRESH_TOKEN_CACHE_PREFIX ?? "auth:refresh";
   }
 }
 

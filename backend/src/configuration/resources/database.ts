@@ -32,24 +32,33 @@ function readBoolean(name: string, fallback: boolean): boolean {
   return value === "true";
 }
 
-export const database = new DataSource({
-  type: "mysql",
-  url: process.env.DATABASE_URL,
-  host: process.env.DB_HOST ?? "localhost",
-  port: readNumber("DB_PORT", 3306),
-  username: process.env.DB_USERNAME ?? "root",
-  password: process.env.DB_PASSWORD ?? "",
-  database: process.env.DB_NAME ?? "fit",
-  entities: process.env.DB_ENTITIES?.split(",") ?? DEFAULT_ENTITY_GLOBS,
-  migrations: process.env.DB_MIGRATIONS?.split(",") ?? DEFAULT_MIGRATION_GLOBS,
-  synchronize: readBoolean("DB_SYNCHRONIZE", false),
-  logging: readBoolean("DB_LOGGING", false),
-  charset: process.env.DB_CHARSET ?? "utf8mb4_unicode_ci",
-});
+let database: DataSource | null = null;
 
-export const databaseClient = database;
+function createDatabaseClient(): DataSource {
+  return new DataSource({
+    type: "mysql",
+    url: process.env.DATABASE_URL,
+    host: process.env.DB_HOST ?? "localhost",
+    port: readNumber("DB_PORT", 3306),
+    username: process.env.DB_USERNAME ?? "root",
+    password: process.env.DB_PASSWORD ?? "",
+    database: process.env.DB_NAME ?? "fit",
+    entities: process.env.DB_ENTITIES?.split(",") ?? DEFAULT_ENTITY_GLOBS,
+    migrations: process.env.DB_MIGRATIONS?.split(",") ?? DEFAULT_MIGRATION_GLOBS,
+    synchronize: readBoolean("DB_SYNCHRONIZE", false),
+    logging: readBoolean("DB_LOGGING", false),
+    charset: process.env.DB_CHARSET ?? "utf8mb4_unicode_ci",
+  });
+}
+
+export let databaseClient: DataSource | null = null;
 
 export async function connectDatabase(): Promise<DataSource> {
+  if (!database) {
+    database = createDatabaseClient();
+    databaseClient = database;
+  }
+
   if (database.isInitialized) {
     return database;
   }
@@ -58,7 +67,7 @@ export async function connectDatabase(): Promise<DataSource> {
 }
 
 export function getDatabaseClient(): DataSource {
-  if (!database.isInitialized) {
+  if (!database || !database.isInitialized) {
     throw new Error("Database has not been initialized. Call connectDatabase() first.");
   }
 
@@ -66,7 +75,7 @@ export function getDatabaseClient(): DataSource {
 }
 
 export async function disconnectDatabase(): Promise<void> {
-  if (!database.isInitialized) {
+  if (!database || !database.isInitialized) {
     return;
   }
 

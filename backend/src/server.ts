@@ -1,16 +1,16 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { loadEnvironment } from "@/configuration/environment/index.js";
 import {
   connectDatabase,
   disconnectDatabase,
-} from "./configuration/resources/database.js";
+} from "@/configuration/resources/database.js";
 import {
   connectRedis,
   disconnectRedis,
-} from "./configuration/resources/redis.js";
+} from "@/configuration/resources/redis.js";
 
 const app = new Hono();
-const port = Number(process.env.PORT ?? 3000);
 
 app.get("/", (context) => {
   return context.json({
@@ -26,6 +26,10 @@ app.get("/health", (context) => {
 });
 
 async function bootstrap(): Promise<void> {
+  loadEnvironment();
+
+  const port = Number(process.env.PORT ?? 3000);
+
   await connectDatabase();
   await connectRedis();
 
