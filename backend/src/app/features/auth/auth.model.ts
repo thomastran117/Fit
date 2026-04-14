@@ -16,9 +16,18 @@ export const localAuthenticateRequestSchema = z.object({
   deviceId: optionalTrimmedString,
 });
 
+export const oauthAuthenticateRequestSchema = z.object({
+  idToken: z.string().trim().min(1, "ID token is required."),
+  deviceId: optionalTrimmedString,
+  firstName: optionalTrimmedString,
+  lastName: optionalTrimmedString,
+});
+
 export type LocalSignupRequest = z.infer<typeof localSignupRequestSchema>;
 
 export type LocalAuthenticateRequest = z.infer<typeof localAuthenticateRequestSchema>;
+
+export type OAuthAuthenticateRequest = z.infer<typeof oauthAuthenticateRequestSchema>;
 
 export interface AuthUserRecord {
   id: string;

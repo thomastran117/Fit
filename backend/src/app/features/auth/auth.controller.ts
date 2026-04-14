@@ -5,10 +5,12 @@ import { AuthService } from "@/features/auth/auth.service";
 import type {
   LocalAuthenticateRequest,
   LocalSignupRequest,
+  OAuthAuthenticateRequest,
 } from "@/features/auth/auth.model";
 import {
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
+  oauthAuthenticateRequestSchema,
 } from "@/features/auth/auth.model";
 
 export class AuthController {
@@ -37,17 +39,20 @@ export class AuthController {
   };
 
   googleAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.authService.googleAuthenticate();
+    const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
+    const result = await this.authService.googleAuthenticate(this.withClientDeviceId(context, input));
     return context.json(result);
   };
 
   microsoftAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.authService.microsoftAuthenticate();
+    const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
+    const result = await this.authService.microsoftAuthenticate(this.withClientDeviceId(context, input));
     return context.json(result);
   };
 
   appleAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.authService.appleAuthenticate();
+    const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
+    const result = await this.authService.appleAuthenticate(this.withClientDeviceId(context, input));
     return context.json(result);
   };
 

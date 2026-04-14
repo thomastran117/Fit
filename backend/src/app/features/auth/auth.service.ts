@@ -9,12 +9,20 @@ import {
   type AuthUserRecord,
   type LocalAuthenticateRequest,
   type LocalSignupRequest,
+  type OAuthAuthenticateRequest,
 } from "@/features/auth/auth.model";
+import { AppleOAuthService } from "@/features/auth/oauth/apple.service";
+import { GoogleOAuthService } from "@/features/auth/oauth/google.service";
+import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
+import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 import { TokenService, type JwtClaims } from "@/features/auth/token/token.service";
 
 interface AuthServiceOptions {
   authRepository: AuthRepository;
   tokenService: TokenService;
+  googleOAuthService?: GoogleOAuthService;
+  microsoftOAuthService?: MicrosoftOAuthService;
+  appleOAuthService?: AppleOAuthService;
 }
 
 interface AuthRequestContext {
@@ -29,10 +37,19 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly tokenService: TokenService,
+    private readonly googleOAuthService: GoogleOAuthService,
+    private readonly microsoftOAuthService: MicrosoftOAuthService,
+    private readonly appleOAuthService: AppleOAuthService,
   ) {}
 
   static create(options: AuthServiceOptions): AuthService {
-    return new AuthService(options.authRepository, options.tokenService);
+    return new AuthService(
+      options.authRepository,
+      options.tokenService,
+      options.googleOAuthService ?? new GoogleOAuthService(),
+      options.microsoftOAuthService ?? new MicrosoftOAuthService(),
+      options.appleOAuthService ?? new AppleOAuthService(),
+    );
   }
 
   async localAuthenticate(input: LocalAuthenticateRequest): Promise<AuthTokenPairResponse> {
@@ -94,16 +111,19 @@ export class AuthService {
     };
   }
 
-  async googleAuthenticate(): Promise<AuthTokenPairResponse> {
-    throw new Error("Google authentication is not implemented yet.");
+  async googleAuthenticate(input: OAuthAuthenticateRequest): Promise<AuthTokenPairResponse> {
+    const profile = await this.googleOAuthService.verify(input);
+    return this.authenticateOAuthProfile(profile, input.deviceId);
   }
 
-  async microsoftAuthenticate(): Promise<AuthTokenPairResponse> {
-    throw new Error("Microsoft authentication is not implemented yet.");
+  async microsoftAuthenticate(input: OAuthAuthenticateRequest): Promise<AuthTokenPairResponse> {
+    const profile = await this.microsoftOAuthService.verify(input);
+    return this.authenticateOAuthProfile(profile, input.deviceId);
   }
 
-  async appleAuthenticate(): Promise<AuthTokenPairResponse> {
-    throw new Error("Apple authentication is not implemented yet.");
+  async appleAuthenticate(input: OAuthAuthenticateRequest): Promise<AuthTokenPairResponse> {
+    const profile = await this.appleOAuthService.verify(input);
+    return this.authenticateOAuthProfile(profile, input.deviceId);
   }
 
   async refresh(): Promise<{ refreshed: true }> {
@@ -198,6 +218,20 @@ export class AuthService {
       session,
       user: this.toUserProfile(user),
     };
+  }
+
+  private async authenticateOAuthProfile(
+    profile: VerifiedOAuthProfile,
+    deviceId?: string,
+  ): Promise<AuthTokenPairResponse> {
+    if (!profile.emailVerified) {
+      throw new Error("OAuth account email must be verified.");
+    }
+
+    const existingUser = await this.authRepository.findUserByEmail(profile.email);
+    const user = existingUser ?? (await this.authRepository.createOAuthUser(profile));
+
+    return this.issueTokensForUser(user, deviceId);
   }
 
   private async hashPassword(password: string): Promise<string> {

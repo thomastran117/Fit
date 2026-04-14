@@ -5,6 +5,7 @@ import {
   type AuthUserRecord,
   type LocalSignupRequest,
 } from "@/features/auth/auth.model";
+import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 
 type AuthUserPersistence = {
   id: string;
@@ -49,6 +50,24 @@ export class AuthRepository extends BaseRepository {
           lastName: input.lastName ?? null,
           role: "user",
           emailVerified: false,
+        },
+      }),
+    );
+
+    return this.mapUser(user);
+  }
+
+  async createOAuthUser(input: VerifiedOAuthProfile): Promise<AuthUserRecord> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.create({
+        data: {
+          id: randomUUID(),
+          email: input.email.toLowerCase(),
+          passwordHash: `oauth:${input.provider}:${input.providerUserId}`,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
+          role: "user",
+          emailVerified: input.emailVerified,
         },
       }),
     );
