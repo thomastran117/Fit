@@ -3,9 +3,11 @@ import { AuthRepository } from "@/features/auth/auth.repository";
 import { AuthService } from "@/features/auth/auth.service";
 import { TokenService } from "@/features/auth/token/token.service";
 import { CacheService } from "@/features/cache/cache.service";
+import { EmailService } from "@/features/email/email.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
+  emailService: EmailService;
   tokenService: TokenService;
   authRepository: AuthRepository;
   authService: AuthService;
@@ -16,6 +18,7 @@ let container: ApplicationContainer | null = null;
 
 function createContainer(): ApplicationContainer {
   const cacheService = new CacheService();
+  const emailService = EmailService.create();
   const tokenService = new TokenService({
     cache: cacheService,
   });
@@ -28,6 +31,7 @@ function createContainer(): ApplicationContainer {
 
   return {
     cacheService,
+    emailService,
     tokenService,
     authRepository,
     authService,
