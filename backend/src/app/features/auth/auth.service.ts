@@ -394,6 +394,12 @@ export class AuthService {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      username: user.profile.username,
+      phoneNumber: user.profile.phoneNumber,
+      avatarUrl: user.profile.avatarUrl,
+      trustworthinessScore: user.profile.trustworthinessScore,
+      rentPostingsCount: user.profile.rentPostingsCount,
+      availableRentPostingsCount: user.profile.availableRentPostingsCount,
       role: user.role,
       emailVerified: user.emailVerified,
     };

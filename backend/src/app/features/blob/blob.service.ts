@@ -73,6 +73,25 @@ export class BlobService {
     };
   }
 
+  isConfigured(): boolean {
+    return this.config !== null;
+  }
+
+  getBlobUrl(blobName: string): string {
+    const config = this.requireConfiguration();
+    const credential = new StorageSharedKeyCredential(config.accountName, config.accountKey);
+    const serviceClient = new BlobServiceClient(config.serviceUrl, credential);
+    return serviceClient.getContainerClient(config.containerName).getBlockBlobClient(blobName).url;
+  }
+
+  isManagedBlobUrl(blobUrl: string, blobName: string): boolean {
+    if (!this.config) {
+      return false;
+    }
+
+    return this.getBlobUrl(blobName) === blobUrl;
+  }
+
   private requireConfiguration(): AzureBlobConfiguration {
     if (!this.config) {
       throw new ServiceNotImplementedError(

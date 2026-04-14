@@ -4,7 +4,7 @@ import { getContainer } from "@/configuration/bootstrap/container";
 import { jwtMiddleware } from "../middlewares/jwt-middleware";
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
-  const { authController, blobController } = getContainer();
+  const { authController, blobController, profileController } = getContainer();
 
   app.use("/auth/local/verify", jwtMiddleware);
   app.use("/auth/logout", jwtMiddleware);
@@ -12,6 +12,7 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.use("/auth/devices", jwtMiddleware);
   app.use("/auth/devices/remove", jwtMiddleware);
   app.use("/blob/upload-url", jwtMiddleware);
+  app.use("/profile/me", jwtMiddleware);
 
   app.get("/", (context) => {
     return context.json({
@@ -40,6 +41,8 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.get("/auth/devices", authController.devices);
   app.delete("/auth/devices/remove", authController.removeKnownDevice);
   app.post("/blob/upload-url", blobController.createUploadUrl);
+  app.get("/profile/me", profileController.getMe);
+  app.put("/profile/me", profileController.updateMe);
 
   return app;
 }

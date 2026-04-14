@@ -10,6 +10,9 @@ import { BlobController } from "@/features/blob/blob.controller";
 import { BlobService } from "@/features/blob/blob.service";
 import { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
+import { ProfileController } from "@/features/profile/profile.controller";
+import { ProfileRepository } from "@/features/profile/profile.repository";
+import { ProfileService } from "@/features/profile/profile.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
@@ -24,6 +27,9 @@ export interface ApplicationContainer {
   authController: AuthController;
   blobService: BlobService;
   blobController: BlobController;
+  profileRepository: ProfileRepository;
+  profileService: ProfileService;
+  profileController: ProfileController;
 }
 
 let container: ApplicationContainer | null = null;
@@ -45,6 +51,9 @@ function createContainer(): ApplicationContainer {
     cache: cacheService,
   });
   const blobService = new BlobService();
+  const profileRepository = new ProfileRepository();
+  const profileService = new ProfileService(profileRepository, blobService);
+  const profileController = new ProfileController(profileService);
   const authRepository = new AuthRepository();
   const authService = AuthService.create({
     authRepository,
@@ -69,6 +78,9 @@ function createContainer(): ApplicationContainer {
     authController,
     blobService,
     blobController,
+    profileRepository,
+    profileService,
+    profileController,
   };
 }
 

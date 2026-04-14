@@ -244,7 +244,7 @@ export class AuthController {
       user: {
         id: result.user.id,
         email: result.user.email,
-        username: this.toUsername(result.user.email),
+        username: result.user.username,
       },
     };
 
@@ -268,12 +268,6 @@ export class AuthController {
   private isSecureCookieEnabled(): boolean {
     return process.env.NODE_ENV === "production";
   }
-
-  private toUsername(email: string): string {
-    const [username] = email.split("@");
-    return username || email;
-  }
-
   private async verifyCaptcha(context: Context<AppBindings>, captchaToken: string): Promise<void> {
     const result = await this.captchaService.verify({
       token: captchaToken,

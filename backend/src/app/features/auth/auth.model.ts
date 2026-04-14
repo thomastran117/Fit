@@ -99,6 +99,20 @@ export interface CreateLocalUserInput {
   lastName?: string;
 }
 
+export interface UserProfileRecord {
+  id: string;
+  userId: string;
+  username: string;
+  phoneNumber?: string;
+  avatarUrl?: string;
+  avatarBlobName?: string;
+  trustworthinessScore: number;
+  rentPostingsCount: number;
+  availableRentPostingsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthUserRecord {
   id: string;
   email: string;
@@ -107,6 +121,7 @@ export interface AuthUserRecord {
   lastName?: string;
   role: string;
   emailVerified: boolean;
+  profile: UserProfileRecord;
   createdAt: string;
   updatedAt: string;
 }
@@ -116,6 +131,12 @@ export interface AuthUserProfile {
   email: string;
   firstName?: string;
   lastName?: string;
+  username: string;
+  phoneNumber?: string;
+  avatarUrl?: string;
+  trustworthinessScore: number;
+  rentPostingsCount: number;
+  availableRentPostingsCount: number;
   role: string;
   emailVerified: boolean;
 }
