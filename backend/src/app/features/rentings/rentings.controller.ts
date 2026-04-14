@@ -18,6 +18,13 @@ import {
 } from "@/features/rentings/rentings.analytics.model";
 import { RentingsAnalyticsService } from "@/features/rentings/rentings.analytics.service";
 import {
+  createRentingReviewRequestSchema,
+  listRentingReviewsQuerySchema,
+  type CreateRentingReviewRequestBody,
+  type ListRentingReviewsQuery,
+} from "@/features/rentings/rentings.reviews.model";
+import { RentingsReviewsService } from "@/features/rentings/rentings.reviews.service";
+import {
   listOwnerRentingsQuerySchema,
   publicSearchRentingsQuerySchema,
   type ListOwnerRentingsInput,
@@ -34,6 +41,7 @@ export class RentingsController {
   constructor(
     private readonly rentingsService: RentingsService,
     private readonly rentingsAnalyticsService: RentingsAnalyticsService,
+    private readonly rentingsReviewsService: RentingsReviewsService,
   ) {}
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
@@ -134,6 +142,38 @@ export class RentingsController {
     return context.json(result);
   };
 
+  listReviews = async (context: Context<AppBindings>): Promise<Response> => {
+    const { page, pageSize } = this.parseListRentingReviewsQuery(context);
+    const result = await this.rentingsReviewsService.list(
+      this.requireRouteId(context),
+      page,
+      pageSize,
+    );
+    return context.json(result);
+  };
+
+  createReview = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = this.requireAuth(context);
+    const body = await parseRequestBody(context, createRentingReviewRequestSchema);
+    const result = await this.rentingsReviewsService.create(
+      this.requireRouteId(context),
+      auth.sub,
+      body,
+    );
+    return context.json(result, 201);
+  };
+
+  updateOwnReview = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = this.requireAuth(context);
+    const body = await parseRequestBody(context, createRentingReviewRequestSchema);
+    const result = await this.rentingsReviewsService.updateOwn(
+      this.requireRouteId(context),
+      auth.sub,
+      body,
+    );
+    return context.json(result);
+  };
+
   private toUpsertInput(userId: string, body: UpsertRentingRequestBody): UpsertRentingInput {
     return {
       ownerId: userId,
@@ -195,6 +235,21 @@ export class RentingsController {
       });
 
       return this.toSearchRentingsInput(query);
+    } catch (error) {
+      throw this.toValidationError(error, "Request query validation failed.");
+    }
+  }
+
+  private parseListRentingReviewsQuery(
+    context: Context<AppBindings>,
+  ): ListRentingReviewsQuery {
+    const url = new URL(context.req.url);
+
+    try {
+      return listRentingReviewsQuerySchema.parse({
+        page: url.searchParams.get("page") ?? undefined,
+        pageSize: url.searchParams.get("pageSize") ?? undefined,
+      });
     } catch (error) {
       throw this.toValidationError(error, "Request query validation failed.");
     }

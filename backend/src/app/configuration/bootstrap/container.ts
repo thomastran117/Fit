@@ -16,6 +16,8 @@ import { ProfileService } from "@/features/profile/profile.service";
 import { RentingsAnalyticsRepository } from "@/features/rentings/rentings.analytics.repository";
 import { RentingsAnalyticsService } from "@/features/rentings/rentings.analytics.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
+import { RentingsReviewsRepository } from "@/features/rentings/rentings.reviews.repository";
+import { RentingsReviewsService } from "@/features/rentings/rentings.reviews.service";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsSearchService } from "@/features/rentings/rentings.search.service";
 import { RentingsService } from "@/features/rentings/rentings.service";
@@ -39,6 +41,8 @@ export interface ApplicationContainer {
   rentingsRepository: RentingsRepository;
   rentingsAnalyticsRepository: RentingsAnalyticsRepository;
   rentingsAnalyticsService: RentingsAnalyticsService;
+  rentingsReviewsRepository: RentingsReviewsRepository;
+  rentingsReviewsService: RentingsReviewsService;
   rentingsSearchService: RentingsSearchService;
   rentingsService: RentingsService;
   rentingsController: RentingsController;
@@ -72,6 +76,11 @@ function createContainer(): ApplicationContainer {
     rentingsAnalyticsRepository,
     rentingsRepository,
   );
+  const rentingsReviewsRepository = new RentingsReviewsRepository();
+  const rentingsReviewsService = new RentingsReviewsService(
+    rentingsReviewsRepository,
+    rentingsRepository,
+  );
   const rentingsSearchService = new RentingsSearchService(rentingsRepository);
   const rentingsService = new RentingsService(
     rentingsRepository,
@@ -81,6 +90,7 @@ function createContainer(): ApplicationContainer {
   const rentingsController = new RentingsController(
     rentingsService,
     rentingsAnalyticsService,
+    rentingsReviewsService,
   );
   const authRepository = new AuthRepository();
   const authService = AuthService.create({
@@ -112,6 +122,8 @@ function createContainer(): ApplicationContainer {
     rentingsRepository,
     rentingsAnalyticsRepository,
     rentingsAnalyticsService,
+    rentingsReviewsRepository,
+    rentingsReviewsService,
     rentingsSearchService,
     rentingsService,
     rentingsController,
