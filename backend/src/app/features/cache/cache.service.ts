@@ -60,6 +60,13 @@ export class CacheService {
   async ttl(key: string): Promise<number> {
     return this.getClient().ttl(key);
   }
+
+  async eval<TResult>(script: string, keys: string[], args: string[]): Promise<TResult> {
+    return this.getClient().eval(script, {
+      keys,
+      arguments: args,
+    }) as Promise<TResult>;
+  }
 }
 
 export const cacheService = new CacheService();
