@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { BaseRepository } from "@/features/base/base.repository";
 import {
+  type CreateLocalUserInput,
   type AuthSessionRecord,
   type AuthUserRecord,
-  type LocalSignupRequest,
 } from "@/features/auth/auth.model";
 import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 
@@ -37,7 +37,7 @@ export class AuthRepository extends BaseRepository {
   }
 
   async createLocalUser(
-    input: LocalSignupRequest,
+    input: CreateLocalUserInput,
     passwordHash: string,
   ): Promise<AuthUserRecord> {
     const user = await this.executeAsync(() =>

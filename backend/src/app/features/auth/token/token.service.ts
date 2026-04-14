@@ -136,6 +136,14 @@ export class TokenService {
     return this.verifyJwt(token);
   }
 
+  getAccessTokenExpiresInSeconds(): number {
+    return this.getAccessTokenTtlSeconds();
+  }
+
+  getRefreshTokenExpiresInSeconds(): number {
+    return this.getRefreshTokenTtlSeconds();
+  }
+
   async createRefreshToken(payload: RefreshTokenPayload): Promise<string> {
     if (this.getRefreshTokenMode() === "stateful") {
       return this.createStatefulRefreshToken(payload);

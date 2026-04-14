@@ -1,11 +1,18 @@
+import { setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { parseRequestBody } from "@/configuration/validation/request";
 import { AuthService } from "@/features/auth/auth.service";
+import { tokenService } from "@/features/auth/token/token.service";
 import type {
-  LocalAuthenticateRequest,
-  LocalSignupRequest,
-  OAuthAuthenticateRequest,
+  AuthResponseBody,
+  AuthSessionResult,
+  LocalAuthenticateInput,
+  LocalAuthenticateRequestBody,
+  LocalSignupInput,
+  LocalSignupRequestBody,
+  OAuthAuthenticateInput,
+  OAuthAuthenticateRequestBody,
 } from "@/features/auth/auth.model";
 import {
   localAuthenticateRequestSchema,
@@ -14,20 +21,24 @@ import {
 } from "@/features/auth/auth.model";
 
 export class AuthController {
+  private static readonly REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
+
   constructor(private readonly authService: AuthService) {}
 
   localAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, localAuthenticateRequestSchema);
-    const result = await this.authService.localAuthenticate(this.withClientDeviceId(context, input));
+    const result = await this.authService.localAuthenticate(
+      this.toLocalAuthenticateInput(context, input),
+    );
 
-    return context.json(result);
+    return this.json(context, result);
   };
 
   localSignup = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, localSignupRequestSchema);
-    const result = await this.authService.localSignup(this.withClientDeviceId(context, input));
+    const result = await this.authService.localSignup(this.toLocalSignupInput(context, input));
 
-    return context.json(result, 201);
+    return this.json(context, result, 201);
   };
 
   localVerify = async (context: Context<AppBindings>): Promise<Response> => {
@@ -40,20 +51,26 @@ export class AuthController {
 
   googleAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
-    const result = await this.authService.googleAuthenticate(this.withClientDeviceId(context, input));
-    return context.json(result);
+    const result = await this.authService.googleAuthenticate(
+      this.toOAuthAuthenticateInput(context, input),
+    );
+    return this.json(context, result);
   };
 
   microsoftAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
-    const result = await this.authService.microsoftAuthenticate(this.withClientDeviceId(context, input));
-    return context.json(result);
+    const result = await this.authService.microsoftAuthenticate(
+      this.toOAuthAuthenticateInput(context, input),
+    );
+    return this.json(context, result);
   };
 
   appleAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
-    const result = await this.authService.appleAuthenticate(this.withClientDeviceId(context, input));
-    return context.json(result);
+    const result = await this.authService.appleAuthenticate(
+      this.toOAuthAuthenticateInput(context, input),
+    );
+    return this.json(context, result);
   };
 
   refresh = async (context: Context<AppBindings>): Promise<Response> => {
@@ -85,19 +102,102 @@ export class AuthController {
     return context.json(result);
   };
 
-  private withClientDeviceId<TInput extends { deviceId?: string }>(
+  private json(
     context: Context<AppBindings>,
-    input: TInput,
-  ): TInput {
-    const deviceId = input.deviceId ?? context.get("client").device.id;
+    body: AuthSessionResult,
+    status?: 200 | 201,
+  ): Response {
+    const responseBody = this.toAuthResponseBody(context, body);
 
-    if (!deviceId) {
-      return input;
+    if (this.shouldSetRefreshCookie(context)) {
+      setCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME, body.refreshToken, {
+        path: "/",
+        httpOnly: true,
+        secure: this.isSecureCookieEnabled(),
+        sameSite: "Lax",
+        maxAge: tokenService.getRefreshTokenExpiresInSeconds(),
+      });
     }
 
+    return context.json(responseBody, status);
+  }
+
+  private toLocalAuthenticateInput(
+    context: Context<AppBindings>,
+    input: LocalAuthenticateRequestBody,
+  ): LocalAuthenticateInput {
     return {
-      ...input,
-      deviceId,
+      email: input.email,
+      password: input.password,
+      deviceId: this.resolveDeviceId(context, input.deviceId),
     };
+  }
+
+  private toLocalSignupInput(
+    context: Context<AppBindings>,
+    input: LocalSignupRequestBody,
+  ): LocalSignupInput {
+    return {
+      email: input.email,
+      password: input.password,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      deviceId: this.resolveDeviceId(context, input.deviceId),
+    };
+  }
+
+  private toOAuthAuthenticateInput(
+    context: Context<AppBindings>,
+    input: OAuthAuthenticateRequestBody,
+  ): OAuthAuthenticateInput {
+    return {
+      idToken: input.idToken,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      deviceId: this.resolveDeviceId(context, input.deviceId),
+    };
+  }
+
+  private resolveDeviceId(context: Context<AppBindings>, deviceId?: string): string | undefined {
+    return deviceId ?? context.get("client").device.id;
+  }
+
+  private toAuthResponseBody(
+    context: Context<AppBindings>,
+    result: AuthSessionResult,
+  ): AuthResponseBody {
+    const responseBody: AuthResponseBody = {
+      accessToken: result.accessToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        username: this.toUsername(result.user.email),
+      },
+    };
+
+    if (!this.shouldSetRefreshCookie(context)) {
+      responseBody.refreshToken = result.refreshToken;
+    }
+
+    return responseBody;
+  }
+
+  private shouldSetRefreshCookie(context: Context<AppBindings>): boolean {
+    const clientDevice = context.get("client").device;
+
+    if (clientDevice.isMobile) {
+      return false;
+    }
+
+    return clientDevice.type === "desktop";
+  }
+
+  private isSecureCookieEnabled(): boolean {
+    return process.env.NODE_ENV === "production";
+  }
+
+  private toUsername(email: string): string {
+    const [username] = email.split("@");
+    return username || email;
   }
 }

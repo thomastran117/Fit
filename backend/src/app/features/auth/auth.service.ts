@@ -4,12 +4,12 @@ import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import {
   type AuthSessionRecord,
-  type AuthTokenPairResponse,
+  type AuthSessionResult,
   type AuthUserProfile,
   type AuthUserRecord,
-  type LocalAuthenticateRequest,
-  type LocalSignupRequest,
-  type OAuthAuthenticateRequest,
+  type LocalAuthenticateInput,
+  type LocalSignupInput,
+  type OAuthAuthenticateInput,
 } from "@/features/auth/auth.model";
 import { AppleOAuthService } from "@/features/auth/oauth/apple.service";
 import { GoogleOAuthService } from "@/features/auth/oauth/google.service";
@@ -52,9 +52,8 @@ export class AuthService {
     );
   }
 
-  async localAuthenticate(input: LocalAuthenticateRequest): Promise<AuthTokenPairResponse> {
-    const email = this.normalizeEmail(input.email);
-    const user = await this.authRepository.findUserByEmail(email);
+  async localAuthenticate(input: LocalAuthenticateInput): Promise<AuthSessionResult> {
+    const user = await this.authRepository.findUserByEmail(input.email);
 
     if (!user) {
       throw new Error("Invalid email or password.");
@@ -69,9 +68,8 @@ export class AuthService {
     return this.issueTokensForUser(user, input.deviceId);
   }
 
-  async localSignup(input: LocalSignupRequest): Promise<AuthTokenPairResponse> {
-    const email = this.normalizeEmail(input.email);
-    const existingUser = await this.authRepository.findUserByEmail(email);
+  async localSignup(input: LocalSignupInput): Promise<AuthSessionResult> {
+    const existingUser = await this.authRepository.findUserByEmail(input.email);
 
     if (existingUser) {
       throw new Error("An account with this email already exists.");
@@ -80,8 +78,9 @@ export class AuthService {
     const passwordHash = await this.hashPassword(input.password);
     const user = await this.authRepository.createLocalUser(
       {
-        ...input,
-        email,
+        email: input.email,
+        firstName: input.firstName,
+        lastName: input.lastName,
       },
       passwordHash,
     );
@@ -111,17 +110,17 @@ export class AuthService {
     };
   }
 
-  async googleAuthenticate(input: OAuthAuthenticateRequest): Promise<AuthTokenPairResponse> {
+  async googleAuthenticate(input: OAuthAuthenticateInput): Promise<AuthSessionResult> {
     const profile = await this.googleOAuthService.verify(input);
     return this.authenticateOAuthProfile(profile, input.deviceId);
   }
 
-  async microsoftAuthenticate(input: OAuthAuthenticateRequest): Promise<AuthTokenPairResponse> {
+  async microsoftAuthenticate(input: OAuthAuthenticateInput): Promise<AuthSessionResult> {
     const profile = await this.microsoftOAuthService.verify(input);
     return this.authenticateOAuthProfile(profile, input.deviceId);
   }
 
-  async appleAuthenticate(input: OAuthAuthenticateRequest): Promise<AuthTokenPairResponse> {
+  async appleAuthenticate(input: OAuthAuthenticateInput): Promise<AuthSessionResult> {
     const profile = await this.appleOAuthService.verify(input);
     return this.authenticateOAuthProfile(profile, input.deviceId);
   }
@@ -195,7 +194,7 @@ export class AuthService {
   private async issueTokensForUser(
     user: AuthUserRecord,
     deviceId?: string,
-  ): Promise<AuthTokenPairResponse> {
+  ): Promise<AuthSessionResult> {
     const session = await this.authRepository.createSession(user, deviceId);
 
     const accessToken = this.tokenService.createAccessToken({
@@ -223,7 +222,7 @@ export class AuthService {
   private async authenticateOAuthProfile(
     profile: VerifiedOAuthProfile,
     deviceId?: string,
-  ): Promise<AuthTokenPairResponse> {
+  ): Promise<AuthSessionResult> {
     if (!profile.emailVerified) {
       throw new Error("OAuth account email must be verified.");
     }
@@ -258,16 +257,6 @@ export class AuthService {
     }
 
     return timingSafeEqual(derivedKey, storedHashBuffer);
-  }
-
-  private normalizeEmail(email: string): string {
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail || !normalizedEmail.includes("@")) {
-      throw new Error("A valid email is required.");
-    }
-
-    return normalizedEmail;
   }
 
   private assertValidPassword(password: string): void {
