@@ -1,6 +1,7 @@
 import { createPublicKey, verify } from "node:crypto";
 import BadRequestError from "@/errors/http/bad-request.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
+import { assertTrustedOutboundUrl } from "@/features/security/outbound-request-guard";
 
 interface JwtHeader {
   alg?: string;
@@ -43,6 +44,7 @@ interface VerifyJwtOptions {
   issuer: string | string[];
   audience: string | string[];
   jwksUrl: string;
+  allowedHosts?: string[];
   allowedAlgorithms?: string[];
 }
 
@@ -187,7 +189,11 @@ export class OAuthTokenVerifier {
 
     this.assertTokenTimes(payload);
 
-    const signingKey = await this.findSigningKey(options.jwksUrl, header.kid);
+    const signingKey = await this.findSigningKey(
+      options.jwksUrl,
+      header.kid,
+      options.allowedHosts,
+    );
     const verified = verify(
       "RSA-SHA256",
       Buffer.from(`${encodedHeader}.${encodedPayload}`, "utf8"),
@@ -214,8 +220,12 @@ export class OAuthTokenVerifier {
     }
   }
 
-  private async findSigningKey(jwksUrl: string, kid?: string): Promise<JsonWebKey> {
-    const keys = await this.fetchJwks(jwksUrl);
+  private async findSigningKey(
+    jwksUrl: string,
+    kid?: string,
+    allowedHosts?: string[],
+  ): Promise<JsonWebKey> {
+    const keys = await this.fetchJwks(jwksUrl, allowedHosts);
 
     if (kid) {
       const matchingKey = keys.find((key) => key.kid === kid);
@@ -236,7 +246,7 @@ export class OAuthTokenVerifier {
     throw new UnauthorizedError("OAuth signing key was not found.");
   }
 
-  private async fetchJwks(jwksUrl: string): Promise<JsonWebKey[]> {
+  private async fetchJwks(jwksUrl: string, allowedHosts?: string[]): Promise<JsonWebKey[]> {
     const cached = OAuthTokenVerifier.jwksCache.get(jwksUrl);
 
     if (cached && cached.expiresAt > Date.now()) {
@@ -245,7 +255,7 @@ export class OAuthTokenVerifier {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       try {
-        const keys = await this.fetchJwksOnce(jwksUrl);
+        const keys = await this.fetchJwksOnce(jwksUrl, allowedHosts);
 
         OAuthTokenVerifier.jwksCache.set(jwksUrl, {
           keys,
@@ -273,12 +283,18 @@ export class OAuthTokenVerifier {
     });
   }
 
-  private async fetchJwksOnce(jwksUrl: string): Promise<JsonWebKey[]> {
+  private async fetchJwksOnce(
+    jwksUrl: string,
+    allowedHosts?: string[],
+  ): Promise<JsonWebKey[]> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const trustedJwksUrl = assertTrustedOutboundUrl(jwksUrl, {
+      allowedHosts,
+    }).toString();
 
     try {
-      const response = await fetch(jwksUrl, {
+      const response = await fetch(trustedJwksUrl, {
         signal: controller.signal,
       });
 

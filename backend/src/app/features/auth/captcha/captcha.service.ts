@@ -1,3 +1,6 @@
+import { getOptionalEnvironmentVariable } from "@/configuration/environment";
+import { assertTrustedOutboundUrl } from "@/features/security/outbound-request-guard";
+
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 const DEFAULTS = {
@@ -20,6 +23,7 @@ const TRANSIENT_ERROR_CODES = new Set([
 interface CaptchaServiceOptions {
   secretKey?: string;
   verificationUrl?: string;
+  allowedHosts?: string[];
   maxRetries?: number;
   initialDelayMs?: number;
   maxDelayMs?: number;
@@ -68,6 +72,7 @@ type NormalizedError = Readonly<{
 export class CaptchaService {
   private readonly secretKey?: string;
   private readonly verificationUrl: string;
+  private readonly allowedHosts: string[];
   private readonly maxRetries: number;
   private readonly initialDelayMs: number;
   private readonly maxDelayMs: number;
@@ -77,6 +82,7 @@ export class CaptchaService {
   constructor(options: CaptchaServiceOptions = {}) {
     this.secretKey = options.secretKey ?? process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
     this.verificationUrl = options.verificationUrl ?? TURNSTILE_SITEVERIFY_URL;
+    this.allowedHosts = options.allowedHosts ?? this.readAllowedHosts();
     this.maxRetries = options.maxRetries ?? DEFAULTS.maxRetries;
     this.initialDelayMs = options.initialDelayMs ?? DEFAULTS.initialDelayMs;
     this.maxDelayMs = options.maxDelayMs ?? DEFAULTS.maxDelayMs;
@@ -138,6 +144,10 @@ export class CaptchaService {
   }
 
   private async submitVerification(input: VerificationPayload): Promise<TurnstileSiteverifyResponse> {
+    const verificationUrl = assertTrustedOutboundUrl(this.verificationUrl, {
+      allowedHosts: this.allowedHosts,
+    }).toString();
+
     const formData = new URLSearchParams({
       secret: this.secretKey as string,
       response: input.token,
@@ -155,7 +165,7 @@ export class CaptchaService {
     const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 
     try {
-      const response = await fetch(this.verificationUrl, {
+      const response = await fetch(verificationUrl, {
         method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",
@@ -315,6 +325,16 @@ export class CaptchaService {
 
   private sleep(delayMs: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  private readAllowedHosts(): string[] {
+    const configuredHosts =
+      getOptionalEnvironmentVariable("CAPTCHA_ALLOWED_HOSTS") ?? "challenges.cloudflare.com";
+
+    return configuredHosts
+      .split(",")
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean);
   }
 }
 

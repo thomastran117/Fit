@@ -9,6 +9,7 @@ import type {
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
+const GOOGLE_JWKS_ALLOWED_HOSTS = ["www.googleapis.com"];
 
 function readAudiences(): string[] {
   const value =
@@ -37,6 +38,7 @@ class GoogleOAuthService {
       issuer: GOOGLE_ISSUERS,
       audience: readAudiences(),
       jwksUrl: GOOGLE_JWKS_URL,
+      allowedHosts: GOOGLE_JWKS_ALLOWED_HOSTS,
     });
 
     if (!payload.sub || typeof payload.email !== "string") {

@@ -9,6 +9,7 @@ import type {
 
 const APPLE_ISSUER = "https://appleid.apple.com";
 const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
+const APPLE_JWKS_ALLOWED_HOSTS = ["appleid.apple.com"];
 
 function readAudiences(): string[] {
   const configuredValues = [
@@ -42,6 +43,7 @@ class AppleOAuthService {
       issuer: APPLE_ISSUER,
       audience: readAudiences(),
       jwksUrl: APPLE_JWKS_URL,
+      allowedHosts: APPLE_JWKS_ALLOWED_HOSTS,
     });
 
     if (!payload.sub || typeof payload.email !== "string") {

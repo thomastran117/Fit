@@ -8,6 +8,7 @@ import type {
 } from "@/features/auth/oauth/oauth.types";
 
 const MICROSOFT_JWKS_URL = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+const MICROSOFT_JWKS_ALLOWED_HOSTS = ["login.microsoftonline.com"];
 const MICROSOFT_ISSUERS = [
   "https://login.microsoftonline.com/common/v2.0",
   "https://login.microsoftonline.com/consumers/v2.0",
@@ -58,6 +59,7 @@ class MicrosoftOAuthService {
       issuer: MICROSOFT_ISSUERS,
       audience: readAudiences(),
       jwksUrl: MICROSOFT_JWKS_URL,
+      allowedHosts: MICROSOFT_JWKS_ALLOWED_HOSTS,
     });
 
     const emailClaim =
