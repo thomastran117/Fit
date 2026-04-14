@@ -47,8 +47,11 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.post("/rentings", rentingsController.create);
   app.get("/rentings", rentingsController.search);
   app.get("/rentings/batch", rentingsController.batchPublic);
+  app.get("/rentings/analytics/summary", rentingsController.analyticsSummary);
+  app.get("/rentings/analytics/rentings", rentingsController.analyticsRentings);
   app.get("/rentings/me", rentingsController.listMine);
   app.get("/rentings/me/batch", rentingsController.batchMine);
+  app.get("/rentings/:id/analytics", rentingsController.analyticsById);
   app.get("/rentings/:id", rentingsController.getById);
   app.put("/rentings/:id", rentingsController.update);
   app.post("/rentings/:id/publish", rentingsController.publish);

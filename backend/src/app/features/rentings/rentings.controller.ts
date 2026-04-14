@@ -7,6 +7,17 @@ import {
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { getContainer } from "@/configuration/bootstrap/container";
 import {
+  listRentingAnalyticsQuerySchema,
+  rentingAnalyticsDetailQuerySchema,
+  rentingAnalyticsSummaryQuerySchema,
+  type ListRentingAnalyticsInput,
+  type ListRentingAnalyticsQuery,
+  type RentingAnalyticsDetailInput,
+  type RentingAnalyticsDetailQuery,
+  type RentingAnalyticsSummaryQuery,
+} from "@/features/rentings/rentings.analytics.model";
+import { RentingsAnalyticsService } from "@/features/rentings/rentings.analytics.service";
+import {
   listOwnerRentingsQuerySchema,
   publicSearchRentingsQuerySchema,
   type ListOwnerRentingsInput,
@@ -20,7 +31,10 @@ import {
 import { RentingsService } from "@/features/rentings/rentings.service";
 
 export class RentingsController {
-  constructor(private readonly rentingsService: RentingsService) {}
+  constructor(
+    private readonly rentingsService: RentingsService,
+    private readonly rentingsAnalyticsService: RentingsAnalyticsService,
+  ) {}
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
@@ -54,6 +68,15 @@ export class RentingsController {
   getById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.getOptionalAuth(context);
     const result = await this.rentingsService.getById(this.requireRouteId(context), auth?.sub);
+
+    if (!auth || auth.sub !== result.ownerId) {
+      await this.rentingsAnalyticsService.trackPublicView(
+        result,
+        context.get("client"),
+        auth?.sub,
+      );
+    }
+
     return context.json(result);
   };
 
@@ -83,6 +106,31 @@ export class RentingsController {
     const result = await this.rentingsService.searchPublic(
       this.parseSearchRentingsInput(context),
     );
+    return context.json(result);
+  };
+
+  analyticsSummary = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = this.requireAuth(context);
+    const query = this.parseAnalyticsSummaryQuery(context);
+    const result = await this.rentingsAnalyticsService.getOwnerSummary(auth.sub, query.window);
+    return context.json(result);
+  };
+
+  analyticsRentings = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = this.requireAuth(context);
+    const input = this.parseListRentingAnalyticsInput(context, auth.sub);
+    const result = await this.rentingsAnalyticsService.listOwnerRentingsAnalytics(input);
+    return context.json(result);
+  };
+
+  analyticsById = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = this.requireAuth(context);
+    const input = this.parseRentingAnalyticsDetailInput(
+      context,
+      auth.sub,
+      this.requireRouteId(context),
+    );
+    const result = await this.rentingsAnalyticsService.getRentingAnalyticsDetail(input);
     return context.json(result);
   };
 
@@ -152,6 +200,56 @@ export class RentingsController {
     }
   }
 
+  private parseAnalyticsSummaryQuery(context: Context<AppBindings>): RentingAnalyticsSummaryQuery {
+    const url = new URL(context.req.url);
+
+    try {
+      return rentingAnalyticsSummaryQuerySchema.parse({
+        window: url.searchParams.get("window") ?? undefined,
+      });
+    } catch (error) {
+      throw this.toValidationError(error, "Request query validation failed.");
+    }
+  }
+
+  private parseListRentingAnalyticsInput(
+    context: Context<AppBindings>,
+    ownerId: string,
+  ): ListRentingAnalyticsInput {
+    const url = new URL(context.req.url);
+
+    try {
+      const query = listRentingAnalyticsQuerySchema.parse({
+        window: url.searchParams.get("window") ?? undefined,
+        page: url.searchParams.get("page") ?? undefined,
+        pageSize: url.searchParams.get("pageSize") ?? undefined,
+      });
+
+      return this.toListRentingAnalyticsInput(ownerId, query);
+    } catch (error) {
+      throw this.toValidationError(error, "Request query validation failed.");
+    }
+  }
+
+  private parseRentingAnalyticsDetailInput(
+    context: Context<AppBindings>,
+    ownerId: string,
+    rentingId: string,
+  ): RentingAnalyticsDetailInput {
+    const url = new URL(context.req.url);
+
+    try {
+      const query = rentingAnalyticsDetailQuerySchema.parse({
+        window: url.searchParams.get("window") ?? undefined,
+        granularity: url.searchParams.get("granularity") ?? undefined,
+      });
+
+      return this.toRentingAnalyticsDetailInput(ownerId, rentingId, query);
+    } catch (error) {
+      throw this.toValidationError(error, "Request query validation failed.");
+    }
+  }
+
   private toListOwnerRentingsInput(
     ownerId: string,
     query: ListOwnerRentingsQuery,
@@ -182,6 +280,31 @@ export class RentingsController {
             }
           : undefined,
       sort: query.sort,
+    };
+  }
+
+  private toListRentingAnalyticsInput(
+    ownerId: string,
+    query: ListRentingAnalyticsQuery,
+  ): ListRentingAnalyticsInput {
+    return {
+      ownerId,
+      window: query.window,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  private toRentingAnalyticsDetailInput(
+    ownerId: string,
+    rentingId: string,
+    query: RentingAnalyticsDetailQuery,
+  ): RentingAnalyticsDetailInput {
+    return {
+      ownerId,
+      rentingId,
+      window: query.window,
+      granularity: query.granularity,
     };
   }
 
