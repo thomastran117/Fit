@@ -37,6 +37,19 @@ type DevicePersistence = {
 };
 
 export class DeviceRepository extends BaseRepository {
+  async hasKnownIpAddress(userId: string, ipAddress: string): Promise<boolean> {
+    const count = await this.executeAsync(() =>
+      this.prisma.device.count({
+        where: {
+          userId,
+          lastIpAddress: ipAddress,
+        },
+      }),
+    );
+
+    return count > 0;
+  }
+
   async findKnownDevice(userId: string, deviceId: string): Promise<KnownDeviceRecord | null> {
     const device = await this.executeAsync(() =>
       this.prisma.device.findUnique({
@@ -100,6 +113,20 @@ export class DeviceRepository extends BaseRepository {
         data: {
           lastSeenAt: new Date(),
           ...(ipAddress ? { lastIpAddress: ipAddress } : {}),
+        },
+      }),
+    );
+  }
+
+  async touchKnownIpAddress(userId: string, ipAddress: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.device.updateMany({
+        where: {
+          userId,
+          lastIpAddress: ipAddress,
+        },
+        data: {
+          lastSeenAt: new Date(),
         },
       }),
     );

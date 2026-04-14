@@ -113,6 +113,7 @@ export interface AuthSessionResult {
   device: {
     deviceId?: string;
     known: boolean;
+    knownByIp: boolean;
   };
   user: AuthUserProfile;
 }
@@ -129,6 +130,7 @@ export interface AuthResponseBody {
   device: {
     deviceId?: string;
     known: boolean;
+    knownByIp: boolean;
   };
   user: AuthResponseUser;
 }

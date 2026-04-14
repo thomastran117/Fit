@@ -14,6 +14,7 @@ interface DeviceServiceOptions {
 export interface KnownDeviceStatus {
   deviceId?: string;
   known: boolean;
+  knownByIp: boolean;
 }
 
 const DEFAULT_UNKNOWN_DEVICE_ALERT_COOLDOWN_SECONDS = 60 * 60;
@@ -42,6 +43,7 @@ export class DeviceService {
       return {
         deviceId,
         known: false,
+        knownByIp: false,
       };
     }
 
@@ -57,6 +59,7 @@ export class DeviceService {
     return {
       deviceId,
       known: true,
+      knownByIp: Boolean(client.ip),
     };
   }
 
@@ -65,28 +68,43 @@ export class DeviceService {
     client: ClientRequestContext,
     deviceId?: string,
   ): Promise<KnownDeviceStatus> {
-    if (!deviceId) {
+    if (!client.ip) {
       return {
         deviceId,
         known: false,
+        knownByIp: false,
       };
     }
 
-    const knownDevice = await this.deviceRepository.findKnownDevice(user.id, deviceId);
+    const knownByIp = await this.deviceRepository.hasKnownIpAddress(user.id, client.ip);
 
-    if (knownDevice) {
-      await this.deviceRepository.touchKnownDevice(user.id, deviceId, client.ip);
+    if (knownByIp) {
+      await this.deviceRepository.touchKnownIpAddress(user.id, client.ip);
+
+      if (deviceId) {
+        await this.deviceRepository.registerKnownDevice({
+          userId: user.id,
+          deviceId,
+          type: client.device.type,
+          platform: client.device.platform,
+          userAgent: client.device.userAgent,
+          ipAddress: client.ip,
+        });
+      }
+
       return {
         deviceId,
         known: true,
+        knownByIp: true,
       };
     }
 
-    await this.notifyUnknownDevice(user, client, deviceId);
+    await this.notifyUnknownDevice(user, client, deviceId ?? "unknown-device");
 
     return {
       deviceId,
       known: false,
+      knownByIp: false,
     };
   }
 

@@ -239,6 +239,7 @@ export class AuthService {
     verified: true;
     device: ClientRequestContext["device"] & {
       known: boolean;
+      knownByIp: boolean;
       deviceId?: string;
     };
     auth: {
@@ -258,6 +259,7 @@ export class AuthService {
       device: {
         ...context.client.device,
         known: deviceStatus.known,
+        knownByIp: deviceStatus.knownByIp,
         deviceId: deviceStatus.deviceId,
       },
       auth: {
@@ -304,7 +306,7 @@ export class AuthService {
 
   private async issueTokensForUser(
     user: AuthUserRecord,
-    deviceStatus: { deviceId?: string; known: boolean },
+    deviceStatus: { deviceId?: string; known: boolean; knownByIp: boolean },
     deviceId?: string,
   ): Promise<AuthSessionResult> {
     const accessToken = this.tokenService.createAccessToken({
