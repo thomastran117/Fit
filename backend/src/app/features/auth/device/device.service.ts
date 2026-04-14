@@ -1,0 +1,135 @@
+import type { ClientRequestContext } from "@/configuration/http/bindings";
+import type { CacheService } from "@/features/cache/cache.service";
+import { EmailService } from "@/features/email/email.service";
+import type { AuthUserRecord } from "@/features/auth/auth.model";
+import { DeviceRepository, type KnownDeviceRecord } from "./device.repository";
+
+interface DeviceServiceOptions {
+  deviceRepository: DeviceRepository;
+  emailService: EmailService;
+  cache: CacheService;
+  unknownDeviceAlertCooldownInSeconds?: number;
+}
+
+export interface KnownDeviceStatus {
+  deviceId?: string;
+  known: boolean;
+}
+
+const DEFAULT_UNKNOWN_DEVICE_ALERT_COOLDOWN_SECONDS = 60 * 60;
+
+export class DeviceService {
+  private readonly deviceRepository: DeviceRepository;
+  private readonly emailService: EmailService;
+  private readonly cache: CacheService;
+  private readonly unknownDeviceAlertCooldownInSeconds: number;
+
+  constructor(options: DeviceServiceOptions) {
+    this.deviceRepository = options.deviceRepository;
+    this.emailService = options.emailService;
+    this.cache = options.cache;
+    this.unknownDeviceAlertCooldownInSeconds =
+      options.unknownDeviceAlertCooldownInSeconds ??
+      DEFAULT_UNKNOWN_DEVICE_ALERT_COOLDOWN_SECONDS;
+  }
+
+  async registerKnownDevice(
+    user: AuthUserRecord,
+    client: ClientRequestContext,
+    deviceId?: string,
+  ): Promise<KnownDeviceStatus> {
+    if (!deviceId) {
+      return {
+        deviceId,
+        known: false,
+      };
+    }
+
+    await this.deviceRepository.registerKnownDevice({
+      userId: user.id,
+      deviceId,
+      type: client.device.type,
+      platform: client.device.platform,
+      userAgent: client.device.userAgent,
+      ipAddress: client.ip,
+    });
+
+    return {
+      deviceId,
+      known: true,
+    };
+  }
+
+  async evaluateSuccessfulAuthentication(
+    user: AuthUserRecord,
+    client: ClientRequestContext,
+    deviceId?: string,
+  ): Promise<KnownDeviceStatus> {
+    if (!deviceId) {
+      return {
+        deviceId,
+        known: false,
+      };
+    }
+
+    const knownDevice = await this.deviceRepository.findKnownDevice(user.id, deviceId);
+
+    if (knownDevice) {
+      await this.deviceRepository.touchKnownDevice(user.id, deviceId, client.ip);
+      return {
+        deviceId,
+        known: true,
+      };
+    }
+
+    await this.notifyUnknownDevice(user, client, deviceId);
+
+    return {
+      deviceId,
+      known: false,
+    };
+  }
+
+  async listKnownDevices(
+    userId: string,
+    currentDeviceId?: string,
+  ): Promise<
+    Array<
+      KnownDeviceRecord & {
+        current: boolean;
+      }
+    >
+  > {
+    const devices = await this.deviceRepository.listKnownDevices(userId);
+
+    return devices.map((device) => ({
+      ...device,
+      current: device.deviceId === currentDeviceId,
+    }));
+  }
+
+  private async notifyUnknownDevice(
+    user: AuthUserRecord,
+    client: ClientRequestContext,
+    deviceId: string,
+  ): Promise<void> {
+    const notificationKey = `auth:unknown-device:${user.id}:${deviceId}`;
+    const alreadySent = await this.cache.exists(notificationKey);
+
+    if (alreadySent) {
+      return;
+    }
+
+    await this.cache.set(notificationKey, "1", this.unknownDeviceAlertCooldownInSeconds);
+
+    await this.emailService.sendNewDeviceEmail({
+      to: user.email,
+      firstName: user.firstName,
+      deviceLabel: deviceId,
+      ipAddress: client.ip,
+      platform: client.device.platform,
+      userAgent: client.device.userAgent,
+      detectedAt: new Date(),
+    });
+  }
+}

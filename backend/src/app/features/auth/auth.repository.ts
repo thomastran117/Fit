@@ -19,6 +19,22 @@ type AuthUserPersistence = {
 };
 
 export class AuthRepository extends BaseRepository {
+  async findUserById(id: string): Promise<AuthUserRecord | null> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.findUnique({
+        where: {
+          id,
+        },
+      }),
+    );
+
+    if (!user) {
+      return null;
+    }
+
+    return this.mapUser(user);
+  }
+
   async findUserByEmail(email: string): Promise<AuthUserRecord | null> {
     const user = await this.executeAsync(() =>
       this.prisma.user.findUnique({

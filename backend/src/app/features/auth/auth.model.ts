@@ -1,3 +1,4 @@
+import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { z } from "zod";
 
 const optionalTrimmedString = z.string().trim().min(1).optional();
@@ -46,6 +47,7 @@ export type ResendVerificationEmailRequestBody = z.infer<
 >;
 
 export interface LocalAuthenticateInput {
+  client: ClientRequestContext;
   email: string;
   password: string;
   deviceId?: string;
@@ -60,6 +62,7 @@ export interface LocalSignupInput {
 }
 
 export interface OAuthAuthenticateInput {
+  client: ClientRequestContext;
   idToken: string;
   deviceId?: string;
   firstName?: string;
@@ -67,6 +70,7 @@ export interface OAuthAuthenticateInput {
 }
 
 export interface VerifyEmailInput {
+  client: ClientRequestContext;
   email: string;
   code: string;
   deviceId?: string;
@@ -106,6 +110,10 @@ export interface AuthUserProfile {
 export interface AuthSessionResult {
   accessToken: string;
   refreshToken: string;
+  device: {
+    deviceId?: string;
+    known: boolean;
+  };
   user: AuthUserProfile;
 }
 
@@ -118,6 +126,10 @@ export interface AuthResponseUser {
 export interface AuthResponseBody {
   accessToken: string;
   refreshToken?: string;
+  device: {
+    deviceId?: string;
+    known: boolean;
+  };
   user: AuthResponseUser;
 }
 

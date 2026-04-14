@@ -1,4 +1,6 @@
 import { AuthController } from "@/features/auth/auth.controller";
+import { DeviceRepository } from "@/features/auth/device/device.repository";
+import { DeviceService } from "@/features/auth/device/device.service";
 import { OtpService } from "@/features/auth/otp/otp.service";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import { AuthService } from "@/features/auth/auth.service";
@@ -10,6 +12,8 @@ export interface ApplicationContainer {
   cacheService: CacheService;
   emailService: EmailService;
   otpService: OtpService;
+  deviceRepository: DeviceRepository;
+  deviceService: DeviceService;
   tokenService: TokenService;
   authRepository: AuthRepository;
   authService: AuthService;
@@ -21,6 +25,12 @@ let container: ApplicationContainer | null = null;
 function createContainer(): ApplicationContainer {
   const cacheService = new CacheService();
   const emailService = EmailService.create();
+  const deviceRepository = new DeviceRepository();
+  const deviceService = new DeviceService({
+    deviceRepository,
+    emailService,
+    cache: cacheService,
+  });
   const otpService = new OtpService({
     cache: cacheService,
   });
@@ -32,6 +42,7 @@ function createContainer(): ApplicationContainer {
     authRepository,
     tokenService,
     otpService,
+    deviceService,
     emailService,
   });
   const authController = new AuthController(authService);
@@ -40,6 +51,8 @@ function createContainer(): ApplicationContainer {
     cacheService,
     emailService,
     otpService,
+    deviceRepository,
+    deviceService,
     tokenService,
     authRepository,
     authService,

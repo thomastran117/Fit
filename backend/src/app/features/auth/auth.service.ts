@@ -4,6 +4,7 @@ import type { ClientRequestContext } from "@/configuration/http/bindings";
 import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
+import { DeviceService } from "@/features/auth/device/device.service";
 import { EmailService } from "@/features/email/email.service";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import {
@@ -28,6 +29,7 @@ interface AuthServiceOptions {
   authRepository: AuthRepository;
   tokenService: TokenService;
   otpService: OtpService;
+  deviceService: DeviceService;
   emailService: EmailService;
   googleOAuthService?: GoogleOAuthService;
   microsoftOAuthService?: MicrosoftOAuthService;
@@ -47,6 +49,7 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly tokenService: TokenService,
     private readonly otpService: OtpService,
+    private readonly deviceService: DeviceService,
     private readonly emailService: EmailService,
     private readonly googleOAuthService: GoogleOAuthService,
     private readonly microsoftOAuthService: MicrosoftOAuthService,
@@ -58,6 +61,7 @@ export class AuthService {
       options.authRepository,
       options.tokenService,
       options.otpService,
+      options.deviceService,
       options.emailService,
       options.googleOAuthService ?? new GoogleOAuthService(),
       options.microsoftOAuthService ?? new MicrosoftOAuthService(),
@@ -82,7 +86,7 @@ export class AuthService {
       throw new UnauthorizedError("Please verify your email address before signing in.");
     }
 
-    return this.issueTokensForUser(user, input.deviceId);
+    return this.authenticateVerifiedUser(user, input);
   }
 
   async localSignup(input: LocalSignupInput): Promise<SignupVerificationPendingResult> {
@@ -138,11 +142,14 @@ export class AuthService {
 
     await this.authRepository.markEmailVerified(user.id);
 
+    const verifiedUser: AuthUserRecord = {
+      ...user,
+      emailVerified: true,
+    };
+
     return this.issueTokensForUser(
-      {
-        ...user,
-        emailVerified: true,
-      },
+      verifiedUser,
+      await this.deviceService.registerKnownDevice(verifiedUser, input.client, input.deviceId),
       input.deviceId,
     );
   }
@@ -191,17 +198,17 @@ export class AuthService {
 
   async googleAuthenticate(input: OAuthAuthenticateInput): Promise<AuthSessionResult> {
     const profile = await this.googleOAuthService.verify(input);
-    return this.authenticateOAuthProfile(profile, input.deviceId);
+    return this.authenticateOAuthProfile(profile, input);
   }
 
   async microsoftAuthenticate(input: OAuthAuthenticateInput): Promise<AuthSessionResult> {
     const profile = await this.microsoftOAuthService.verify(input);
-    return this.authenticateOAuthProfile(profile, input.deviceId);
+    return this.authenticateOAuthProfile(profile, input);
   }
 
   async appleAuthenticate(input: OAuthAuthenticateInput): Promise<AuthSessionResult> {
     const profile = await this.appleOAuthService.verify(input);
-    return this.authenticateOAuthProfile(profile, input.deviceId);
+    return this.authenticateOAuthProfile(profile, input);
   }
 
   async refresh(): Promise<{ refreshed: true }> {
@@ -230,15 +237,29 @@ export class AuthService {
 
   async deviceVerify(context: AuthRequestContext): Promise<{
     verified: true;
-    device: ClientRequestContext["device"];
+    device: ClientRequestContext["device"] & {
+      known: boolean;
+      deviceId?: string;
+    };
     auth: {
       userId: string;
       tokenDeviceId?: string;
     };
   }> {
+    const user = await this.requireExistingUser(context.auth.sub);
+    const deviceStatus = await this.deviceService.registerKnownDevice(
+      user,
+      context.client,
+      context.auth.deviceId ?? context.client.device.id,
+    );
+
     return {
       verified: true,
-      device: context.client.device,
+      device: {
+        ...context.client.device,
+        known: deviceStatus.known,
+        deviceId: deviceStatus.deviceId,
+      },
       auth: {
         userId: context.auth.sub,
         tokenDeviceId: context.auth.deviceId,
@@ -248,26 +269,42 @@ export class AuthService {
 
   async devices(context: AuthRequestContext): Promise<{
     devices: Array<{
-      current: true;
-      tokenDeviceId?: string;
-      detectedDevice: ClientRequestContext["device"];
-      ip?: string;
+      id: string;
+      current: boolean;
+      deviceId: string;
+      type: string;
+      platform?: string;
+      userAgent?: string;
+      lastIpAddress?: string;
+      firstSeenAt: string;
+      lastSeenAt: string;
+      verifiedAt: string;
     }>;
   }> {
+    const knownDevices = await this.deviceService.listKnownDevices(
+      context.auth.sub,
+      context.auth.deviceId,
+    );
+
     return {
-      devices: [
-        {
-          current: true,
-          tokenDeviceId: context.auth.deviceId,
-          detectedDevice: context.client.device,
-          ip: context.client.ip,
-        },
-      ],
+      devices: knownDevices.map((device) => ({
+        id: device.id,
+        current: device.current,
+        deviceId: device.deviceId,
+        type: device.type,
+        platform: device.platform,
+        userAgent: device.userAgent,
+        lastIpAddress: device.lastIpAddress,
+        firstSeenAt: device.firstSeenAt,
+        lastSeenAt: device.lastSeenAt,
+        verifiedAt: device.verifiedAt,
+      })),
     };
   }
 
   private async issueTokensForUser(
     user: AuthUserRecord,
+    deviceStatus: { deviceId?: string; known: boolean },
     deviceId?: string,
   ): Promise<AuthSessionResult> {
     const accessToken = this.tokenService.createAccessToken({
@@ -285,13 +322,14 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+      device: deviceStatus,
       user: this.toUserProfile(user),
     };
   }
 
   private async authenticateOAuthProfile(
     profile: VerifiedOAuthProfile,
-    deviceId?: string,
+    input: OAuthAuthenticateInput,
   ): Promise<AuthSessionResult> {
     if (!profile.emailVerified) {
       throw new Error("OAuth account email must be verified.");
@@ -300,7 +338,7 @@ export class AuthService {
     const existingUser = await this.authRepository.findUserByEmail(profile.email);
     const user = existingUser ?? (await this.authRepository.createOAuthUser(profile));
 
-    return this.issueTokensForUser(user, deviceId);
+    return this.authenticateVerifiedUser(user, input);
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -357,5 +395,28 @@ export class AuthService {
       verificationCode: issuedOtp.code,
       firstName: user.firstName,
     });
+  }
+
+  private async authenticateVerifiedUser(
+    user: AuthUserRecord,
+    input: { deviceId?: string; client: ClientRequestContext },
+  ): Promise<AuthSessionResult> {
+    const deviceStatus = await this.deviceService.evaluateSuccessfulAuthentication(
+      user,
+      input.client,
+      input.deviceId,
+    );
+
+    return this.issueTokensForUser(user, deviceStatus, input.deviceId);
+  }
+
+  private async requireExistingUser(userId: string): Promise<AuthUserRecord> {
+    const user = await this.authRepository.findUserById(userId);
+
+    if (!user) {
+      throw new BadRequestError("User account could not be found.");
+    }
+
+    return user;
   }
 }

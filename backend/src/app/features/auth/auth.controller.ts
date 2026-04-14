@@ -150,6 +150,7 @@ export class AuthController {
     return {
       email: input.email,
       password: input.password,
+      client: context.get("client"),
       deviceId: this.resolveDeviceId(context, input.deviceId),
     };
   }
@@ -173,6 +174,7 @@ export class AuthController {
   ): OAuthAuthenticateInput {
     return {
       idToken: input.idToken,
+      client: context.get("client"),
       firstName: input.firstName,
       lastName: input.lastName,
       deviceId: this.resolveDeviceId(context, input.deviceId),
@@ -188,6 +190,7 @@ export class AuthController {
     input: VerifyEmailRequestBody,
   ): VerifyEmailInput {
     return {
+      client: context.get("client"),
       email: input.email,
       code: input.code,
       deviceId: this.resolveDeviceId(context, input.deviceId),
@@ -208,6 +211,7 @@ export class AuthController {
   ): AuthResponseBody {
     const responseBody: AuthResponseBody = {
       accessToken: result.accessToken,
+      device: result.device,
       user: {
         id: result.user.id,
         email: result.user.email,

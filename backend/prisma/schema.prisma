@@ -17,6 +17,27 @@ model User {
   emailVerified Boolean  @default(false) @map("email_verified")
   createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(6)
+  devices       Device[]
 
   @@map("users")
+}
+
+model Device {
+  id            String   @id @db.VarChar(36)
+  userId        String   @map("user_id") @db.VarChar(36)
+  deviceId      String   @map("device_id") @db.VarChar(255)
+  type          String   @db.VarChar(50)
+  platform      String?  @db.VarChar(255)
+  userAgent     String?  @map("user_agent") @db.VarChar(1024)
+  lastIpAddress String?  @map("last_ip_address") @db.VarChar(255)
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at") @db.DateTime(6)
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at") @db.DateTime(6)
+  verifiedAt    DateTime @default(now()) @map("verified_at") @db.DateTime(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(6)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("devices")
 }
