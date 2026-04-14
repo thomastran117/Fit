@@ -1,4 +1,5 @@
 import { AuthController } from "@/features/auth/auth.controller";
+import { CaptchaService } from "@/features/auth/captcha/captcha.service";
 import { DeviceRepository } from "@/features/auth/device/device.repository";
 import { DeviceService } from "@/features/auth/device/device.service";
 import { OtpService } from "@/features/auth/otp/otp.service";
@@ -11,6 +12,7 @@ import { EmailService } from "@/features/email/email.service";
 export interface ApplicationContainer {
   cacheService: CacheService;
   emailService: EmailService;
+  captchaService: CaptchaService;
   otpService: OtpService;
   deviceRepository: DeviceRepository;
   deviceService: DeviceService;
@@ -25,6 +27,7 @@ let container: ApplicationContainer | null = null;
 function createContainer(): ApplicationContainer {
   const cacheService = new CacheService();
   const emailService = EmailService.create();
+  const captchaService = CaptchaService.create();
   const deviceRepository = new DeviceRepository();
   const deviceService = new DeviceService({
     deviceRepository,
@@ -45,11 +48,12 @@ function createContainer(): ApplicationContainer {
     deviceService,
     emailService,
   });
-  const authController = new AuthController(authService);
+  const authController = new AuthController(authService, captchaService);
 
   return {
     cacheService,
     emailService,
+    captchaService,
     otpService,
     deviceRepository,
     deviceService,

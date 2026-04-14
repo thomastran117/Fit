@@ -6,6 +6,7 @@ const optionalTrimmedString = z.string().trim().min(1).optional();
 export const localSignupRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(8, "Password must be at least 8 characters long."),
+  captchaToken: z.string().trim().min(1, "Captcha token is required."),
   firstName: optionalTrimmedString,
   lastName: optionalTrimmedString,
   deviceId: optionalTrimmedString,
@@ -14,6 +15,7 @@ export const localSignupRequestSchema = z.object({
 export const localAuthenticateRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(1, "Password is required."),
+  captchaToken: z.string().trim().min(1, "Captcha token is required."),
   deviceId: optionalTrimmedString,
 });
 

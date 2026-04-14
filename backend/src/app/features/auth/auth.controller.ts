@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { parseRequestBody } from "@/configuration/validation/request";
+import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthService } from "@/features/auth/auth.service";
+import { CaptchaService } from "@/features/auth/captcha/captcha.service";
 import { tokenService } from "@/features/auth/token/token.service";
 import type {
   AuthResponseBody,
@@ -33,10 +36,14 @@ import {
 export class AuthController {
   private static readonly REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly captchaService: CaptchaService,
+  ) {}
 
   localAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, localAuthenticateRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.localAuthenticate(
       this.toLocalAuthenticateInput(context, input),
     );
@@ -46,6 +53,7 @@ export class AuthController {
 
   localSignup = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, localSignupRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.localSignup(this.toLocalSignupInput(context, input));
 
     return context.json(result, 202);
@@ -264,5 +272,20 @@ export class AuthController {
   private toUsername(email: string): string {
     const [username] = email.split("@");
     return username || email;
+  }
+
+  private async verifyCaptcha(context: Context<AppBindings>, captchaToken: string): Promise<void> {
+    const result = await this.captchaService.verify({
+      token: captchaToken,
+      remoteIp: context.get("client").ip,
+      idempotencyKey: context.req.header("x-request-id") ?? randomUUID(),
+    });
+
+    if (!result.success) {
+      throw new BadRequestError("Captcha verification failed.", {
+        errors: result.errors,
+        failOpen: result.failOpen,
+      });
+    }
   }
 }
