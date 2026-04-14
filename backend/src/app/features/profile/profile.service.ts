@@ -1,7 +1,12 @@
 import BadRequestError from "@/errors/http/bad-request.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { BlobService } from "@/features/blob/blob.service";
-import type { ProfileRecord, UpdateProfileInput } from "@/features/profile/profile.model";
+import type {
+  ListProfilesInput,
+  ListProfilesResult,
+  ProfileRecord,
+  UpdateProfileInput,
+} from "@/features/profile/profile.model";
 import type { ProfileRepository } from "@/features/profile/profile.repository";
 
 export class ProfileService {
@@ -9,6 +14,14 @@ export class ProfileService {
     private readonly profileRepository: ProfileRepository,
     private readonly blobService: BlobService,
   ) {}
+
+  async list(input: ListProfilesInput): Promise<ListProfilesResult> {
+    return this.profileRepository.findPublicProfiles({
+      page: input.page,
+      pageSize: input.pageSize,
+      query: input.query?.trim() || undefined,
+    });
+  }
 
   async getByUserId(userId: string): Promise<ProfileRecord> {
     const profile = await this.profileRepository.findByUserId(userId);

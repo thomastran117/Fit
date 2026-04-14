@@ -41,6 +41,7 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.get("/auth/devices", authController.devices);
   app.delete("/auth/devices/remove", authController.removeKnownDevice);
   app.post("/blob/upload-url", blobController.createUploadUrl);
+  app.get("/profiles", profileController.list);
   app.get("/profile/me", profileController.getMe);
   app.put("/profile/me", profileController.updateMe);
 

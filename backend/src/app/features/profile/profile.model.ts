@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export const listProfilesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  q: z.string().trim().min(1).max(100).optional(),
+});
+
 export const updateProfileRequestSchema = z.object({
   username: z
     .string()
@@ -18,6 +24,7 @@ export const updateProfileRequestSchema = z.object({
     .regex(/^[0-9+()\-\s]+$/, "Phone number contains unsupported characters.")
     .nullable()
     .optional(),
+  isPrivate: z.boolean().optional(),
   avatarUrl: z.url("Avatar URL must be a valid URL.").nullable().optional(),
   avatarBlobName: z.string().trim().min(1).max(1024).nullable().optional(),
   trustworthinessScore: z
@@ -38,6 +45,7 @@ export const updateProfileRequestSchema = z.object({
     .optional(),
 });
 
+export type ListProfilesQuery = z.infer<typeof listProfilesQuerySchema>;
 export type UpdateProfileRequestBody = z.infer<typeof updateProfileRequestSchema>;
 
 export interface ProfileRecord {
@@ -50,6 +58,7 @@ export interface ProfileRecord {
   phoneNumber?: string;
   avatarUrl?: string;
   avatarBlobName?: string;
+  isPrivate: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
@@ -57,13 +66,49 @@ export interface ProfileRecord {
   updatedAt: string;
 }
 
+export interface PublicProfileRecord {
+  id: string;
+  userId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  username: string;
+  phoneNumber?: string;
+  avatarUrl?: string;
+  trustworthinessScore: number;
+  rentPostingsCount: number;
+  availableRentPostingsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListProfilesResult {
+  profiles: PublicProfileRecord[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+  query?: string;
+}
+
 export interface UpdateProfileInput {
   userId: string;
   username: string;
   phoneNumber?: string | null;
+  isPrivate?: boolean;
   avatarUrl?: string | null;
   avatarBlobName?: string | null;
   trustworthinessScore?: number;
   rentPostingsCount?: number;
   availableRentPostingsCount?: number;
+}
+
+export interface ListProfilesInput {
+  page: number;
+  pageSize: number;
+  query?: string;
 }

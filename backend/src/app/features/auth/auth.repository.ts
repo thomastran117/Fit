@@ -29,6 +29,7 @@ type AuthProfilePersistence = {
   phoneNumber: string | null;
   avatarUrl: string | null;
   avatarBlobName: string | null;
+  isPrivate: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
@@ -176,6 +177,7 @@ export class AuthRepository extends BaseRepository {
       phoneNumber: profile.phoneNumber ?? undefined,
       avatarUrl: profile.avatarUrl ?? undefined,
       avatarBlobName: profile.avatarBlobName ?? undefined,
+      isPrivate: profile.isPrivate,
       trustworthinessScore: profile.trustworthinessScore,
       rentPostingsCount: profile.rentPostingsCount,
       availableRentPostingsCount: profile.availableRentPostingsCount,

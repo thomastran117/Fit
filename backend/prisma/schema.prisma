@@ -30,6 +30,7 @@ model Profile {
   phoneNumber              String?  @map("phone_number") @db.VarChar(32)
   avatarUrl                String?  @map("avatar_url") @db.VarChar(2048)
   avatarBlobName           String?  @map("avatar_blob_name") @db.VarChar(1024)
+  isPrivate                Boolean  @default(false) @map("is_private")
   trustworthinessScore     Int      @default(1) @map("trustworthiness_score")
   rentPostingsCount        Int      @default(0) @map("rent_postings_count")
   availableRentPostingsCount Int    @default(0) @map("available_rent_postings_count")

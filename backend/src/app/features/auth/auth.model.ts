@@ -106,6 +106,7 @@ export interface UserProfileRecord {
   phoneNumber?: string;
   avatarUrl?: string;
   avatarBlobName?: string;
+  isPrivate: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
@@ -134,6 +135,7 @@ export interface AuthUserProfile {
   username: string;
   phoneNumber?: string;
   avatarUrl?: string;
+  isPrivate: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;

@@ -397,6 +397,7 @@ export class AuthService {
       username: user.profile.username,
       phoneNumber: user.profile.phoneNumber,
       avatarUrl: user.profile.avatarUrl,
+      isPrivate: user.profile.isPrivate,
       trustworthinessScore: user.profile.trustworthinessScore,
       rentPostingsCount: user.profile.rentPostingsCount,
       availableRentPostingsCount: user.profile.availableRentPostingsCount,
