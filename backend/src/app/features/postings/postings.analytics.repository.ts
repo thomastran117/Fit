@@ -2,20 +2,20 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import type {
-  EnqueueRentingViewedEventInput,
-  ListRentingAnalyticsInput,
-  OwnerRentingsAnalyticsSummary,
-  ProcessRentingViewedEventInput,
-  RentingAnalyticsBucket,
-  RentingAnalyticsDetail,
-  RentingAnalyticsDetailInput,
-  RentingAnalyticsListItem,
-  RentingAnalyticsListResult,
-  RentingAnalyticsMetrics,
-  RentingAnalyticsOutboxRecord,
-  RentingAnalyticsSummaryInput,
-  RentingAnalyticsWindow,
-} from "@/features/rentings/rentings.analytics.model";
+  EnqueuePostingViewedEventInput,
+  ListPostingAnalyticsInput,
+  OwnerPostingsAnalyticsSummary,
+  ProcessPostingViewedEventInput,
+  PostingAnalyticsBucket,
+  PostingAnalyticsDetail,
+  PostingAnalyticsDetailInput,
+  PostingAnalyticsListItem,
+  PostingAnalyticsListResult,
+  PostingAnalyticsMetrics,
+  PostingAnalyticsOutboxRecord,
+  PostingAnalyticsSummaryInput,
+  PostingAnalyticsWindow,
+} from "@/features/postings/postings.analytics.model";
 
 interface AnalyticsAggregateRow {
   views: bigint | number | null;
@@ -28,35 +28,35 @@ interface AnalyticsCountRow {
   total: bigint | number;
 }
 
-interface RentingAnalyticsListRow extends AnalyticsAggregateRow {
-  rentingId: string;
+interface PostingAnalyticsListRow extends AnalyticsAggregateRow {
+  postingId: string;
   name: string;
   status: string;
   primaryPhotoUrl: string | null;
 }
 
-interface RentingAnalyticsBucketRow extends AnalyticsAggregateRow {
+interface PostingAnalyticsBucketRow extends AnalyticsAggregateRow {
   bucketStart: Date;
 }
 
-interface RentingAnalyticsHeaderRow {
-  rentingId: string;
+interface PostingAnalyticsHeaderRow {
+  postingId: string;
   name: string;
   status: string;
   primaryPhotoUrl: string | null;
 }
 
-type AnalyticsOutboxPersistence = Prisma.RentingAnalyticsOutboxGetPayload<object>;
+type AnalyticsOutboxPersistence = Prisma.PostingAnalyticsOutboxGetPayload<object>;
 
-export class RentingsAnalyticsRepository extends BaseRepository {
-  async enqueueRentingViewedEvent(input: EnqueueRentingViewedEventInput): Promise<void> {
+export class PostingsAnalyticsRepository extends BaseRepository {
+  async enqueuePostingViewedEvent(input: EnqueuePostingViewedEventInput): Promise<void> {
     await this.executeAsync(() =>
-      this.prisma.rentingAnalyticsOutbox.create({
+      this.prisma.postingAnalyticsOutbox.create({
         data: {
           id: randomUUID(),
-          rentingId: input.rentingId,
+          postingId: input.postingId,
           ownerId: input.ownerId,
-          eventType: "renting_viewed",
+          eventType: "posting_viewed",
           payload: {
             occurredAt: input.occurredAt,
             viewerHash: input.viewerHash,
@@ -70,11 +70,11 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     );
   }
 
-  async claimOutboxBatch(limit: number): Promise<RentingAnalyticsOutboxRecord[]> {
+  async claimOutboxBatch(limit: number): Promise<PostingAnalyticsOutboxRecord[]> {
     return this.executeAsync(async () => {
       const now = new Date();
       const staleProcessingThreshold = new Date(now.getTime() - 5 * 60 * 1000);
-      const candidates = await this.prisma.rentingAnalyticsOutbox.findMany({
+      const candidates = await this.prisma.postingAnalyticsOutbox.findMany({
         where: {
           processedAt: null,
           availableAt: {
@@ -102,10 +102,10 @@ export class RentingsAnalyticsRepository extends BaseRepository {
         take: limit,
       });
 
-      const claimed: RentingAnalyticsOutboxRecord[] = [];
+      const claimed: PostingAnalyticsOutboxRecord[] = [];
 
       for (const candidate of candidates) {
-        const result = await this.prisma.rentingAnalyticsOutbox.updateMany({
+        const result = await this.prisma.postingAnalyticsOutbox.updateMany({
           where: {
             id: candidate.id,
             processedAt: null,
@@ -136,7 +136,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
 
   async markOutboxProcessed(id: string): Promise<void> {
     await this.executeAsync(() =>
-      this.prisma.rentingAnalyticsOutbox.update({
+      this.prisma.postingAnalyticsOutbox.update({
         where: {
           id,
         },
@@ -152,7 +152,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
   async markOutboxRetry(id: string, attempts: number, errorMessage: string): Promise<void> {
     const backoffSeconds = Math.min(300, 2 ** Math.min(attempts, 8));
     await this.executeAsync(() =>
-      this.prisma.rentingAnalyticsOutbox.update({
+      this.prisma.postingAnalyticsOutbox.update({
         where: {
           id,
         },
@@ -168,17 +168,17 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     );
   }
 
-  async processRentingViewedEvent(input: ProcessRentingViewedEventInput): Promise<void> {
+  async processPostingViewedEvent(input: ProcessPostingViewedEventInput): Promise<void> {
     await this.executeAsync(() =>
       this.prisma.$transaction(async (transaction) => {
         const occurredAt = new Date(input.occurredAt);
         const eventDate = new Date(input.eventDate);
         const eventHour = new Date(input.eventHour);
 
-        await transaction.rentingViewEvent.create({
+        await transaction.postingViewEvent.create({
           data: {
             id: randomUUID(),
-            rentingId: input.rentingId,
+            postingId: input.postingId,
             ownerId: input.ownerId,
             viewerHash: input.viewerHash,
             userId: input.userId ?? null,
@@ -191,10 +191,10 @@ export class RentingsAnalyticsRepository extends BaseRepository {
           },
         });
 
-        const uniqueInsert = await transaction.rentingAnalyticsUniqueView.createMany({
+        const uniqueInsert = await transaction.postingAnalyticsUniqueView.createMany({
           data: [
             {
-              rentingId: input.rentingId,
+              postingId: input.postingId,
               ownerId: input.ownerId,
               viewerHash: input.viewerHash,
               eventDate,
@@ -204,13 +204,13 @@ export class RentingsAnalyticsRepository extends BaseRepository {
         });
         const uniqueIncrement = uniqueInsert.count > 0 ? 1 : 0;
 
-        await this.upsertHourlyRollup(transaction, input.rentingId, input.ownerId, eventHour, uniqueIncrement);
-        await this.upsertDailyRollup(transaction, input.rentingId, input.ownerId, eventDate, uniqueIncrement);
+        await this.upsertHourlyRollup(transaction, input.postingId, input.ownerId, eventHour, uniqueIncrement);
+        await this.upsertDailyRollup(transaction, input.postingId, input.ownerId, eventDate, uniqueIncrement);
       }),
     );
   }
 
-  async getOwnerSummary(input: RentingAnalyticsSummaryInput): Promise<OwnerRentingsAnalyticsSummary> {
+  async getOwnerSummary(input: PostingAnalyticsSummaryInput): Promise<OwnerPostingsAnalyticsSummary> {
     const tableSql = this.dailyTableSql();
     const range = this.createWindowRange(input.window);
     const whereSql = Prisma.sql`
@@ -237,7 +237,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     };
   }
 
-  async listOwnerRentingsAnalytics(input: ListRentingAnalyticsInput): Promise<RentingAnalyticsListResult> {
+  async listOwnerPostingsAnalytics(input: ListPostingAnalyticsInput): Promise<PostingAnalyticsListResult> {
     const range = this.createWindowRange(input.window);
     const skip = (input.page - 1) * input.pageSize;
     const tableSql = this.dailyTableSql();
@@ -248,15 +248,15 @@ export class RentingsAnalyticsRepository extends BaseRepository {
 
     const [rows, countRows] = await this.executeAsync(() =>
       Promise.all([
-        this.prisma.$queryRaw<RentingAnalyticsListRow[]>(Prisma.sql`
+        this.prisma.$queryRaw<PostingAnalyticsListRow[]>(Prisma.sql`
           SELECT
-            ra.renting_id AS rentingId,
+            ra.posting_id AS postingId,
             r.name AS name,
             r.status AS status,
             (
               SELECT rp.blob_url
-              FROM renting_photos rp
-              WHERE rp.renting_id = ra.renting_id
+              FROM posting_photos rp
+              WHERE rp.posting_id = ra.posting_id
               ORDER BY rp.position ASC
               LIMIT 1
             ) AS primaryPhotoUrl,
@@ -265,9 +265,9 @@ export class RentingsAnalyticsRepository extends BaseRepository {
             COALESCE(SUM(ra.booking_requests), 0) AS bookingRequests,
             COALESCE(SUM(ra.estimated_revenue), 0) AS estimatedRevenue
           FROM ${tableSql} ra
-          INNER JOIN rentings r ON r.id = ra.renting_id
+          INNER JOIN postings r ON r.id = ra.posting_id
           WHERE ${whereSql}
-          GROUP BY ra.renting_id, r.name, r.status
+          GROUP BY ra.posting_id, r.name, r.status
           ORDER BY views DESC, uniqueViews DESC, r.updated_at DESC
           LIMIT ${input.pageSize}
           OFFSET ${skip}
@@ -275,11 +275,11 @@ export class RentingsAnalyticsRepository extends BaseRepository {
         this.prisma.$queryRaw<AnalyticsCountRow[]>(Prisma.sql`
           SELECT COUNT(*) AS total
           FROM (
-            SELECT ra.renting_id
+            SELECT ra.posting_id
             FROM ${tableSql} ra
             WHERE ${whereSql}
-            GROUP BY ra.renting_id
-          ) AS grouped_rentings
+            GROUP BY ra.posting_id
+          ) AS grouped_postings
         `),
       ]),
     );
@@ -288,8 +288,8 @@ export class RentingsAnalyticsRepository extends BaseRepository {
 
     return {
       window: input.window,
-      rentings: rows.map((row): RentingAnalyticsListItem => ({
-        rentingId: row.rentingId,
+      postings: rows.map((row): PostingAnalyticsListItem => ({
+        postingId: row.postingId,
         name: row.name,
         status: row.status,
         primaryPhotoUrl: row.primaryPhotoUrl ?? undefined,
@@ -301,10 +301,10 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     };
   }
 
-  async getRentingAnalyticsDetail(
-    input: RentingAnalyticsDetailInput,
-  ): Promise<RentingAnalyticsDetail | null> {
-    const header = await this.findRentingAnalyticsHeader(input.rentingId, input.ownerId);
+  async getPostingAnalyticsDetail(
+    input: PostingAnalyticsDetailInput,
+  ): Promise<PostingAnalyticsDetail | null> {
+    const header = await this.findPostingAnalyticsHeader(input.postingId, input.ownerId);
 
     if (!header) {
       return null;
@@ -314,7 +314,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     const totalsTable = this.dailyTableSql();
     const detailTable = input.granularity === "hour" ? this.hourlyTableSql() : this.dailyTableSql();
     const whereTotalsSql = Prisma.sql`
-      renting_id = ${input.rentingId}
+      posting_id = ${input.postingId}
       AND owner_id = ${input.ownerId}
       ${range.startAt ? Prisma.sql`AND bucket_start >= ${range.startAt}` : Prisma.empty}
     `;
@@ -330,7 +330,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
           FROM ${totalsTable}
           WHERE ${whereTotalsSql}
         `),
-        this.prisma.$queryRaw<RentingAnalyticsBucketRow[]>(Prisma.sql`
+        this.prisma.$queryRaw<PostingAnalyticsBucketRow[]>(Prisma.sql`
           SELECT
             bucket_start AS bucketStart,
             COALESCE(SUM(views), 0) AS views,
@@ -346,14 +346,14 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     );
 
     return {
-      rentingId: header.rentingId,
+      postingId: header.postingId,
       name: header.name,
       status: header.status,
       primaryPhotoUrl: header.primaryPhotoUrl ?? undefined,
       window: input.window,
       granularity: input.granularity,
       totals: this.mapMetrics(totalRows[0]),
-      buckets: bucketRows.map((row): RentingAnalyticsBucket => {
+      buckets: bucketRows.map((row): PostingAnalyticsBucket => {
         const startAt = row.bucketStart;
         const endAt = new Date(
           startAt.getTime() +
@@ -372,25 +372,25 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     };
   }
 
-  private async findRentingAnalyticsHeader(
-    rentingId: string,
+  private async findPostingAnalyticsHeader(
+    postingId: string,
     ownerId: string,
-  ): Promise<RentingAnalyticsHeaderRow | null> {
+  ): Promise<PostingAnalyticsHeaderRow | null> {
     const [row] = await this.executeAsync(() =>
-      this.prisma.$queryRaw<RentingAnalyticsHeaderRow[]>(Prisma.sql`
+      this.prisma.$queryRaw<PostingAnalyticsHeaderRow[]>(Prisma.sql`
         SELECT
-          r.id AS rentingId,
+          r.id AS postingId,
           r.name AS name,
           r.status AS status,
           (
             SELECT rp.blob_url
-            FROM renting_photos rp
-            WHERE rp.renting_id = r.id
+            FROM posting_photos rp
+            WHERE rp.posting_id = r.id
             ORDER BY rp.position ASC
             LIMIT 1
           ) AS primaryPhotoUrl
-        FROM rentings r
-        WHERE r.id = ${rentingId}
+        FROM postings r
+        WHERE r.id = ${postingId}
           AND r.owner_id = ${ownerId}
         LIMIT 1
       `),
@@ -401,15 +401,15 @@ export class RentingsAnalyticsRepository extends BaseRepository {
 
   private async upsertHourlyRollup(
     transaction: Prisma.TransactionClient,
-    rentingId: string,
+    postingId: string,
     ownerId: string,
     bucketStart: Date,
     uniqueIncrement: number,
   ): Promise<void> {
-    await transaction.rentingAnalyticsHourly.upsert({
+    await transaction.postingAnalyticsHourly.upsert({
       where: {
-        rentingId_bucketStart: {
-          rentingId,
+        postingId_bucketStart: {
+          postingId,
           bucketStart,
         },
       },
@@ -423,7 +423,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
       },
       create: {
         id: randomUUID(),
-        rentingId,
+        postingId,
         ownerId,
         bucketStart,
         views: 1,
@@ -436,15 +436,15 @@ export class RentingsAnalyticsRepository extends BaseRepository {
 
   private async upsertDailyRollup(
     transaction: Prisma.TransactionClient,
-    rentingId: string,
+    postingId: string,
     ownerId: string,
     bucketStart: Date,
     uniqueIncrement: number,
   ): Promise<void> {
-    await transaction.rentingAnalyticsDaily.upsert({
+    await transaction.postingAnalyticsDaily.upsert({
       where: {
-        rentingId_bucketStart: {
-          rentingId,
+        postingId_bucketStart: {
+          postingId,
           bucketStart,
         },
       },
@@ -458,7 +458,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
       },
       create: {
         id: randomUUID(),
-        rentingId,
+        postingId,
         ownerId,
         bucketStart,
         views: 1,
@@ -470,14 +470,14 @@ export class RentingsAnalyticsRepository extends BaseRepository {
   }
 
   private dailyTableSql(): Prisma.Sql {
-    return Prisma.sql`renting_analytics_daily`;
+    return Prisma.sql`posting_analytics_daily`;
   }
 
   private hourlyTableSql(): Prisma.Sql {
-    return Prisma.sql`renting_analytics_hourly`;
+    return Prisma.sql`posting_analytics_hourly`;
   }
 
-  private createWindowRange(window: RentingAnalyticsWindow): { startAt?: Date; endAt: Date } {
+  private createWindowRange(window: PostingAnalyticsWindow): { startAt?: Date; endAt: Date } {
     const endAt = new Date();
 
     switch (window) {
@@ -499,7 +499,7 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     }
   }
 
-  private mapMetrics(row?: AnalyticsAggregateRow): RentingAnalyticsMetrics {
+  private mapMetrics(row?: AnalyticsAggregateRow): PostingAnalyticsMetrics {
     return {
       views: Number(row?.views ?? 0),
       uniqueViews: Number(row?.uniqueViews ?? 0),
@@ -540,10 +540,10 @@ export class RentingsAnalyticsRepository extends BaseRepository {
   private mapOutbox(
     outbox: AnalyticsOutboxPersistence,
     processingAt?: Date,
-  ): RentingAnalyticsOutboxRecord {
+  ): PostingAnalyticsOutboxRecord {
     return {
       id: outbox.id,
-      rentingId: outbox.rentingId,
+      postingId: outbox.postingId,
       ownerId: outbox.ownerId,
       eventType: outbox.eventType,
       payload: (outbox.payload ?? {}) as Record<string, unknown>,
@@ -557,3 +557,4 @@ export class RentingsAnalyticsRepository extends BaseRepository {
     };
   }
 }
+

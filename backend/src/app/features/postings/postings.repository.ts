@@ -2,26 +2,26 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import type {
-  BatchPublicRentingsInput,
-  BatchRentingsResult,
-  BatchOwnerRentingsInput,
-  ListOwnerRentingsInput,
-  ListOwnerRentingsResult,
-  PublicRentingRecord,
-  RentingAvailabilityBlockRecord,
-  RentingAvailabilityStatus,
-  RentingPhotoRecord,
-  RentingPricing,
-  RentingRecord,
-  RentingSearchDocument,
-  RentingSearchOutboxRecord,
-  RentingSort,
-  RentingStatus,
-  SearchRentingsInput,
-  UpsertRentingInput,
-} from "@/features/rentings/rentings.model";
+  BatchPublicPostingsInput,
+  BatchPostingsResult,
+  BatchOwnerPostingsInput,
+  ListOwnerPostingsInput,
+  ListOwnerPostingsResult,
+  PublicPostingRecord,
+  PostingAvailabilityBlockRecord,
+  PostingAvailabilityStatus,
+  PostingPhotoRecord,
+  PostingPricing,
+  PostingRecord,
+  PostingSearchDocument,
+  PostingSearchOutboxRecord,
+  PostingSort,
+  PostingStatus,
+  SearchPostingsInput,
+  UpsertPostingInput,
+} from "@/features/postings/postings.model";
 
-type RentingPersistence = Prisma.RentingGetPayload<{
+type PostingPersistence = Prisma.PostingGetPayload<{
   include: {
     photos: {
       orderBy: {
@@ -46,11 +46,11 @@ interface SearchIdRow {
 
 const PUBLIC_LOCATION_PRECISION = 2;
 
-export class RentingsRepository extends BaseRepository {
-  async create(input: UpsertRentingInput): Promise<RentingRecord> {
+export class PostingsRepository extends BaseRepository {
+  async create(input: UpsertPostingInput): Promise<PostingRecord> {
     return this.executeAsync(async () => {
-      const renting = await this.prisma.$transaction(async (transaction) => {
-        const created = await transaction.renting.create({
+      const posting = await this.prisma.$transaction(async (transaction) => {
+        const created = await transaction.posting.create({
           data: this.toCreateData(input),
           include: {
             photos: {
@@ -72,15 +72,15 @@ export class RentingsRepository extends BaseRepository {
         return created;
       });
 
-      return this.mapRenting(renting);
+      return this.mapPosting(posting);
     });
   }
 
-  async update(id: string, input: UpsertRentingInput): Promise<RentingRecord | null> {
+  async update(id: string, input: UpsertPostingInput): Promise<PostingRecord | null> {
     return this.executeAsync(async () => {
       try {
-        const renting = await this.prisma.$transaction(async (transaction) => {
-          const updated = await transaction.renting.update({
+        const posting = await this.prisma.$transaction(async (transaction) => {
+          const updated = await transaction.posting.update({
             where: {
               id,
             },
@@ -109,7 +109,7 @@ export class RentingsRepository extends BaseRepository {
           return updated;
         });
 
-        return this.mapRenting(renting);
+        return this.mapPosting(posting);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
           return null;
@@ -120,11 +120,11 @@ export class RentingsRepository extends BaseRepository {
     });
   }
 
-  async publish(id: string, ownerId: string): Promise<RentingRecord | null> {
+  async publish(id: string, ownerId: string): Promise<PostingRecord | null> {
     return this.executeAsync(async () => {
       try {
-        const renting = await this.prisma.$transaction(async (transaction) => {
-          const updated = await transaction.renting.update({
+        const posting = await this.prisma.$transaction(async (transaction) => {
+          const updated = await transaction.posting.update({
             where: {
               id,
             },
@@ -153,7 +153,7 @@ export class RentingsRepository extends BaseRepository {
           return updated;
         });
 
-        return this.mapRenting(renting);
+        return this.mapPosting(posting);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
           return null;
@@ -164,11 +164,11 @@ export class RentingsRepository extends BaseRepository {
     });
   }
 
-  async archive(id: string, ownerId: string): Promise<RentingRecord | null> {
+  async archive(id: string, ownerId: string): Promise<PostingRecord | null> {
     return this.executeAsync(async () => {
       try {
-        const renting = await this.prisma.$transaction(async (transaction) => {
-          const updated = await transaction.renting.update({
+        const posting = await this.prisma.$transaction(async (transaction) => {
+          const updated = await transaction.posting.update({
             where: {
               id,
             },
@@ -196,7 +196,7 @@ export class RentingsRepository extends BaseRepository {
           return updated;
         });
 
-        return this.mapRenting(renting);
+        return this.mapPosting(posting);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
           return null;
@@ -207,9 +207,9 @@ export class RentingsRepository extends BaseRepository {
     });
   }
 
-  async findById(id: string): Promise<RentingRecord | null> {
-    const renting = await this.executeAsync(() =>
-      this.prisma.renting.findUnique({
+  async findById(id: string): Promise<PostingRecord | null> {
+    const posting = await this.executeAsync(() =>
+      this.prisma.posting.findUnique({
         where: {
           id,
         },
@@ -228,19 +228,19 @@ export class RentingsRepository extends BaseRepository {
       }),
     );
 
-    return renting ? this.mapRenting(renting) : null;
+    return posting ? this.mapPosting(posting) : null;
   }
 
-  async listByOwner(input: ListOwnerRentingsInput): Promise<ListOwnerRentingsResult> {
-    const where: Prisma.RentingWhereInput = {
+  async listByOwner(input: ListOwnerPostingsInput): Promise<ListOwnerPostingsResult> {
+    const where: Prisma.PostingWhereInput = {
       ownerId: input.ownerId,
       ...(input.status ? { status: input.status } : {}),
     };
     const skip = (input.page - 1) * input.pageSize;
 
-    const [rentings, total] = await this.executeAsync(() =>
+    const [postings, total] = await this.executeAsync(() =>
       Promise.all([
-        this.prisma.renting.findMany({
+        this.prisma.posting.findMany({
           where,
           skip,
           take: input.pageSize,
@@ -265,24 +265,24 @@ export class RentingsRepository extends BaseRepository {
             },
           },
         }),
-        this.prisma.renting.count({
+        this.prisma.posting.count({
           where,
         }),
       ]),
     );
 
     return {
-      rentings: rentings.map((renting) => this.mapRenting(renting)),
+      postings: postings.map((posting) => this.mapPosting(posting)),
       pagination: this.createPagination(input.page, input.pageSize, total),
       ...(input.status ? { status: input.status } : {}),
     };
   }
 
   async batchFindByOwner(
-    input: BatchOwnerRentingsInput,
-  ): Promise<BatchRentingsResult<RentingRecord>> {
-    const rentings = await this.executeAsync(() =>
-      this.prisma.renting.findMany({
+    input: BatchOwnerPostingsInput,
+  ): Promise<BatchPostingsResult<PostingRecord>> {
+    const postings = await this.executeAsync(() =>
+      this.prisma.posting.findMany({
         where: {
           ownerId: input.ownerId,
           id: {
@@ -304,15 +304,15 @@ export class RentingsRepository extends BaseRepository {
       }),
     );
 
-    const mapped = rentings.map((renting) => this.mapRenting(renting));
+    const mapped = postings.map((posting) => this.mapPosting(posting));
     return this.orderBatchResult(input.ids, mapped);
   }
 
   async batchFindPublic(
-    input: BatchPublicRentingsInput,
-  ): Promise<BatchRentingsResult<PublicRentingRecord>> {
-    const rentings = await this.executeAsync(() =>
-      this.prisma.renting.findMany({
+    input: BatchPublicPostingsInput,
+  ): Promise<BatchPostingsResult<PublicPostingRecord>> {
+    const postings = await this.executeAsync(() =>
+      this.prisma.posting.findMany({
         where: {
           id: {
             in: input.ids,
@@ -335,11 +335,11 @@ export class RentingsRepository extends BaseRepository {
       }),
     );
 
-    const mapped = rentings.map((renting) => this.mapPublicRenting(renting));
+    const mapped = postings.map((posting) => this.mapPublicPosting(posting));
     return this.orderBatchResult(input.ids, mapped);
   }
 
-  async searchPublicFallback(input: SearchRentingsInput): Promise<{
+  async searchPublicFallback(input: SearchPostingsInput): Promise<{
     ids: string[];
     total: number;
   }> {
@@ -409,12 +409,12 @@ export class RentingsRepository extends BaseRepository {
     const [countRows, idRows] = await this.executeAsync(() =>
       Promise.all([
         this.prisma.$queryRaw<SearchCountRow[]>(
-          Prisma.sql`SELECT COUNT(*) AS total FROM rentings WHERE ${whereSql}`,
+          Prisma.sql`SELECT COUNT(*) AS total FROM postings WHERE ${whereSql}`,
         ),
         this.prisma.$queryRaw<SearchIdRow[]>(
           Prisma.sql`
             SELECT id
-            FROM rentings
+            FROM postings
             WHERE ${whereSql}
             ORDER BY ${orderBy}
             LIMIT ${input.pageSize}
@@ -430,13 +430,13 @@ export class RentingsRepository extends BaseRepository {
     };
   }
 
-  async findByIdsForIndexing(ids: string[]): Promise<RentingSearchDocument[]> {
+  async findByIdsForIndexing(ids: string[]): Promise<PostingSearchDocument[]> {
     if (ids.length === 0) {
       return [];
     }
 
-    const rentings = await this.executeAsync(() =>
-      this.prisma.renting.findMany({
+    const postings = await this.executeAsync(() =>
+      this.prisma.posting.findMany({
         where: {
           id: {
             in: ids,
@@ -457,14 +457,14 @@ export class RentingsRepository extends BaseRepository {
       }),
     );
 
-    return rentings.map((renting) => this.mapSearchDocument(renting));
+    return postings.map((posting) => this.mapSearchDocument(posting));
   }
 
-  async claimSearchOutboxBatch(limit: number): Promise<RentingSearchOutboxRecord[]> {
+  async claimSearchOutboxBatch(limit: number): Promise<PostingSearchOutboxRecord[]> {
     return this.executeAsync(async () => {
       const now = new Date();
       const staleProcessingThreshold = new Date(now.getTime() - 5 * 60 * 1000);
-      const candidates = await this.prisma.rentingSearchOutbox.findMany({
+      const candidates = await this.prisma.postingSearchOutbox.findMany({
         where: {
           processedAt: null,
           availableAt: {
@@ -492,10 +492,10 @@ export class RentingsRepository extends BaseRepository {
         take: limit,
       });
 
-      const claimed: RentingSearchOutboxRecord[] = [];
+      const claimed: PostingSearchOutboxRecord[] = [];
 
       for (const candidate of candidates) {
-        const result = await this.prisma.rentingSearchOutbox.updateMany({
+        const result = await this.prisma.postingSearchOutbox.updateMany({
           where: {
             id: candidate.id,
             processedAt: null,
@@ -526,7 +526,7 @@ export class RentingsRepository extends BaseRepository {
 
   async markSearchOutboxProcessed(id: string): Promise<void> {
     await this.executeAsync(() =>
-      this.prisma.rentingSearchOutbox.update({
+      this.prisma.postingSearchOutbox.update({
         where: {
           id,
         },
@@ -542,7 +542,7 @@ export class RentingsRepository extends BaseRepository {
   async markSearchOutboxRetry(id: string, attempts: number, errorMessage: string): Promise<void> {
     const backoffSeconds = Math.min(300, 2 ** Math.min(attempts, 8));
     await this.executeAsync(() =>
-      this.prisma.rentingSearchOutbox.update({
+      this.prisma.postingSearchOutbox.update({
         where: {
           id,
         },
@@ -560,7 +560,7 @@ export class RentingsRepository extends BaseRepository {
 
   async getPendingSearchOutboxCount(): Promise<number> {
     return this.executeAsync(() =>
-      this.prisma.rentingSearchOutbox.count({
+      this.prisma.postingSearchOutbox.count({
         where: {
           processedAt: null,
         },
@@ -569,7 +569,7 @@ export class RentingsRepository extends BaseRepository {
   }
 
   private createFallbackOrderBy(
-    sort: RentingSort,
+    sort: PostingSort,
     distanceExpression: Prisma.Sql | null,
   ): Prisma.Sql {
     switch (sort) {
@@ -590,13 +590,13 @@ export class RentingsRepository extends BaseRepository {
 
   private async enqueueOutbox(
     transaction: Prisma.TransactionClient,
-    rentingId: string,
+    postingId: string,
     operation: "upsert" | "delete",
   ): Promise<void> {
-    await transaction.rentingSearchOutbox.create({
+    await transaction.postingSearchOutbox.create({
       data: {
         id: randomUUID(),
-        rentingId,
+        postingId,
         operation,
       },
     });
@@ -606,8 +606,8 @@ export class RentingsRepository extends BaseRepository {
     transaction: Prisma.TransactionClient,
     ownerId: string,
   ): Promise<void> {
-    const [totalRentings, availableRentings] = await Promise.all([
-      transaction.renting.count({
+    const [totalPostings, availablePostings] = await Promise.all([
+      transaction.posting.count({
         where: {
           ownerId,
           status: {
@@ -615,7 +615,7 @@ export class RentingsRepository extends BaseRepository {
           },
         },
       }),
-      transaction.renting.count({
+      transaction.posting.count({
         where: {
           ownerId,
           status: "published",
@@ -632,13 +632,13 @@ export class RentingsRepository extends BaseRepository {
         userId: ownerId,
       },
       data: {
-        rentPostingsCount: totalRentings,
-        availableRentPostingsCount: availableRentings,
+        rentPostingsCount: totalPostings,
+        availableRentPostingsCount: availablePostings,
       },
     });
   }
 
-  private toCreateData(input: UpsertRentingInput): Prisma.RentingCreateInput {
+  private toCreateData(input: UpsertPostingInput): Prisma.PostingCreateInput {
     return {
       id: randomUUID(),
       owner: {
@@ -680,7 +680,7 @@ export class RentingsRepository extends BaseRepository {
     };
   }
 
-  private toUpdateData(input: UpsertRentingInput): Prisma.RentingUpdateInput {
+  private toUpdateData(input: UpsertPostingInput): Prisma.PostingUpdateInput {
     return {
       name: input.name,
       description: input.description,
@@ -717,23 +717,23 @@ export class RentingsRepository extends BaseRepository {
     };
   }
 
-  private mapRenting(renting: RentingPersistence): RentingRecord {
-    const pricing = renting.pricing as RentingPricing;
-    const tags = Array.isArray(renting.tags) ? (renting.tags as string[]) : [];
-    const attributes = (renting.attributes ?? {}) as Record<
+  private mapPosting(posting: PostingPersistence): PostingRecord {
+    const pricing = posting.pricing as PostingPricing;
+    const tags = Array.isArray(posting.tags) ? (posting.tags as string[]) : [];
+    const attributes = (posting.attributes ?? {}) as Record<
       string,
       string | number | boolean | string[]
     >;
 
     return {
-      id: renting.id,
-      ownerId: renting.ownerId,
-      status: renting.status as RentingStatus,
-      name: renting.name,
-      description: renting.description,
+      id: posting.id,
+      ownerId: posting.ownerId,
+      status: posting.status as PostingStatus,
+      name: posting.name,
+      description: posting.description,
       pricing,
-      pricingCurrency: renting.pricingCurrency,
-      photos: renting.photos.map((photo): RentingPhotoRecord => ({
+      pricingCurrency: posting.pricingCurrency,
+      photos: posting.photos.map((photo): PostingPhotoRecord => ({
         id: photo.id,
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
@@ -743,10 +743,10 @@ export class RentingsRepository extends BaseRepository {
       })),
       tags,
       attributes,
-      availabilityStatus: renting.availabilityStatus as RentingAvailabilityStatus,
-      availabilityNotes: renting.availabilityNotes ?? undefined,
-      availabilityBlocks: renting.availabilityBlocks.map(
-        (block): RentingAvailabilityBlockRecord => ({
+      availabilityStatus: posting.availabilityStatus as PostingAvailabilityStatus,
+      availabilityNotes: posting.availabilityNotes ?? undefined,
+      availabilityBlocks: posting.availabilityBlocks.map(
+        (block): PostingAvailabilityBlockRecord => ({
           id: block.id,
           startAt: block.startAt.toISOString(),
           endAt: block.endAt.toISOString(),
@@ -756,22 +756,22 @@ export class RentingsRepository extends BaseRepository {
         }),
       ),
       location: {
-        latitude: renting.latitude,
-        longitude: renting.longitude,
-        city: renting.city,
-        region: renting.region,
-        country: renting.country,
-        postalCode: renting.postalCode ?? undefined,
+        latitude: posting.latitude,
+        longitude: posting.longitude,
+        city: posting.city,
+        region: posting.region,
+        country: posting.country,
+        postalCode: posting.postalCode ?? undefined,
       },
-      publishedAt: renting.publishedAt?.toISOString(),
-      archivedAt: renting.archivedAt?.toISOString(),
-      createdAt: renting.createdAt.toISOString(),
-      updatedAt: renting.updatedAt.toISOString(),
+      publishedAt: posting.publishedAt?.toISOString(),
+      archivedAt: posting.archivedAt?.toISOString(),
+      createdAt: posting.createdAt.toISOString(),
+      updatedAt: posting.updatedAt.toISOString(),
     };
   }
 
-  private mapPublicRenting(renting: RentingPersistence): PublicRentingRecord {
-    const record = this.mapRenting(renting);
+  private mapPublicPosting(posting: PostingPersistence): PublicPostingRecord {
+    const record = this.mapPosting(posting);
 
     return {
       ...record,
@@ -786,46 +786,46 @@ export class RentingsRepository extends BaseRepository {
     };
   }
 
-  private mapSearchDocument(renting: RentingPersistence): RentingSearchDocument {
+  private mapSearchDocument(posting: PostingPersistence): PostingSearchDocument {
     return {
-      id: renting.id,
-      ownerId: renting.ownerId,
-      status: renting.status as RentingStatus,
-      name: renting.name,
-      description: renting.description,
-      tags: Array.isArray(renting.tags) ? (renting.tags as string[]) : [],
-      attributes: (renting.attributes ?? {}) as Record<
+      id: posting.id,
+      ownerId: posting.ownerId,
+      status: posting.status as PostingStatus,
+      name: posting.name,
+      description: posting.description,
+      tags: Array.isArray(posting.tags) ? (posting.tags as string[]) : [],
+      attributes: (posting.attributes ?? {}) as Record<
         string,
         string | number | boolean | string[]
       >,
-      availabilityStatus: renting.availabilityStatus as RentingAvailabilityStatus,
-      pricing: renting.pricing as RentingPricing,
-      pricingCurrency: renting.pricingCurrency,
+      availabilityStatus: posting.availabilityStatus as PostingAvailabilityStatus,
+      pricing: posting.pricing as PostingPricing,
+      pricingCurrency: posting.pricingCurrency,
       location: {
-        latitude: renting.latitude,
-        longitude: renting.longitude,
-        city: renting.city,
-        region: renting.region,
-        country: renting.country,
-        postalCode: renting.postalCode ?? undefined,
+        latitude: posting.latitude,
+        longitude: posting.longitude,
+        city: posting.city,
+        region: posting.region,
+        country: posting.country,
+        postalCode: posting.postalCode ?? undefined,
       },
-      photos: renting.photos.map((photo) => ({
+      photos: posting.photos.map((photo) => ({
         blobUrl: photo.blobUrl,
         position: photo.position,
       })),
-      createdAt: renting.createdAt.toISOString(),
-      updatedAt: renting.updatedAt.toISOString(),
-      publishedAt: renting.publishedAt?.toISOString(),
+      createdAt: posting.createdAt.toISOString(),
+      updatedAt: posting.updatedAt.toISOString(),
+      publishedAt: posting.publishedAt?.toISOString(),
     };
   }
 
   private mapOutbox(
-    outbox: Prisma.RentingSearchOutboxGetPayload<object>,
+    outbox: Prisma.PostingSearchOutboxGetPayload<object>,
     processingAt?: Date,
-  ): RentingSearchOutboxRecord {
+  ): PostingSearchOutboxRecord {
     return {
       id: outbox.id,
-      rentingId: outbox.rentingId,
+      postingId: outbox.postingId,
       operation: outbox.operation,
       attempts: outbox.attempts,
       availableAt: outbox.availableAt.toISOString(),
@@ -857,7 +857,7 @@ export class RentingsRepository extends BaseRepository {
   private orderBatchResult<TRecord extends { id: string }>(
     ids: string[],
     records: TRecord[],
-  ): BatchRentingsResult<TRecord> {
+  ): BatchPostingsResult<TRecord> {
     const byId = new Map(records.map((record) => [record.id, record]));
     const orderedRecords: TRecord[] = [];
     const missingIds: string[] = [];
@@ -874,8 +874,9 @@ export class RentingsRepository extends BaseRepository {
     }
 
     return {
-      rentings: orderedRecords,
+      postings: orderedRecords,
       missingIds,
     };
   }
 }
+

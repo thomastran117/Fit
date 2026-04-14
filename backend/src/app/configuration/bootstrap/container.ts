@@ -13,14 +13,14 @@ import { EmailService } from "@/features/email/email.service";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
-import { RentingsAnalyticsRepository } from "@/features/rentings/rentings.analytics.repository";
-import { RentingsAnalyticsService } from "@/features/rentings/rentings.analytics.service";
-import { RentingsController } from "@/features/rentings/rentings.controller";
-import { RentingsReviewsRepository } from "@/features/rentings/rentings.reviews.repository";
-import { RentingsReviewsService } from "@/features/rentings/rentings.reviews.service";
-import { RentingsRepository } from "@/features/rentings/rentings.repository";
-import { RentingsSearchService } from "@/features/rentings/rentings.search.service";
-import { RentingsService } from "@/features/rentings/rentings.service";
+import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
+import { PostingsController } from "@/features/postings/postings.controller";
+import { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
+import { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingsSearchService } from "@/features/postings/postings.search.service";
+import { PostingsService } from "@/features/postings/postings.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
@@ -38,14 +38,14 @@ export interface ApplicationContainer {
   profileRepository: ProfileRepository;
   profileService: ProfileService;
   profileController: ProfileController;
-  rentingsRepository: RentingsRepository;
-  rentingsAnalyticsRepository: RentingsAnalyticsRepository;
-  rentingsAnalyticsService: RentingsAnalyticsService;
-  rentingsReviewsRepository: RentingsReviewsRepository;
-  rentingsReviewsService: RentingsReviewsService;
-  rentingsSearchService: RentingsSearchService;
-  rentingsService: RentingsService;
-  rentingsController: RentingsController;
+  postingsRepository: PostingsRepository;
+  postingsAnalyticsRepository: PostingsAnalyticsRepository;
+  postingsAnalyticsService: PostingsAnalyticsService;
+  postingsReviewsRepository: PostingsReviewsRepository;
+  postingsReviewsService: PostingsReviewsService;
+  postingsSearchService: PostingsSearchService;
+  postingsService: PostingsService;
+  postingsController: PostingsController;
 }
 
 let container: ApplicationContainer | null = null;
@@ -70,27 +70,27 @@ function createContainer(): ApplicationContainer {
   const profileRepository = new ProfileRepository();
   const profileService = new ProfileService(profileRepository, blobService);
   const profileController = new ProfileController(profileService);
-  const rentingsRepository = new RentingsRepository();
-  const rentingsAnalyticsRepository = new RentingsAnalyticsRepository();
-  const rentingsAnalyticsService = new RentingsAnalyticsService(
-    rentingsAnalyticsRepository,
-    rentingsRepository,
+  const postingsRepository = new PostingsRepository();
+  const postingsAnalyticsRepository = new PostingsAnalyticsRepository();
+  const postingsAnalyticsService = new PostingsAnalyticsService(
+    postingsAnalyticsRepository,
+    postingsRepository,
   );
-  const rentingsReviewsRepository = new RentingsReviewsRepository();
-  const rentingsReviewsService = new RentingsReviewsService(
-    rentingsReviewsRepository,
-    rentingsRepository,
+  const postingsReviewsRepository = new PostingsReviewsRepository();
+  const postingsReviewsService = new PostingsReviewsService(
+    postingsReviewsRepository,
+    postingsRepository,
   );
-  const rentingsSearchService = new RentingsSearchService(rentingsRepository);
-  const rentingsService = new RentingsService(
-    rentingsRepository,
-    rentingsSearchService,
+  const postingsSearchService = new PostingsSearchService(postingsRepository);
+  const postingsService = new PostingsService(
+    postingsRepository,
+    postingsSearchService,
     blobService,
   );
-  const rentingsController = new RentingsController(
-    rentingsService,
-    rentingsAnalyticsService,
-    rentingsReviewsService,
+  const postingsController = new PostingsController(
+    postingsService,
+    postingsAnalyticsService,
+    postingsReviewsService,
   );
   const authRepository = new AuthRepository();
   const authService = AuthService.create({
@@ -119,14 +119,14 @@ function createContainer(): ApplicationContainer {
     profileRepository,
     profileService,
     profileController,
-    rentingsRepository,
-    rentingsAnalyticsRepository,
-    rentingsAnalyticsService,
-    rentingsReviewsRepository,
-    rentingsReviewsService,
-    rentingsSearchService,
-    rentingsService,
-    rentingsController,
+    postingsRepository,
+    postingsAnalyticsRepository,
+    postingsAnalyticsService,
+    postingsReviewsRepository,
+    postingsReviewsService,
+    postingsSearchService,
+    postingsService,
+    postingsController,
   };
 }
 
@@ -146,3 +146,5 @@ export function getContainer(): ApplicationContainer {
 
   return container;
 }
+
+

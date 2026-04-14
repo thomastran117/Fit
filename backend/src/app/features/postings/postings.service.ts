@@ -4,127 +4,127 @@ import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { BlobService } from "@/features/blob/blob.service";
 import {
   MAX_BATCH_IDS,
-  MAX_RENTING_PHOTOS,
-  type BatchRentingsResult,
-  type ListOwnerRentingsInput,
-  type ListOwnerRentingsResult,
-  type PublicRentingRecord,
-  type RentingAvailabilityBlockInput,
-  type RentingPhotoInput,
-  type RentingPricing,
-  type RentingRecord,
-  type SearchRentingsInput,
-  type SearchRentingsResult,
-  type UpsertRentingInput,
-} from "@/features/rentings/rentings.model";
-import type { RentingsRepository } from "@/features/rentings/rentings.repository";
-import type { RentingsSearchService } from "@/features/rentings/rentings.search.service";
+  MAX_POSTING_PHOTOS,
+  type BatchPostingsResult,
+  type ListOwnerPostingsInput,
+  type ListOwnerPostingsResult,
+  type PublicPostingRecord,
+  type PostingAvailabilityBlockInput,
+  type PostingPhotoInput,
+  type PostingPricing,
+  type PostingRecord,
+  type SearchPostingsInput,
+  type SearchPostingsResult,
+  type UpsertPostingInput,
+} from "@/features/postings/postings.model";
+import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 
-export class RentingsService {
+export class PostingsService {
   constructor(
-    private readonly rentingsRepository: RentingsRepository,
-    private readonly rentingsSearchService: RentingsSearchService,
+    private readonly postingsRepository: PostingsRepository,
+    private readonly postingsSearchService: PostingsSearchService,
     private readonly blobService: BlobService,
   ) {}
 
-  async createDraft(input: UpsertRentingInput): Promise<RentingRecord> {
+  async createDraft(input: UpsertPostingInput): Promise<PostingRecord> {
     const normalizedInput = this.normalizeUpsertInput(input);
     this.assertPublishableDraftShape(normalizedInput);
 
-    return this.rentingsRepository.create(normalizedInput);
+    return this.postingsRepository.create(normalizedInput);
   }
 
-  async update(id: string, input: UpsertRentingInput): Promise<RentingRecord> {
-    const existing = await this.requireOwnerRenting(id, input.ownerId);
+  async update(id: string, input: UpsertPostingInput): Promise<PostingRecord> {
+    const existing = await this.requireOwnerPosting(id, input.ownerId);
     const normalizedInput = this.normalizeUpsertInput(input);
     this.assertPublishableDraftShape(normalizedInput);
 
-    const updated = await this.rentingsRepository.update(existing.id, normalizedInput);
+    const updated = await this.postingsRepository.update(existing.id, normalizedInput);
 
     if (!updated) {
-      throw new ResourceNotFoundError("Renting could not be found.");
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
     return updated;
   }
 
-  async publish(id: string, ownerId: string): Promise<RentingRecord> {
-    const renting = await this.requireOwnerRenting(id, ownerId);
-    this.assertCanPublish(renting);
+  async publish(id: string, ownerId: string): Promise<PostingRecord> {
+    const posting = await this.requireOwnerPosting(id, ownerId);
+    this.assertCanPublish(posting);
 
-    const published = await this.rentingsRepository.publish(id, ownerId);
+    const published = await this.postingsRepository.publish(id, ownerId);
 
     if (!published) {
-      throw new ResourceNotFoundError("Renting could not be found.");
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
     return published;
   }
 
-  async archive(id: string, ownerId: string): Promise<RentingRecord> {
-    await this.requireOwnerRenting(id, ownerId);
-    const archived = await this.rentingsRepository.archive(id, ownerId);
+  async archive(id: string, ownerId: string): Promise<PostingRecord> {
+    await this.requireOwnerPosting(id, ownerId);
+    const archived = await this.postingsRepository.archive(id, ownerId);
 
     if (!archived) {
-      throw new ResourceNotFoundError("Renting could not be found.");
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
     return archived;
   }
 
-  async getById(id: string, viewerId?: string): Promise<RentingRecord | PublicRentingRecord> {
-    const renting = await this.rentingsRepository.findById(id);
+  async getById(id: string, viewerId?: string): Promise<PostingRecord | PublicPostingRecord> {
+    const posting = await this.postingsRepository.findById(id);
 
-    if (!renting) {
-      throw new ResourceNotFoundError("Renting could not be found.");
+    if (!posting) {
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
-    if (viewerId && renting.ownerId === viewerId) {
-      return renting;
+    if (viewerId && posting.ownerId === viewerId) {
+      return posting;
     }
 
-    if (renting.status !== "published" || renting.archivedAt) {
-      throw new ResourceNotFoundError("Renting could not be found.");
+    if (posting.status !== "published" || posting.archivedAt) {
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
-    return this.toPublicRenting(renting);
+    return this.toPublicPosting(posting);
   }
 
-  async listByOwner(input: ListOwnerRentingsInput): Promise<ListOwnerRentingsResult> {
-    return this.rentingsRepository.listByOwner(input);
+  async listByOwner(input: ListOwnerPostingsInput): Promise<ListOwnerPostingsResult> {
+    return this.postingsRepository.listByOwner(input);
   }
 
-  async batchByOwner(ownerId: string, ids: string[]): Promise<BatchRentingsResult<RentingRecord>> {
+  async batchByOwner(ownerId: string, ids: string[]): Promise<BatchPostingsResult<PostingRecord>> {
     const normalizedIds = this.normalizeBatchIds(ids);
 
-    return this.rentingsRepository.batchFindByOwner({
+    return this.postingsRepository.batchFindByOwner({
       ownerId,
       ids: normalizedIds,
     });
   }
 
-  async batchPublic(ids: string[]): Promise<BatchRentingsResult<PublicRentingRecord>> {
+  async batchPublic(ids: string[]): Promise<BatchPostingsResult<PublicPostingRecord>> {
     const normalizedIds = this.normalizeBatchIds(ids);
-    const batch = await this.rentingsRepository.batchFindPublic({
+    const batch = await this.postingsRepository.batchFindPublic({
       ids: normalizedIds,
     });
 
     return {
-      rentings: batch.rentings.map((renting) => this.toPublicRenting(renting)),
+      postings: batch.postings.map((posting) => this.toPublicPosting(posting)),
       missingIds: batch.missingIds,
     };
   }
 
-  async searchPublic(input: SearchRentingsInput): Promise<SearchRentingsResult> {
+  async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
     this.assertValidSearchInput(input);
-    return this.rentingsSearchService.searchPublic({
+    return this.postingsSearchService.searchPublic({
       ...input,
       query: input.query?.trim() || undefined,
       tags: input.tags?.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
     });
   }
 
-  private normalizeUpsertInput(input: UpsertRentingInput): UpsertRentingInput {
+  private normalizeUpsertInput(input: UpsertPostingInput): UpsertPostingInput {
     const normalizedPhotos = this.normalizePhotos(input.photos);
     const normalizedBlocks = this.normalizeAvailabilityBlocks(input.availabilityBlocks);
     const normalizedTags = Array.from(
@@ -157,13 +157,13 @@ export class RentingsService {
     };
   }
 
-  private normalizePhotos(photos: RentingPhotoInput[]): RentingPhotoInput[] {
+  private normalizePhotos(photos: PostingPhotoInput[]): PostingPhotoInput[] {
     if (photos.length === 0) {
       throw new BadRequestError("At least one photo is required.");
     }
 
-    if (photos.length > MAX_RENTING_PHOTOS) {
-      throw new BadRequestError(`A renting can include at most ${MAX_RENTING_PHOTOS} photos.`);
+    if (photos.length > MAX_POSTING_PHOTOS) {
+      throw new BadRequestError(`A posting can include at most ${MAX_POSTING_PHOTOS} photos.`);
     }
 
     const uniquePositions = new Set<number>();
@@ -187,8 +187,8 @@ export class RentingsService {
   }
 
   private normalizeAvailabilityBlocks(
-    blocks: RentingAvailabilityBlockInput[],
-  ): RentingAvailabilityBlockInput[] {
+    blocks: PostingAvailabilityBlockInput[],
+  ): PostingAvailabilityBlockInput[] {
     const normalized = blocks
       .map((block) => ({
         ...block,
@@ -217,7 +217,7 @@ export class RentingsService {
     return normalized;
   }
 
-  private normalizePricing(pricing: RentingPricing): RentingPricing {
+  private normalizePricing(pricing: PostingPricing): PostingPricing {
     return {
       currency: pricing.currency.trim().toUpperCase(),
       daily: {
@@ -240,35 +240,35 @@ export class RentingsService {
     );
   }
 
-  private assertCanPublish(renting: RentingRecord): void {
-    if (renting.photos.length < 1 || renting.photos.length > MAX_RENTING_PHOTOS) {
-      throw new BadRequestError("Published rentings must include between 1 and 10 photos.");
+  private assertCanPublish(posting: PostingRecord): void {
+    if (posting.photos.length < 1 || posting.photos.length > MAX_POSTING_PHOTOS) {
+      throw new BadRequestError("Published postings must include between 1 and 10 photos.");
     }
 
-    if (!renting.pricing.daily?.amount || renting.pricing.daily.amount <= 0) {
-      throw new BadRequestError("Published rentings must include a valid daily price.");
+    if (!posting.pricing.daily?.amount || posting.pricing.daily.amount <= 0) {
+      throw new BadRequestError("Published postings must include a valid daily price.");
     }
 
-    if (!this.isValidCoordinate(renting.location.latitude, -90, 90)) {
-      throw new BadRequestError("Published rentings must include a valid latitude.");
+    if (!this.isValidCoordinate(posting.location.latitude, -90, 90)) {
+      throw new BadRequestError("Published postings must include a valid latitude.");
     }
 
-    if (!this.isValidCoordinate(renting.location.longitude, -180, 180)) {
-      throw new BadRequestError("Published rentings must include a valid longitude.");
+    if (!this.isValidCoordinate(posting.location.longitude, -180, 180)) {
+      throw new BadRequestError("Published postings must include a valid longitude.");
     }
   }
 
-  private assertPublishableDraftShape(input: UpsertRentingInput): void {
+  private assertPublishableDraftShape(input: UpsertPostingInput): void {
     if (!input.name.trim()) {
-      throw new BadRequestError("Renting name is required.");
+      throw new BadRequestError("Posting name is required.");
     }
 
     if (!input.description.trim()) {
-      throw new BadRequestError("Renting description is required.");
+      throw new BadRequestError("Posting description is required.");
     }
 
     if (!input.pricing.daily || input.pricing.daily.amount <= 0) {
-      throw new BadRequestError("Renting daily pricing is required.");
+      throw new BadRequestError("Posting daily pricing is required.");
     }
 
     if (!this.isValidCoordinate(input.location.latitude, -90, 90)) {
@@ -283,18 +283,18 @@ export class RentingsService {
   private assertManagedBlob(blobUrl: string, blobName: string): void {
     if (!this.blobService.isConfigured()) {
       throw new BadRequestError(
-        "Renting photos require Azure Blob Storage to be configured on the backend.",
+        "Posting photos require Azure Blob Storage to be configured on the backend.",
       );
     }
 
     if (!this.blobService.isManagedBlobUrl(blobUrl, blobName)) {
       throw new BadRequestError(
-        "Renting photo URLs must match the configured Azure Blob Storage location.",
+        "Posting photo URLs must match the configured Azure Blob Storage location.",
       );
     }
   }
 
-  private assertValidSearchInput(input: SearchRentingsInput): void {
+  private assertValidSearchInput(input: SearchPostingsInput): void {
     if (
       input.minDailyPrice !== undefined &&
       input.maxDailyPrice !== undefined &&
@@ -308,44 +308,44 @@ export class RentingsService {
     }
   }
 
-  private async requireOwnerRenting(id: string, ownerId: string): Promise<RentingRecord> {
-    const renting = await this.rentingsRepository.findById(id);
+  private async requireOwnerPosting(id: string, ownerId: string): Promise<PostingRecord> {
+    const posting = await this.postingsRepository.findById(id);
 
-    if (!renting) {
-      throw new ResourceNotFoundError("Renting could not be found.");
+    if (!posting) {
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
-    if (renting.ownerId !== ownerId) {
-      throw new ForbiddenError("You do not have access to this renting.");
+    if (posting.ownerId !== ownerId) {
+      throw new ForbiddenError("You do not have access to this posting.");
     }
 
-    return renting;
+    return posting;
   }
 
   private normalizeBatchIds(ids: string[]): string[] {
     const normalized = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
 
     if (normalized.length === 0) {
-      throw new BadRequestError("At least one renting id is required.");
+      throw new BadRequestError("At least one posting id is required.");
     }
 
     if (normalized.length > MAX_BATCH_IDS) {
-      throw new BadRequestError(`At most ${MAX_BATCH_IDS} renting ids may be requested at once.`);
+      throw new BadRequestError(`At most ${MAX_BATCH_IDS} posting ids may be requested at once.`);
     }
 
     return normalized;
   }
 
-  private toPublicRenting(renting: RentingRecord | PublicRentingRecord): PublicRentingRecord {
+  private toPublicPosting(posting: PostingRecord | PublicPostingRecord): PublicPostingRecord {
     return {
-      ...renting,
+      ...posting,
       location: {
-        city: renting.location.city,
-        region: renting.location.region,
-        country: renting.location.country,
-        postalCode: renting.location.postalCode,
-        latitude: Number(renting.location.latitude.toFixed(2)),
-        longitude: Number(renting.location.longitude.toFixed(2)),
+        city: posting.location.city,
+        region: posting.location.region,
+        country: posting.location.country,
+        postalCode: posting.location.postalCode,
+        latitude: Number(posting.location.latitude.toFixed(2)),
+        longitude: Number(posting.location.longitude.toFixed(2)),
       },
     };
   }
@@ -354,3 +354,4 @@ export class RentingsService {
     return Number.isFinite(value) && value >= min && value <= max;
   }
 }
+

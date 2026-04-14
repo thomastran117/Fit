@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/features/rentings/rentings.model";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/features/postings/postings.model";
 
 const optionalReviewTextSchema = z
   .string()
@@ -9,7 +9,7 @@ const optionalReviewTextSchema = z
   .nullable()
   .optional();
 
-export const createRentingReviewRequestSchema = z.object({
+export const createPostingReviewRequestSchema = z.object({
   rating: z.number().int().min(1).max(5),
   title: z
     .string()
@@ -21,20 +21,20 @@ export const createRentingReviewRequestSchema = z.object({
   comment: optionalReviewTextSchema,
 });
 
-export const updateRentingReviewRequestSchema = createRentingReviewRequestSchema;
+export const updatePostingReviewRequestSchema = createPostingReviewRequestSchema;
 
-export const listRentingReviewsQuerySchema = z.object({
+export const listPostingReviewsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
 
-export type CreateRentingReviewRequestBody = z.infer<typeof createRentingReviewRequestSchema>;
-export type UpdateRentingReviewRequestBody = z.infer<typeof updateRentingReviewRequestSchema>;
-export type ListRentingReviewsQuery = z.infer<typeof listRentingReviewsQuerySchema>;
+export type CreatePostingReviewRequestBody = z.infer<typeof createPostingReviewRequestSchema>;
+export type UpdatePostingReviewRequestBody = z.infer<typeof updatePostingReviewRequestSchema>;
+export type ListPostingReviewsQuery = z.infer<typeof listPostingReviewsQuerySchema>;
 
-export interface RentingReviewRecord {
+export interface PostingReviewRecord {
   id: string;
-  rentingId: string;
+  postingId: string;
   reviewerId: string;
   rating: number;
   title?: string;
@@ -47,14 +47,14 @@ export interface RentingReviewRecord {
   updatedAt: string;
 }
 
-export interface RentingReviewSummary {
+export interface PostingReviewSummary {
   averageRating: number;
   reviewCount: number;
 }
 
-export interface ListRentingReviewsResult {
-  reviews: RentingReviewRecord[];
-  summary: RentingReviewSummary;
+export interface ListPostingReviewsResult {
+  reviews: PostingReviewRecord[];
+  summary: PostingReviewSummary;
   pagination: {
     page: number;
     pageSize: number;
@@ -65,10 +65,11 @@ export interface ListRentingReviewsResult {
   };
 }
 
-export interface UpsertRentingReviewInput {
-  rentingId: string;
+export interface UpsertPostingReviewInput {
+  postingId: string;
   reviewerId: string;
   rating: number;
   title?: string | null;
   comment?: string | null;
 }
+

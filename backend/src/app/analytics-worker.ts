@@ -3,8 +3,8 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-import { RentingsAnalyticsRepository } from "@/features/rentings/rentings.analytics.repository";
-import type { ProcessRentingViewedEventInput } from "@/features/rentings/rentings.analytics.model";
+import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { ProcessPostingViewedEventInput } from "@/features/postings/postings.analytics.model";
 
 function readNumber(name: string, fallback: number): number {
   const rawValue = process.env[name];
@@ -26,11 +26,11 @@ async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
 
-  const repository = new RentingsAnalyticsRepository();
-  const pollIntervalMs = readNumber("RENTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS", 2_000);
-  const batchSize = readNumber("RENTINGS_ANALYTICS_OUTBOX_BATCH_SIZE", 50);
+  const repository = new PostingsAnalyticsRepository();
+  const pollIntervalMs = readNumber("POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS", 2_000);
+  const batchSize = readNumber("POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE", 50);
 
-  console.log("Rentings analytics worker started.");
+  console.log("Postings analytics worker started.");
 
   let isShuttingDown = false;
 
@@ -40,7 +40,7 @@ async function bootstrap(): Promise<void> {
     }
 
     isShuttingDown = true;
-    console.log(`Received ${signal}. Shutting down rentings analytics worker...`);
+    console.log(`Received ${signal}. Shutting down postings analytics worker...`);
     await disconnectDatabase();
     process.exit(0);
   };
@@ -64,14 +64,14 @@ async function bootstrap(): Promise<void> {
 
       for (const job of jobs) {
         try {
-          if (job.eventType === "renting_viewed") {
+          if (job.eventType === "posting_viewed") {
             const payload = job.payload as Record<string, unknown>;
             const occurredAt = readString(payload.occurredAt, "occurredAt");
             const eventDate = floorToUtcDay(occurredAt);
             const eventHour = floorToUtcHour(occurredAt);
 
-            const input: ProcessRentingViewedEventInput = {
-              rentingId: job.rentingId,
+            const input: ProcessPostingViewedEventInput = {
+              postingId: job.postingId,
               ownerId: job.ownerId,
               occurredAt,
               eventDate,
@@ -83,14 +83,14 @@ async function bootstrap(): Promise<void> {
               deviceType: readString(payload.deviceType, "deviceType"),
             };
 
-            await repository.processRentingViewedEvent(input);
+            await repository.processPostingViewedEvent(input);
           }
 
           await repository.markOutboxProcessed(job.id);
         } catch (error) {
-          console.error("Failed to process rentings analytics outbox job", {
+          console.error("Failed to process postings analytics outbox job", {
             jobId: job.id,
-            rentingId: job.rentingId,
+            postingId: job.postingId,
             eventType: job.eventType,
             error,
           });
@@ -102,7 +102,7 @@ async function bootstrap(): Promise<void> {
         }
       }
     } catch (error) {
-      console.error("Rentings analytics worker loop failed", error);
+      console.error("Postings analytics worker loop failed", error);
       await sleep(pollIntervalMs);
     }
   }
@@ -139,7 +139,8 @@ function sleep(delayMs: number): Promise<void> {
 }
 
 void bootstrap().catch(async (error: unknown) => {
-  console.error("Failed to start rentings analytics worker", error);
+  console.error("Failed to start postings analytics worker", error);
   await disconnectDatabase();
   process.exit(1);
 });
+

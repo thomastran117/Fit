@@ -8,8 +8,8 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-import { RentingsRepository } from "@/features/rentings/rentings.repository";
-import { RentingsSearchService } from "@/features/rentings/rentings.search.service";
+import { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingsSearchService } from "@/features/postings/postings.search.service";
 
 function readNumber(name: string, fallback: number): number {
   const rawValue = process.env[name];
@@ -33,12 +33,12 @@ async function bootstrap(): Promise<void> {
   await connectElasticsearch();
   initializeContainer();
 
-  const repository = new RentingsRepository();
-  const searchService = new RentingsSearchService(repository);
-  const pollIntervalMs = readNumber("RENTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS", 2_000);
-  const batchSize = readNumber("RENTINGS_SEARCH_OUTBOX_BATCH_SIZE", 25);
+  const repository = new PostingsRepository();
+  const searchService = new PostingsSearchService(repository);
+  const pollIntervalMs = readNumber("POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS", 2_000);
+  const batchSize = readNumber("POSTINGS_SEARCH_OUTBOX_BATCH_SIZE", 25);
 
-  console.log("Rentings search worker started.");
+  console.log("Postings search worker started.");
 
   let isShuttingDown = false;
 
@@ -48,7 +48,7 @@ async function bootstrap(): Promise<void> {
     }
 
     isShuttingDown = true;
-    console.log(`Received ${signal}. Shutting down rentings search worker...`);
+    console.log(`Received ${signal}. Shutting down postings search worker...`);
     await Promise.allSettled([disconnectDatabase(), disconnectElasticsearch()]);
     process.exit(0);
   };
@@ -78,13 +78,13 @@ async function bootstrap(): Promise<void> {
       for (const job of jobs) {
         try {
           if (job.operation === "delete") {
-            await searchService.deleteDocument(job.rentingId);
+            await searchService.deleteDocument(job.postingId);
           } else {
-            const documents = await repository.findByIdsForIndexing([job.rentingId]);
+            const documents = await repository.findByIdsForIndexing([job.postingId]);
             const document = documents[0];
 
             if (!document || document.status !== "published") {
-              await searchService.deleteDocument(job.rentingId);
+              await searchService.deleteDocument(job.postingId);
             } else {
               await searchService.upsertDocument(document);
             }
@@ -92,9 +92,9 @@ async function bootstrap(): Promise<void> {
 
           await repository.markSearchOutboxProcessed(job.id);
         } catch (error) {
-          console.error("Failed to process rentings search outbox job", {
+          console.error("Failed to process postings search outbox job", {
             jobId: job.id,
-            rentingId: job.rentingId,
+            postingId: job.postingId,
             error,
           });
           await repository.markSearchOutboxRetry(
@@ -105,7 +105,7 @@ async function bootstrap(): Promise<void> {
         }
       }
     } catch (error) {
-      console.error("Rentings search worker loop failed", error);
+      console.error("Postings search worker loop failed", error);
       await sleep(pollIntervalMs);
     }
   }
@@ -118,7 +118,8 @@ function sleep(delayMs: number): Promise<void> {
 }
 
 void bootstrap().catch(async (error: unknown) => {
-  console.error("Failed to start rentings search worker", error);
+  console.error("Failed to start postings search worker", error);
   await Promise.allSettled([disconnectDatabase(), disconnectElasticsearch()]);
   process.exit(1);
 });
+

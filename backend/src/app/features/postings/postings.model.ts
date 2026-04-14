@@ -1,18 +1,18 @@
 import { z } from "zod";
 
-export const MAX_RENTING_PHOTOS = 10;
+export const MAX_POSTING_PHOTOS = 10;
 export const MAX_BATCH_IDS = 50;
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 50;
 
-export const rentingStatusSchema = z.enum(["draft", "published", "archived"]);
-export const rentingAvailabilityStatusSchema = z.enum([
+export const postingStatusSchema = z.enum(["draft", "published", "archived"]);
+export const postingAvailabilityStatusSchema = z.enum([
   "available",
   "limited",
   "unavailable",
 ]);
-export const rentingSearchSourceSchema = z.enum(["elasticsearch", "database"]);
-export const rentingSortSchema = z.enum(["relevance", "newest", "dailyPrice", "nearest"]);
+export const postingSearchSourceSchema = z.enum(["elasticsearch", "database"]);
+export const postingSortSchema = z.enum(["relevance", "newest", "dailyPrice", "nearest"]);
 
 const trimmedStringSchema = z.string().trim().min(1);
 const nullableTrimmedStringSchema = z
@@ -31,7 +31,7 @@ const pricingRateSchema = z.object({
   amount: moneyAmountSchema,
 });
 
-export const rentingPricingSchema = z.object({
+export const postingPricingSchema = z.object({
   currency: z
     .string()
     .trim()
@@ -54,7 +54,7 @@ const attributeValueSchema = z.union([
   z.array(z.string().trim().min(1).max(100)).max(20),
 ]);
 
-export const rentingAttributesSchema = z
+export const postingAttributesSchema = z
   .record(
     z
       .string()
@@ -69,30 +69,30 @@ export const rentingAttributesSchema = z
   )
   .default({});
 
-export const rentingPhotoSchema = z.object({
+export const postingPhotoSchema = z.object({
   blobUrl: z.url("Photo URL must be a valid URL."),
   blobName: trimmedStringSchema.max(1024),
-  position: z.number().int().min(0).max(MAX_RENTING_PHOTOS - 1),
+  position: z.number().int().min(0).max(MAX_POSTING_PHOTOS - 1),
 });
 
-export const rentingAvailabilityBlockSchema = z.object({
+export const postingAvailabilityBlockSchema = z.object({
   startAt: z.string().datetime("Availability block start time must be an ISO datetime."),
   endAt: z.string().datetime("Availability block end time must be an ISO datetime."),
   note: nullableTrimmedStringSchema.pipe(z.string().trim().max(255).nullable().optional()),
 });
 
-export const upsertRentingRequestSchema = z.object({
+export const upsertPostingRequestSchema = z.object({
   name: trimmedStringSchema.max(150),
   description: trimmedStringSchema.max(5000),
-  pricing: rentingPricingSchema,
-  photos: z.array(rentingPhotoSchema).min(1).max(MAX_RENTING_PHOTOS),
+  pricing: postingPricingSchema,
+  photos: z.array(postingPhotoSchema).min(1).max(MAX_POSTING_PHOTOS),
   tags: z.array(trimmedStringSchema.max(50)).max(30).default([]),
-  attributes: rentingAttributesSchema,
-  availabilityStatus: rentingAvailabilityStatusSchema,
+  attributes: postingAttributesSchema,
+  availabilityStatus: postingAvailabilityStatusSchema,
   availabilityNotes: nullableTrimmedStringSchema.pipe(
     z.string().trim().max(500).nullable().optional(),
   ),
-  availabilityBlocks: z.array(rentingAvailabilityBlockSchema).max(200).default([]),
+  availabilityBlocks: z.array(postingAvailabilityBlockSchema).max(200).default([]),
   location: z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
@@ -105,38 +105,38 @@ export const upsertRentingRequestSchema = z.object({
   }),
 });
 
-export const listOwnerRentingsQuerySchema = z.object({
+export const listOwnerPostingsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
-  status: rentingStatusSchema.optional(),
+  status: postingStatusSchema.optional(),
 });
 
-export const publicSearchRentingsQuerySchema = z.object({
+export const publicSearchPostingsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   q: z.string().trim().min(1).max(120).optional(),
   tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
-  availabilityStatus: rentingAvailabilityStatusSchema.optional(),
+  availabilityStatus: postingAvailabilityStatusSchema.optional(),
   minDailyPrice: z.coerce.number().finite().nonnegative().optional(),
   maxDailyPrice: z.coerce.number().finite().nonnegative().optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().positive().max(20_000).optional(),
-  sort: rentingSortSchema.default("relevance"),
+  sort: postingSortSchema.default("relevance"),
 });
 
-export type RentingStatus = z.infer<typeof rentingStatusSchema>;
-export type RentingAvailabilityStatus = z.infer<typeof rentingAvailabilityStatusSchema>;
-export type RentingSearchSource = z.infer<typeof rentingSearchSourceSchema>;
-export type RentingSort = z.infer<typeof rentingSortSchema>;
-export type RentingPricing = z.infer<typeof rentingPricingSchema>;
-export type RentingPhotoInput = z.infer<typeof rentingPhotoSchema>;
-export type RentingAvailabilityBlockInput = z.infer<typeof rentingAvailabilityBlockSchema>;
-export type UpsertRentingRequestBody = z.infer<typeof upsertRentingRequestSchema>;
-export type ListOwnerRentingsQuery = z.infer<typeof listOwnerRentingsQuerySchema>;
-export type PublicSearchRentingsQuery = z.infer<typeof publicSearchRentingsQuerySchema>;
+export type PostingStatus = z.infer<typeof postingStatusSchema>;
+export type PostingAvailabilityStatus = z.infer<typeof postingAvailabilityStatusSchema>;
+export type PostingSearchSource = z.infer<typeof postingSearchSourceSchema>;
+export type PostingSort = z.infer<typeof postingSortSchema>;
+export type PostingPricing = z.infer<typeof postingPricingSchema>;
+export type PostingPhotoInput = z.infer<typeof postingPhotoSchema>;
+export type PostingAvailabilityBlockInput = z.infer<typeof postingAvailabilityBlockSchema>;
+export type UpsertPostingRequestBody = z.infer<typeof upsertPostingRequestSchema>;
+export type ListOwnerPostingsQuery = z.infer<typeof listOwnerPostingsQuerySchema>;
+export type PublicSearchPostingsQuery = z.infer<typeof publicSearchPostingsQuerySchema>;
 
-export interface RentingPhotoRecord {
+export interface PostingPhotoRecord {
   id: string;
   blobUrl: string;
   blobName: string;
@@ -145,7 +145,7 @@ export interface RentingPhotoRecord {
   updatedAt: string;
 }
 
-export interface RentingAvailabilityBlockRecord {
+export interface PostingAvailabilityBlockRecord {
   id: string;
   startAt: string;
   endAt: string;
@@ -154,7 +154,7 @@ export interface RentingAvailabilityBlockRecord {
   updatedAt: string;
 }
 
-export interface RentingLocationRecord {
+export interface PostingLocationRecord {
   city: string;
   region: string;
   country: string;
@@ -163,7 +163,7 @@ export interface RentingLocationRecord {
   longitude: number;
 }
 
-export interface PublicRentingLocationRecord {
+export interface PublicPostingLocationRecord {
   city: string;
   region: string;
   country: string;
@@ -172,32 +172,32 @@ export interface PublicRentingLocationRecord {
   longitude: number;
 }
 
-export interface RentingRecord {
+export interface PostingRecord {
   id: string;
   ownerId: string;
-  status: RentingStatus;
+  status: PostingStatus;
   name: string;
   description: string;
-  pricing: RentingPricing;
+  pricing: PostingPricing;
   pricingCurrency: string;
-  photos: RentingPhotoRecord[];
+  photos: PostingPhotoRecord[];
   tags: string[];
   attributes: Record<string, string | number | boolean | string[]>;
-  availabilityStatus: RentingAvailabilityStatus;
+  availabilityStatus: PostingAvailabilityStatus;
   availabilityNotes?: string;
-  availabilityBlocks: RentingAvailabilityBlockRecord[];
-  location: RentingLocationRecord;
+  availabilityBlocks: PostingAvailabilityBlockRecord[];
+  location: PostingLocationRecord;
   publishedAt?: string;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface PublicRentingRecord extends Omit<RentingRecord, "location"> {
-  location: PublicRentingLocationRecord;
+export interface PublicPostingRecord extends Omit<PostingRecord, "location"> {
+  location: PublicPostingLocationRecord;
 }
 
-export interface RentingPagination {
+export interface PostingPagination {
   page: number;
   pageSize: number;
   total: number;
@@ -206,70 +206,70 @@ export interface RentingPagination {
   hasPreviousPage: boolean;
 }
 
-export interface ListOwnerRentingsResult {
-  rentings: RentingRecord[];
-  pagination: RentingPagination;
-  status?: RentingStatus;
+export interface ListOwnerPostingsResult {
+  postings: PostingRecord[];
+  pagination: PostingPagination;
+  status?: PostingStatus;
 }
 
-export interface BatchRentingsResult<TRecord> {
-  rentings: TRecord[];
+export interface BatchPostingsResult<TRecord> {
+  postings: TRecord[];
   missingIds: string[];
 }
 
-export interface SearchRentingsResult {
-  rentings: PublicRentingRecord[];
-  pagination: RentingPagination;
-  source: RentingSearchSource;
+export interface SearchPostingsResult {
+  postings: PublicPostingRecord[];
+  pagination: PostingPagination;
+  source: PostingSearchSource;
   query?: string;
 }
 
-export interface RentingGeoInput {
+export interface PostingGeoInput {
   latitude: number;
   longitude: number;
 }
 
-export interface UpsertRentingInput {
+export interface UpsertPostingInput {
   ownerId: string;
   name: string;
   description: string;
-  pricing: RentingPricing;
-  photos: RentingPhotoInput[];
+  pricing: PostingPricing;
+  photos: PostingPhotoInput[];
   tags: string[];
   attributes: Record<string, string | number | boolean | string[]>;
-  availabilityStatus: RentingAvailabilityStatus;
+  availabilityStatus: PostingAvailabilityStatus;
   availabilityNotes?: string | null;
-  availabilityBlocks: RentingAvailabilityBlockInput[];
-  location: RentingLocationRecord;
+  availabilityBlocks: PostingAvailabilityBlockInput[];
+  location: PostingLocationRecord;
 }
 
-export interface ListOwnerRentingsInput {
+export interface ListOwnerPostingsInput {
   ownerId: string;
   page: number;
   pageSize: number;
-  status?: RentingStatus;
+  status?: PostingStatus;
 }
 
-export interface BatchOwnerRentingsInput {
+export interface BatchOwnerPostingsInput {
   ownerId: string;
   ids: string[];
 }
 
-export interface BatchPublicRentingsInput {
+export interface BatchPublicPostingsInput {
   ids: string[];
 }
 
-export interface GetRentingInput {
+export interface GetPostingInput {
   id: string;
   viewerId?: string;
 }
 
-export interface SearchRentingsInput {
+export interface SearchPostingsInput {
   page: number;
   pageSize: number;
   query?: string;
   tags?: string[];
-  availabilityStatus?: RentingAvailabilityStatus;
+  availabilityStatus?: PostingAvailabilityStatus;
   minDailyPrice?: number;
   maxDailyPrice?: number;
   geo?: {
@@ -277,19 +277,19 @@ export interface SearchRentingsInput {
     longitude: number;
     radiusKm?: number;
   };
-  sort: RentingSort;
+  sort: PostingSort;
 }
 
-export interface RentingSearchDocument {
+export interface PostingSearchDocument {
   id: string;
   ownerId: string;
-  status: RentingStatus;
+  status: PostingStatus;
   name: string;
   description: string;
   tags: string[];
   attributes: Record<string, string | number | boolean | string[]>;
-  availabilityStatus: RentingAvailabilityStatus;
-  pricing: RentingPricing;
+  availabilityStatus: PostingAvailabilityStatus;
+  pricing: PostingPricing;
   pricingCurrency: string;
   location: {
     latitude: number;
@@ -308,9 +308,9 @@ export interface RentingSearchDocument {
   publishedAt?: string;
 }
 
-export interface RentingSearchOutboxRecord {
+export interface PostingSearchOutboxRecord {
   id: string;
-  rentingId: string;
+  postingId: string;
   operation: "upsert" | "delete";
   attempts: number;
   availableAt: string;
@@ -320,3 +320,4 @@ export interface RentingSearchOutboxRecord {
   createdAt: string;
   updatedAt: string;
 }
+

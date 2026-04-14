@@ -4,17 +4,17 @@ import {
   type ElasticsearchClient,
 } from "@/configuration/resources/elasticsearch";
 import type {
-  SearchRentingsInput,
-  SearchRentingsResult,
-  RentingSearchDocument,
-  RentingSearchSource,
-} from "@/features/rentings/rentings.model";
-import type { RentingsRepository } from "@/features/rentings/rentings.repository";
+  SearchPostingsInput,
+  SearchPostingsResult,
+  PostingSearchDocument,
+  PostingSearchSource,
+} from "@/features/postings/postings.model";
+import type { PostingsRepository } from "@/features/postings/postings.repository";
 
 interface SearchIdsResult {
   ids: string[];
   total: number;
-  source: RentingSearchSource;
+  source: PostingSearchSource;
 }
 
 interface ElasticsearchSearchResponse {
@@ -28,28 +28,28 @@ interface ElasticsearchSearchResponse {
   };
 }
 
-export class RentingsSearchService {
+export class PostingsSearchService {
   constructor(
-    private readonly rentingsRepository: RentingsRepository,
+    private readonly postingsRepository: PostingsRepository,
     private readonly elasticsearch: ElasticsearchClient = getElasticsearchClient(),
   ) {}
 
-  async searchPublic(input: SearchRentingsInput): Promise<SearchRentingsResult> {
+  async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
     const searchIds = await this.searchIdsWithFallback(input);
-    const batch = await this.rentingsRepository.batchFindPublic({
+    const batch = await this.postingsRepository.batchFindPublic({
       ids: searchIds.ids,
     });
 
     return {
-      rentings: batch.rentings,
+      postings: batch.postings,
       pagination: this.createPagination(input.page, input.pageSize, searchIds.total),
       source: searchIds.source,
       ...(input.query ? { query: input.query } : {}),
     };
   }
 
-  async upsertDocument(document: RentingSearchDocument): Promise<void> {
-    const indexName = this.elasticsearch.getRentingsIndexName();
+  async upsertDocument(document: PostingSearchDocument): Promise<void> {
+    const indexName = this.elasticsearch.getPostingsIndexName();
 
     await this.elasticsearch.requestJson(
       `/${encodeURIComponent(indexName)}/_doc/${encodeURIComponent(document.id)}`,
@@ -61,7 +61,7 @@ export class RentingsSearchService {
   }
 
   async deleteDocument(id: string): Promise<void> {
-    const indexName = this.elasticsearch.getRentingsIndexName();
+    const indexName = this.elasticsearch.getPostingsIndexName();
 
     await this.elasticsearch.requestJson(
       `/${encodeURIComponent(indexName)}/_doc/${encodeURIComponent(id)}`,
@@ -78,16 +78,16 @@ export class RentingsSearchService {
     return this.elasticsearch.isEnabled();
   }
 
-  private async searchIdsWithFallback(input: SearchRentingsInput): Promise<SearchIdsResult> {
+  private async searchIdsWithFallback(input: SearchPostingsInput): Promise<SearchIdsResult> {
     if (this.isElasticsearchEnabled()) {
       try {
         return await this.searchIdsInElasticsearch(input);
       } catch (error) {
-        console.warn("Rentings search falling back to database", error);
+        console.warn("Postings search falling back to database", error);
       }
     }
 
-    const fallback = await this.rentingsRepository.searchPublicFallback(input);
+    const fallback = await this.postingsRepository.searchPublicFallback(input);
 
     return {
       ...fallback,
@@ -95,8 +95,8 @@ export class RentingsSearchService {
     };
   }
 
-  private async searchIdsInElasticsearch(input: SearchRentingsInput): Promise<SearchIdsResult> {
-    const indexName = this.elasticsearch.getRentingsIndexName();
+  private async searchIdsInElasticsearch(input: SearchPostingsInput): Promise<SearchIdsResult> {
+    const indexName = this.elasticsearch.getPostingsIndexName();
     const from = (input.page - 1) * input.pageSize;
     const response = await this.elasticsearch.requestJson<ElasticsearchSearchResponse>(
       `/${encodeURIComponent(indexName)}/_search`,
@@ -114,7 +114,7 @@ export class RentingsSearchService {
     };
   }
 
-  private buildSearchRequest(input: SearchRentingsInput, from: number): Record<string, unknown> {
+  private buildSearchRequest(input: SearchPostingsInput, from: number): Record<string, unknown> {
     const must: Array<Record<string, unknown>> = [];
     const filter: Array<Record<string, unknown>> = [
       {
@@ -187,7 +187,7 @@ export class RentingsSearchService {
     };
   }
 
-  private buildSort(input: SearchRentingsInput): Array<Record<string, unknown>> {
+  private buildSort(input: SearchPostingsInput): Array<Record<string, unknown>> {
     switch (input.sort) {
       case "dailyPrice":
         return [
@@ -263,7 +263,7 @@ export class RentingsSearchService {
     }
   }
 
-  private toElasticsearchDocument(document: RentingSearchDocument): Record<string, unknown> {
+  private toElasticsearchDocument(document: PostingSearchDocument): Record<string, unknown> {
     const primaryPhoto = document.photos.find((photo) => photo.position === 0) ?? document.photos[0];
 
     return {
@@ -309,3 +309,4 @@ export class RentingsSearchService {
     };
   }
 }
+

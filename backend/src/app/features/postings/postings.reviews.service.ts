@@ -1,0 +1,90 @@
+import ConflictError from "@/errors/http/conflict.error";
+import ForbiddenError from "@/errors/http/forbidden.error";
+import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
+import type {
+  CreatePostingReviewRequestBody,
+  ListPostingReviewsResult,
+  PostingReviewRecord,
+  UpsertPostingReviewInput,
+} from "@/features/postings/postings.reviews.model";
+import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import type { PostingsRepository } from "@/features/postings/postings.repository";
+
+export class PostingsReviewsService {
+  constructor(
+    private readonly postingsReviewsRepository: PostingsReviewsRepository,
+    private readonly postingsRepository: PostingsRepository,
+  ) {}
+
+  async create(
+    postingId: string,
+    reviewerId: string,
+    body: CreatePostingReviewRequestBody,
+  ): Promise<PostingReviewRecord> {
+    const posting = await this.requirePublishedPosting(postingId);
+    this.assertReviewerIsNotOwner(posting.ownerId, reviewerId);
+
+    const existing = await this.postingsReviewsRepository.findOwnReview(postingId, reviewerId);
+
+    if (existing) {
+      throw new ConflictError("You have already reviewed this posting.");
+    }
+
+    return this.postingsReviewsRepository.create(this.toUpsertInput(postingId, reviewerId, body));
+  }
+
+  async updateOwn(
+    postingId: string,
+    reviewerId: string,
+    body: CreatePostingReviewRequestBody,
+  ): Promise<PostingReviewRecord> {
+    const posting = await this.requirePublishedPosting(postingId);
+    this.assertReviewerIsNotOwner(posting.ownerId, reviewerId);
+
+    const review = await this.postingsReviewsRepository.updateOwnReview(
+      this.toUpsertInput(postingId, reviewerId, body),
+    );
+
+    if (!review) {
+      throw new ResourceNotFoundError("Review could not be found.");
+    }
+
+    return review;
+  }
+
+  async list(postingId: string, page: number, pageSize: number): Promise<ListPostingReviewsResult> {
+    await this.requirePublishedPosting(postingId);
+    return this.postingsReviewsRepository.listByPosting(postingId, page, pageSize);
+  }
+
+  private async requirePublishedPosting(postingId: string) {
+    const posting = await this.postingsRepository.findById(postingId);
+
+    if (!posting || posting.status !== "published" || posting.archivedAt) {
+      throw new ResourceNotFoundError("Posting could not be found.");
+    }
+
+    return posting;
+  }
+
+  private assertReviewerIsNotOwner(ownerId: string, reviewerId: string): void {
+    if (ownerId === reviewerId) {
+      throw new ForbiddenError("You cannot review your own posting.");
+    }
+  }
+
+  private toUpsertInput(
+    postingId: string,
+    reviewerId: string,
+    body: CreatePostingReviewRequestBody,
+  ): UpsertPostingReviewInput {
+    return {
+      postingId,
+      reviewerId,
+      rating: body.rating,
+      title: body.title?.trim() || null,
+      comment: body.comment?.trim() || null,
+    };
+  }
+}
+

@@ -4,7 +4,7 @@ import { getContainer } from "@/configuration/bootstrap/container";
 import { jwtMiddleware } from "../middlewares/jwt-middleware";
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
-  const { authController, blobController, profileController, rentingsController } = getContainer();
+  const { authController, blobController, profileController, postingsController } = getContainer();
 
   app.use("/auth/local/verify", jwtMiddleware);
   app.use("/auth/logout", jwtMiddleware);
@@ -44,21 +44,22 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.get("/profiles", profileController.list);
   app.get("/profile/me", profileController.getMe);
   app.put("/profile/me", profileController.updateMe);
-  app.post("/rentings", rentingsController.create);
-  app.get("/rentings", rentingsController.search);
-  app.get("/rentings/batch", rentingsController.batchPublic);
-  app.get("/rentings/analytics/summary", rentingsController.analyticsSummary);
-  app.get("/rentings/analytics/rentings", rentingsController.analyticsRentings);
-  app.get("/rentings/me", rentingsController.listMine);
-  app.get("/rentings/me/batch", rentingsController.batchMine);
-  app.get("/rentings/:id/analytics", rentingsController.analyticsById);
-  app.get("/rentings/:id/reviews", rentingsController.listReviews);
-  app.post("/rentings/:id/reviews", rentingsController.createReview);
-  app.put("/rentings/:id/reviews/me", rentingsController.updateOwnReview);
-  app.get("/rentings/:id", rentingsController.getById);
-  app.put("/rentings/:id", rentingsController.update);
-  app.post("/rentings/:id/publish", rentingsController.publish);
-  app.post("/rentings/:id/archive", rentingsController.archive);
+  app.post("/postings", postingsController.create);
+  app.get("/postings", postingsController.search);
+  app.get("/postings/batch", postingsController.batchPublic);
+  app.get("/postings/analytics/summary", postingsController.analyticsSummary);
+  app.get("/postings/analytics/postings", postingsController.analyticsPostings);
+  app.get("/postings/me", postingsController.listMine);
+  app.get("/postings/me/batch", postingsController.batchMine);
+  app.get("/postings/:id/analytics", postingsController.analyticsById);
+  app.get("/postings/:id/reviews", postingsController.listReviews);
+  app.post("/postings/:id/reviews", postingsController.createReview);
+  app.put("/postings/:id/reviews/me", postingsController.updateOwnReview);
+  app.get("/postings/:id", postingsController.getById);
+  app.put("/postings/:id", postingsController.update);
+  app.post("/postings/:id/publish", postingsController.publish);
+  app.post("/postings/:id/archive", postingsController.archive);
 
   return app;
 }
+

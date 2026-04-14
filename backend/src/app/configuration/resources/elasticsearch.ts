@@ -7,7 +7,7 @@ export interface ElasticsearchConfig {
   url?: string;
   username?: string;
   password?: string;
-  rentingsIndexName: string;
+  postingsIndexName: string;
   timeoutMs: number;
 }
 
@@ -25,8 +25,8 @@ export class ElasticsearchClient {
     return Boolean(this.config.enabled && this.config.url);
   }
 
-  getRentingsIndexName(): string {
-    return this.config.rentingsIndexName;
+  getPostingsIndexName(): string {
+    return this.config.postingsIndexName;
   }
 
   async requestJson<TResponse>(
@@ -132,7 +132,7 @@ function createElasticsearchClient(): ElasticsearchClient {
     url: getOptionalEnvironmentVariable("ELASTICSEARCH_URL")?.replace(/\/+$/, ""),
     username: getOptionalEnvironmentVariable("ELASTICSEARCH_USERNAME"),
     password: getOptionalEnvironmentVariable("ELASTICSEARCH_PASSWORD"),
-    rentingsIndexName: getOptionalEnvironmentVariable("ELASTICSEARCH_RENTINGS_INDEX") ?? "rentings",
+    postingsIndexName: getOptionalEnvironmentVariable("ELASTICSEARCH_POSTINGS_INDEX") ?? "postings",
     timeoutMs: readNumber("ELASTICSEARCH_TIMEOUT_MS", 2_000),
   });
 }
@@ -162,3 +162,4 @@ export async function disconnectElasticsearch(): Promise<void> {
   elasticsearch = null;
   elasticsearchClient = null;
 }
+

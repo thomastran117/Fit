@@ -7,54 +7,54 @@ import {
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { getContainer } from "@/configuration/bootstrap/container";
 import {
-  listRentingAnalyticsQuerySchema,
-  rentingAnalyticsDetailQuerySchema,
-  rentingAnalyticsSummaryQuerySchema,
-  type ListRentingAnalyticsInput,
-  type ListRentingAnalyticsQuery,
-  type RentingAnalyticsDetailInput,
-  type RentingAnalyticsDetailQuery,
-  type RentingAnalyticsSummaryQuery,
-} from "@/features/rentings/rentings.analytics.model";
-import { RentingsAnalyticsService } from "@/features/rentings/rentings.analytics.service";
+  listPostingAnalyticsQuerySchema,
+  postingAnalyticsDetailQuerySchema,
+  postingAnalyticsSummaryQuerySchema,
+  type ListPostingAnalyticsInput,
+  type ListPostingAnalyticsQuery,
+  type PostingAnalyticsDetailInput,
+  type PostingAnalyticsDetailQuery,
+  type PostingAnalyticsSummaryQuery,
+} from "@/features/postings/postings.analytics.model";
+import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import {
-  createRentingReviewRequestSchema,
-  listRentingReviewsQuerySchema,
-  type CreateRentingReviewRequestBody,
-  type ListRentingReviewsQuery,
-} from "@/features/rentings/rentings.reviews.model";
-import { RentingsReviewsService } from "@/features/rentings/rentings.reviews.service";
+  createPostingReviewRequestSchema,
+  listPostingReviewsQuerySchema,
+  type CreatePostingReviewRequestBody,
+  type ListPostingReviewsQuery,
+} from "@/features/postings/postings.reviews.model";
+import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
 import {
-  listOwnerRentingsQuerySchema,
-  publicSearchRentingsQuerySchema,
-  type ListOwnerRentingsInput,
-  type ListOwnerRentingsQuery,
-  type PublicSearchRentingsQuery,
-  type SearchRentingsInput,
-  type UpsertRentingInput,
-  type UpsertRentingRequestBody,
-  upsertRentingRequestSchema,
-} from "@/features/rentings/rentings.model";
-import { RentingsService } from "@/features/rentings/rentings.service";
+  listOwnerPostingsQuerySchema,
+  publicSearchPostingsQuerySchema,
+  type ListOwnerPostingsInput,
+  type ListOwnerPostingsQuery,
+  type PublicSearchPostingsQuery,
+  type SearchPostingsInput,
+  type UpsertPostingInput,
+  type UpsertPostingRequestBody,
+  upsertPostingRequestSchema,
+} from "@/features/postings/postings.model";
+import { PostingsService } from "@/features/postings/postings.service";
 
-export class RentingsController {
+export class PostingsController {
   constructor(
-    private readonly rentingsService: RentingsService,
-    private readonly rentingsAnalyticsService: RentingsAnalyticsService,
-    private readonly rentingsReviewsService: RentingsReviewsService,
+    private readonly postingsService: PostingsService,
+    private readonly postingsAnalyticsService: PostingsAnalyticsService,
+    private readonly postingsReviewsService: PostingsReviewsService,
   ) {}
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const body = await parseRequestBody(context, upsertRentingRequestSchema);
-    const result = await this.rentingsService.createDraft(this.toUpsertInput(auth.sub, body));
+    const body = await parseRequestBody(context, upsertPostingRequestSchema);
+    const result = await this.postingsService.createDraft(this.toUpsertInput(auth.sub, body));
     return context.json(result, 201);
   };
 
   update = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const body = await parseRequestBody(context, upsertRentingRequestSchema);
-    const result = await this.rentingsService.update(
+    const body = await parseRequestBody(context, upsertPostingRequestSchema);
+    const result = await this.postingsService.update(
       this.requireRouteId(context),
       this.toUpsertInput(auth.sub, body),
     );
@@ -63,22 +63,22 @@ export class RentingsController {
 
   publish = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const result = await this.rentingsService.publish(this.requireRouteId(context), auth.sub);
+    const result = await this.postingsService.publish(this.requireRouteId(context), auth.sub);
     return context.json(result);
   };
 
   archive = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const result = await this.rentingsService.archive(this.requireRouteId(context), auth.sub);
+    const result = await this.postingsService.archive(this.requireRouteId(context), auth.sub);
     return context.json(result);
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.getOptionalAuth(context);
-    const result = await this.rentingsService.getById(this.requireRouteId(context), auth?.sub);
+    const result = await this.postingsService.getById(this.requireRouteId(context), auth?.sub);
 
     if (!auth || auth.sub !== result.ownerId) {
-      await this.rentingsAnalyticsService.trackPublicView(
+      await this.postingsAnalyticsService.trackPublicView(
         result,
         context.get("client"),
         auth?.sub,
@@ -90,15 +90,15 @@ export class RentingsController {
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const result = await this.rentingsService.listByOwner(
-      this.parseListOwnerRentingsInput(context, auth.sub),
+    const result = await this.postingsService.listByOwner(
+      this.parseListOwnerPostingsInput(context, auth.sub),
     );
     return context.json(result);
   };
 
   batchMine = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const result = await this.rentingsService.batchByOwner(
+    const result = await this.postingsService.batchByOwner(
       auth.sub,
       this.parseBatchIds(context),
     );
@@ -106,13 +106,13 @@ export class RentingsController {
   };
 
   batchPublic = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.rentingsService.batchPublic(this.parseBatchIds(context));
+    const result = await this.postingsService.batchPublic(this.parseBatchIds(context));
     return context.json(result);
   };
 
   search = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.rentingsService.searchPublic(
-      this.parseSearchRentingsInput(context),
+    const result = await this.postingsService.searchPublic(
+      this.parseSearchPostingsInput(context),
     );
     return context.json(result);
   };
@@ -120,31 +120,31 @@ export class RentingsController {
   analyticsSummary = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
     const query = this.parseAnalyticsSummaryQuery(context);
-    const result = await this.rentingsAnalyticsService.getOwnerSummary(auth.sub, query.window);
+    const result = await this.postingsAnalyticsService.getOwnerSummary(auth.sub, query.window);
     return context.json(result);
   };
 
-  analyticsRentings = async (context: Context<AppBindings>): Promise<Response> => {
+  analyticsPostings = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const input = this.parseListRentingAnalyticsInput(context, auth.sub);
-    const result = await this.rentingsAnalyticsService.listOwnerRentingsAnalytics(input);
+    const input = this.parseListPostingAnalyticsInput(context, auth.sub);
+    const result = await this.postingsAnalyticsService.listOwnerPostingsAnalytics(input);
     return context.json(result);
   };
 
   analyticsById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const input = this.parseRentingAnalyticsDetailInput(
+    const input = this.parsePostingAnalyticsDetailInput(
       context,
       auth.sub,
       this.requireRouteId(context),
     );
-    const result = await this.rentingsAnalyticsService.getRentingAnalyticsDetail(input);
+    const result = await this.postingsAnalyticsService.getPostingAnalyticsDetail(input);
     return context.json(result);
   };
 
   listReviews = async (context: Context<AppBindings>): Promise<Response> => {
-    const { page, pageSize } = this.parseListRentingReviewsQuery(context);
-    const result = await this.rentingsReviewsService.list(
+    const { page, pageSize } = this.parseListPostingReviewsQuery(context);
+    const result = await this.postingsReviewsService.list(
       this.requireRouteId(context),
       page,
       pageSize,
@@ -154,8 +154,8 @@ export class RentingsController {
 
   createReview = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const body = await parseRequestBody(context, createRentingReviewRequestSchema);
-    const result = await this.rentingsReviewsService.create(
+    const body = await parseRequestBody(context, createPostingReviewRequestSchema);
+    const result = await this.postingsReviewsService.create(
       this.requireRouteId(context),
       auth.sub,
       body,
@@ -165,8 +165,8 @@ export class RentingsController {
 
   updateOwnReview = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
-    const body = await parseRequestBody(context, createRentingReviewRequestSchema);
-    const result = await this.rentingsReviewsService.updateOwn(
+    const body = await parseRequestBody(context, createPostingReviewRequestSchema);
+    const result = await this.postingsReviewsService.updateOwn(
       this.requireRouteId(context),
       auth.sub,
       body,
@@ -174,7 +174,7 @@ export class RentingsController {
     return context.json(result);
   };
 
-  private toUpsertInput(userId: string, body: UpsertRentingRequestBody): UpsertRentingInput {
+  private toUpsertInput(userId: string, body: UpsertPostingRequestBody): UpsertPostingInput {
     return {
       ownerId: userId,
       name: body.name,
@@ -197,30 +197,30 @@ export class RentingsController {
     };
   }
 
-  private parseListOwnerRentingsInput(
+  private parseListOwnerPostingsInput(
     context: Context<AppBindings>,
     ownerId: string,
-  ): ListOwnerRentingsInput {
+  ): ListOwnerPostingsInput {
     const url = new URL(context.req.url);
 
     try {
-      const query = listOwnerRentingsQuerySchema.parse({
+      const query = listOwnerPostingsQuerySchema.parse({
         page: url.searchParams.get("page") ?? undefined,
         pageSize: url.searchParams.get("pageSize") ?? undefined,
         status: url.searchParams.get("status") ?? undefined,
       });
 
-      return this.toListOwnerRentingsInput(ownerId, query);
+      return this.toListOwnerPostingsInput(ownerId, query);
     } catch (error) {
       throw this.toValidationError(error, "Request query validation failed.");
     }
   }
 
-  private parseSearchRentingsInput(context: Context<AppBindings>): SearchRentingsInput {
+  private parseSearchPostingsInput(context: Context<AppBindings>): SearchPostingsInput {
     const url = new URL(context.req.url);
 
     try {
-      const query = publicSearchRentingsQuerySchema.parse({
+      const query = publicSearchPostingsQuerySchema.parse({
         page: url.searchParams.get("page") ?? undefined,
         pageSize: url.searchParams.get("pageSize") ?? undefined,
         q: url.searchParams.get("q") ?? undefined,
@@ -234,19 +234,19 @@ export class RentingsController {
         sort: url.searchParams.get("sort") ?? undefined,
       });
 
-      return this.toSearchRentingsInput(query);
+      return this.toSearchPostingsInput(query);
     } catch (error) {
       throw this.toValidationError(error, "Request query validation failed.");
     }
   }
 
-  private parseListRentingReviewsQuery(
+  private parseListPostingReviewsQuery(
     context: Context<AppBindings>,
-  ): ListRentingReviewsQuery {
+  ): ListPostingReviewsQuery {
     const url = new URL(context.req.url);
 
     try {
-      return listRentingReviewsQuerySchema.parse({
+      return listPostingReviewsQuerySchema.parse({
         page: url.searchParams.get("page") ?? undefined,
         pageSize: url.searchParams.get("pageSize") ?? undefined,
       });
@@ -255,11 +255,11 @@ export class RentingsController {
     }
   }
 
-  private parseAnalyticsSummaryQuery(context: Context<AppBindings>): RentingAnalyticsSummaryQuery {
+  private parseAnalyticsSummaryQuery(context: Context<AppBindings>): PostingAnalyticsSummaryQuery {
     const url = new URL(context.req.url);
 
     try {
-      return rentingAnalyticsSummaryQuerySchema.parse({
+      return postingAnalyticsSummaryQuerySchema.parse({
         window: url.searchParams.get("window") ?? undefined,
       });
     } catch (error) {
@@ -267,48 +267,48 @@ export class RentingsController {
     }
   }
 
-  private parseListRentingAnalyticsInput(
+  private parseListPostingAnalyticsInput(
     context: Context<AppBindings>,
     ownerId: string,
-  ): ListRentingAnalyticsInput {
+  ): ListPostingAnalyticsInput {
     const url = new URL(context.req.url);
 
     try {
-      const query = listRentingAnalyticsQuerySchema.parse({
+      const query = listPostingAnalyticsQuerySchema.parse({
         window: url.searchParams.get("window") ?? undefined,
         page: url.searchParams.get("page") ?? undefined,
         pageSize: url.searchParams.get("pageSize") ?? undefined,
       });
 
-      return this.toListRentingAnalyticsInput(ownerId, query);
+      return this.toListPostingAnalyticsInput(ownerId, query);
     } catch (error) {
       throw this.toValidationError(error, "Request query validation failed.");
     }
   }
 
-  private parseRentingAnalyticsDetailInput(
+  private parsePostingAnalyticsDetailInput(
     context: Context<AppBindings>,
     ownerId: string,
-    rentingId: string,
-  ): RentingAnalyticsDetailInput {
+    postingId: string,
+  ): PostingAnalyticsDetailInput {
     const url = new URL(context.req.url);
 
     try {
-      const query = rentingAnalyticsDetailQuerySchema.parse({
+      const query = postingAnalyticsDetailQuerySchema.parse({
         window: url.searchParams.get("window") ?? undefined,
         granularity: url.searchParams.get("granularity") ?? undefined,
       });
 
-      return this.toRentingAnalyticsDetailInput(ownerId, rentingId, query);
+      return this.toPostingAnalyticsDetailInput(ownerId, postingId, query);
     } catch (error) {
       throw this.toValidationError(error, "Request query validation failed.");
     }
   }
 
-  private toListOwnerRentingsInput(
+  private toListOwnerPostingsInput(
     ownerId: string,
-    query: ListOwnerRentingsQuery,
-  ): ListOwnerRentingsInput {
+    query: ListOwnerPostingsQuery,
+  ): ListOwnerPostingsInput {
     return {
       ownerId,
       page: query.page,
@@ -317,7 +317,7 @@ export class RentingsController {
     };
   }
 
-  private toSearchRentingsInput(query: PublicSearchRentingsQuery): SearchRentingsInput {
+  private toSearchPostingsInput(query: PublicSearchPostingsQuery): SearchPostingsInput {
     return {
       page: query.page,
       pageSize: query.pageSize,
@@ -338,10 +338,10 @@ export class RentingsController {
     };
   }
 
-  private toListRentingAnalyticsInput(
+  private toListPostingAnalyticsInput(
     ownerId: string,
-    query: ListRentingAnalyticsQuery,
-  ): ListRentingAnalyticsInput {
+    query: ListPostingAnalyticsQuery,
+  ): ListPostingAnalyticsInput {
     return {
       ownerId,
       window: query.window,
@@ -350,14 +350,14 @@ export class RentingsController {
     };
   }
 
-  private toRentingAnalyticsDetailInput(
+  private toPostingAnalyticsDetailInput(
     ownerId: string,
-    rentingId: string,
-    query: RentingAnalyticsDetailQuery,
-  ): RentingAnalyticsDetailInput {
+    postingId: string,
+    query: PostingAnalyticsDetailQuery,
+  ): PostingAnalyticsDetailInput {
     return {
       ownerId,
-      rentingId,
+      postingId,
       window: query.window,
       granularity: query.granularity,
     };
@@ -444,3 +444,4 @@ export class RentingsController {
     throw error;
   }
 }
+

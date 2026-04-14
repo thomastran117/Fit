@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import type {
-  ListRentingReviewsResult,
-  RentingReviewRecord,
-  RentingReviewSummary,
-  UpsertRentingReviewInput,
-} from "@/features/rentings/rentings.reviews.model";
+  ListPostingReviewsResult,
+  PostingReviewRecord,
+  PostingReviewSummary,
+  UpsertPostingReviewInput,
+} from "@/features/postings/postings.reviews.model";
 
-type RentingReviewPersistence = Prisma.RentingReviewGetPayload<{
+type PostingReviewPersistence = Prisma.PostingReviewGetPayload<{
   include: {
     reviewer: {
       include: {
@@ -18,7 +18,7 @@ type RentingReviewPersistence = Prisma.RentingReviewGetPayload<{
   };
 }>;
 
-type RentingReviewAggregatePersistence = {
+type PostingReviewAggregatePersistence = {
   _avg: {
     rating: number | null;
   };
@@ -27,13 +27,13 @@ type RentingReviewAggregatePersistence = {
   };
 };
 
-export class RentingsReviewsRepository extends BaseRepository {
-  async create(input: UpsertRentingReviewInput): Promise<RentingReviewRecord> {
+export class PostingsReviewsRepository extends BaseRepository {
+  async create(input: UpsertPostingReviewInput): Promise<PostingReviewRecord> {
     const review = await this.executeAsync(() =>
-      this.prisma.rentingReview.create({
+      this.prisma.postingReview.create({
         data: {
           id: randomUUID(),
-          rentingId: input.rentingId,
+          postingId: input.postingId,
           reviewerId: input.reviewerId,
           rating: input.rating,
           title: input.title ?? null,
@@ -52,13 +52,13 @@ export class RentingsReviewsRepository extends BaseRepository {
     return this.mapReview(review);
   }
 
-  async updateOwnReview(input: UpsertRentingReviewInput): Promise<RentingReviewRecord | null> {
+  async updateOwnReview(input: UpsertPostingReviewInput): Promise<PostingReviewRecord | null> {
     try {
       const review = await this.executeAsync(() =>
-        this.prisma.rentingReview.update({
+        this.prisma.postingReview.update({
           where: {
-            rentingId_reviewerId: {
-              rentingId: input.rentingId,
+            postingId_reviewerId: {
+              postingId: input.postingId,
               reviewerId: input.reviewerId,
             },
           },
@@ -87,12 +87,12 @@ export class RentingsReviewsRepository extends BaseRepository {
     }
   }
 
-  async findOwnReview(rentingId: string, reviewerId: string): Promise<RentingReviewRecord | null> {
+  async findOwnReview(postingId: string, reviewerId: string): Promise<PostingReviewRecord | null> {
     const review = await this.executeAsync(() =>
-      this.prisma.rentingReview.findUnique({
+      this.prisma.postingReview.findUnique({
         where: {
-          rentingId_reviewerId: {
-            rentingId,
+          postingId_reviewerId: {
+            postingId,
             reviewerId,
           },
         },
@@ -109,18 +109,18 @@ export class RentingsReviewsRepository extends BaseRepository {
     return review ? this.mapReview(review) : null;
   }
 
-  async listByRenting(
-    rentingId: string,
+  async listByPosting(
+    postingId: string,
     page: number,
     pageSize: number,
-  ): Promise<ListRentingReviewsResult> {
+  ): Promise<ListPostingReviewsResult> {
     const skip = (page - 1) * pageSize;
 
     const [reviews, total, aggregate] = await this.executeAsync(() =>
       Promise.all([
-        this.prisma.rentingReview.findMany({
+        this.prisma.postingReview.findMany({
           where: {
-            rentingId,
+            postingId,
           },
           skip,
           take: pageSize,
@@ -137,14 +137,14 @@ export class RentingsReviewsRepository extends BaseRepository {
             },
           },
         }),
-        this.prisma.rentingReview.count({
+        this.prisma.postingReview.count({
           where: {
-            rentingId,
+            postingId,
           },
         }),
-        this.prisma.rentingReview.aggregate({
+        this.prisma.postingReview.aggregate({
           where: {
-            rentingId,
+            postingId,
           },
           _avg: {
             rating: true,
@@ -163,11 +163,11 @@ export class RentingsReviewsRepository extends BaseRepository {
     };
   }
 
-  async getSummary(rentingId: string): Promise<RentingReviewSummary> {
+  async getSummary(postingId: string): Promise<PostingReviewSummary> {
     const aggregate = await this.executeAsync(() =>
-      this.prisma.rentingReview.aggregate({
+      this.prisma.postingReview.aggregate({
         where: {
-          rentingId,
+          postingId,
         },
         _avg: {
           rating: true,
@@ -181,10 +181,10 @@ export class RentingsReviewsRepository extends BaseRepository {
     return this.mapSummary(aggregate);
   }
 
-  private mapReview(review: RentingReviewPersistence): RentingReviewRecord {
+  private mapReview(review: PostingReviewPersistence): PostingReviewRecord {
     return {
       id: review.id,
-      rentingId: review.rentingId,
+      postingId: review.postingId,
       reviewerId: review.reviewerId,
       rating: review.rating,
       title: review.title ?? undefined,
@@ -198,7 +198,7 @@ export class RentingsReviewsRepository extends BaseRepository {
     };
   }
 
-  private mapSummary(aggregate: RentingReviewAggregatePersistence): RentingReviewSummary {
+  private mapSummary(aggregate: PostingReviewAggregatePersistence): PostingReviewSummary {
     return {
       averageRating: Number((aggregate._avg.rating ?? 0).toFixed(2)),
       reviewCount: aggregate._count._all,
@@ -218,3 +218,4 @@ export class RentingsReviewsRepository extends BaseRepository {
     };
   }
 }
+

@@ -19,8 +19,8 @@ model User {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   devices       Device[]
   profile       Profile?
-  rentings      Renting[]
-  rentingReviews RentingReview[] @relation("RentingReviewAuthor")
+  postings      Posting[]
+  postingReviews PostingReview[] @relation("PostingReviewAuthor")
 
   @@map("users")
 }
@@ -64,17 +64,17 @@ model Device {
   @@map("devices")
 }
 
-model Renting {
+model Posting {
   id                String                     @id @db.VarChar(36)
   ownerId           String                     @map("owner_id") @db.VarChar(36)
-  status            RentingStatus
+  status            PostingStatus
   name              String                     @db.VarChar(150)
   description       String                     @db.Text
   pricingCurrency   String                     @map("pricing_currency") @db.VarChar(3)
   pricing           Json
   tags              Json
   attributes        Json
-  availabilityStatus RentingAvailabilityStatus @map("availability_status")
+  availabilityStatus PostingAvailabilityStatus @map("availability_status")
   availabilityNotes String?                    @map("availability_notes") @db.VarChar(500)
   latitude          Float
   longitude         Float
@@ -87,54 +87,54 @@ model Renting {
   createdAt         DateTime                   @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt         DateTime                   @updatedAt @map("updated_at") @db.DateTime(6)
   owner             User                       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  photos            RentingPhoto[]
-  availabilityBlocks RentingAvailabilityBlock[]
-  searchOutboxEntries RentingSearchOutbox[]
-  viewEvents        RentingViewEvent[]
-  hourlyAnalytics   RentingAnalyticsHourly[]
-  dailyAnalytics    RentingAnalyticsDaily[]
-  analyticsOutboxEntries RentingAnalyticsOutbox[]
-  reviews           RentingReview[]
+  photos            PostingPhoto[]
+  availabilityBlocks PostingAvailabilityBlock[]
+  searchOutboxEntries PostingSearchOutbox[]
+  viewEvents        PostingViewEvent[]
+  hourlyAnalytics   PostingAnalyticsHourly[]
+  dailyAnalytics    PostingAnalyticsDaily[]
+  analyticsOutboxEntries PostingAnalyticsOutbox[]
+  reviews           PostingReview[]
 
   @@index([ownerId, status])
   @@index([status, publishedAt])
   @@index([country, region, city])
-  @@map("rentings")
+  @@map("postings")
 }
 
-model RentingPhoto {
+model PostingPhoto {
   id         String   @id @db.VarChar(36)
-  rentingId  String   @map("renting_id") @db.VarChar(36)
+  postingId  String   @map("posting_id") @db.VarChar(36)
   blobUrl    String   @map("blob_url") @db.VarChar(2048)
   blobName   String   @map("blob_name") @db.VarChar(1024)
   position   Int
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting    Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting    Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
-  @@unique([rentingId, position])
-  @@index([rentingId])
-  @@map("renting_photos")
+  @@unique([postingId, position])
+  @@index([postingId])
+  @@map("posting_photos")
 }
 
-model RentingAvailabilityBlock {
+model PostingAvailabilityBlock {
   id         String   @id @db.VarChar(36)
-  rentingId  String   @map("renting_id") @db.VarChar(36)
+  postingId  String   @map("posting_id") @db.VarChar(36)
   startAt    DateTime @map("start_at") @db.DateTime(6)
   endAt      DateTime @map("end_at") @db.DateTime(6)
   note       String?  @db.VarChar(255)
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting    Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting    Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
-  @@index([rentingId, startAt, endAt])
-  @@map("renting_availability_blocks")
+  @@index([postingId, startAt, endAt])
+  @@map("posting_availability_blocks")
 }
 
-model RentingSearchOutbox {
+model PostingSearchOutbox {
   id           String                     @id @db.VarChar(36)
-  rentingId    String                     @map("renting_id") @db.VarChar(36)
-  operation    RentingSearchOutboxOperation
+  postingId    String                     @map("posting_id") @db.VarChar(36)
+  operation    PostingSearchOutboxOperation
   attempts     Int                        @default(0)
   availableAt  DateTime                   @default(now()) @map("available_at") @db.DateTime(6)
   processingAt DateTime?                  @map("processing_at") @db.DateTime(6)
@@ -142,16 +142,16 @@ model RentingSearchOutbox {
   lastError    String?                    @map("last_error") @db.VarChar(2048)
   createdAt    DateTime                   @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt    DateTime                   @updatedAt @map("updated_at") @db.DateTime(6)
-  renting      Renting                    @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting      Posting                    @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
   @@index([availableAt, processedAt, processingAt])
-  @@index([rentingId, operation])
-  @@map("renting_search_outbox")
+  @@index([postingId, operation])
+  @@map("posting_search_outbox")
 }
 
-model RentingViewEvent {
+model PostingViewEvent {
   id             String   @id @db.VarChar(36)
-  rentingId      String   @map("renting_id") @db.VarChar(36)
+  postingId      String   @map("posting_id") @db.VarChar(36)
   ownerId        String   @map("owner_id") @db.VarChar(36)
   viewerHash     String   @map("viewer_hash") @db.VarChar(128)
   userId         String?  @map("user_id") @db.VarChar(36)
@@ -162,30 +162,30 @@ model RentingViewEvent {
   eventDate      DateTime @map("event_date") @db.DateTime(6)
   eventHour      DateTime @map("event_hour") @db.DateTime(6)
   createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(6)
-  renting        Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting        Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
-  @@index([rentingId, eventDate])
+  @@index([postingId, eventDate])
   @@index([ownerId, eventDate])
-  @@index([rentingId, eventHour])
+  @@index([postingId, eventHour])
   @@index([viewerHash, eventDate])
-  @@map("renting_view_events")
+  @@map("posting_view_events")
 }
 
-model RentingAnalyticsUniqueView {
-  rentingId   String   @map("renting_id") @db.VarChar(36)
+model PostingAnalyticsUniqueView {
+  postingId   String   @map("posting_id") @db.VarChar(36)
   ownerId     String   @map("owner_id") @db.VarChar(36)
   viewerHash  String   @map("viewer_hash") @db.VarChar(128)
   eventDate   DateTime @map("event_date") @db.DateTime(6)
   firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.DateTime(6)
 
-  @@id([rentingId, eventDate, viewerHash])
+  @@id([postingId, eventDate, viewerHash])
   @@index([ownerId, eventDate])
-  @@map("renting_analytics_unique_views")
+  @@map("posting_analytics_unique_views")
 }
 
-model RentingAnalyticsHourly {
+model PostingAnalyticsHourly {
   id               String   @id @db.VarChar(36)
-  rentingId        String   @map("renting_id") @db.VarChar(36)
+  postingId        String   @map("posting_id") @db.VarChar(36)
   ownerId          String   @map("owner_id") @db.VarChar(36)
   bucketStart      DateTime @map("bucket_start") @db.DateTime(6)
   views            Int      @default(0)
@@ -194,16 +194,16 @@ model RentingAnalyticsHourly {
   estimatedRevenue Decimal  @default(0) @map("estimated_revenue") @db.Decimal(18, 2)
   createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting          Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting          Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
-  @@unique([rentingId, bucketStart])
+  @@unique([postingId, bucketStart])
   @@index([ownerId, bucketStart])
-  @@map("renting_analytics_hourly")
+  @@map("posting_analytics_hourly")
 }
 
-model RentingAnalyticsDaily {
+model PostingAnalyticsDaily {
   id               String   @id @db.VarChar(36)
-  rentingId        String   @map("renting_id") @db.VarChar(36)
+  postingId        String   @map("posting_id") @db.VarChar(36)
   ownerId          String   @map("owner_id") @db.VarChar(36)
   bucketStart      DateTime @map("bucket_start") @db.DateTime(6)
   views            Int      @default(0)
@@ -212,18 +212,18 @@ model RentingAnalyticsDaily {
   estimatedRevenue Decimal  @default(0) @map("estimated_revenue") @db.Decimal(18, 2)
   createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting          Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting          Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
-  @@unique([rentingId, bucketStart])
+  @@unique([postingId, bucketStart])
   @@index([ownerId, bucketStart])
-  @@map("renting_analytics_daily")
+  @@map("posting_analytics_daily")
 }
 
-model RentingAnalyticsOutbox {
+model PostingAnalyticsOutbox {
   id           String                    @id @db.VarChar(36)
-  rentingId    String                    @map("renting_id") @db.VarChar(36)
+  postingId    String                    @map("posting_id") @db.VarChar(36)
   ownerId      String                    @map("owner_id") @db.VarChar(36)
-  eventType    RentingAnalyticsEventType @map("event_type")
+  eventType    PostingAnalyticsEventType @map("event_type")
   payload      Json
   attempts     Int                       @default(0)
   availableAt  DateTime                  @default(now()) @map("available_at") @db.DateTime(6)
@@ -232,52 +232,53 @@ model RentingAnalyticsOutbox {
   lastError    String?                   @map("last_error") @db.VarChar(2048)
   createdAt    DateTime                  @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt    DateTime                  @updatedAt @map("updated_at") @db.DateTime(6)
-  renting      Renting                   @relation(fields: [rentingId], references: [id], onDelete: Cascade)
+  posting      Posting                   @relation(fields: [postingId], references: [id], onDelete: Cascade)
 
   @@index([availableAt, processedAt, processingAt])
   @@index([ownerId, eventType])
-  @@index([rentingId, eventType])
-  @@map("renting_analytics_outbox")
+  @@index([postingId, eventType])
+  @@map("posting_analytics_outbox")
 }
 
-model RentingReview {
+model PostingReview {
   id         String   @id @db.VarChar(36)
-  rentingId  String   @map("renting_id") @db.VarChar(36)
+  postingId  String   @map("posting_id") @db.VarChar(36)
   reviewerId String   @map("reviewer_id") @db.VarChar(36)
   rating     Int
   title      String?  @db.VarChar(120)
   comment    String?  @db.Text
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting    Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
-  reviewer   User     @relation("RentingReviewAuthor", fields: [reviewerId], references: [id], onDelete: Cascade)
+  posting    Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation("PostingReviewAuthor", fields: [reviewerId], references: [id], onDelete: Cascade)
 
-  @@unique([rentingId, reviewerId])
-  @@index([rentingId, createdAt])
+  @@unique([postingId, reviewerId])
+  @@index([postingId, createdAt])
   @@index([reviewerId])
-  @@map("renting_reviews")
+  @@map("posting_reviews")
 }
 
-enum RentingStatus {
+enum PostingStatus {
   draft
   published
   archived
 }
 
-enum RentingAvailabilityStatus {
+enum PostingAvailabilityStatus {
   available
   limited
   unavailable
 }
 
-enum RentingSearchOutboxOperation {
+enum PostingSearchOutboxOperation {
   upsert
   delete
 }
 
-enum RentingAnalyticsEventType {
-  renting_viewed
+enum PostingAnalyticsEventType {
+  posting_viewed
   booking_requested
   booking_accepted
   payment_captured
 }
+
