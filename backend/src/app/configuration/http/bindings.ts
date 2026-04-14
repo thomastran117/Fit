@@ -1,5 +1,7 @@
 import type { JwtClaims } from "@/features/auth/token/token.service";
 
+export type OutputFormat = "json" | "xml";
+
 export interface ClientSignatureContext {
   clientId: string;
   timestamp: number;
@@ -25,5 +27,6 @@ export interface AppBindings {
     auth: JwtClaims;
     client: ClientRequestContext;
     clientSignature: ClientSignatureContext;
+    outputFormat: OutputFormat;
   };
 }

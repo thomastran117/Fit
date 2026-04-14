@@ -1,7 +1,8 @@
+import BadRequestError from "@/errors/http/bad-request.error";
 import type { Context } from "hono";
 import { ZodError, type ZodType, type output } from "zod";
 
-export class RequestValidationError extends Error {
+export class RequestValidationError extends BadRequestError {
   constructor(
     message: string,
     public readonly details: Array<{
