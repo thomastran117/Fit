@@ -3,7 +3,6 @@ import { promisify } from "node:util";
 import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import {
-  type AuthSessionRecord,
   type AuthSessionResult,
   type AuthUserProfile,
   type AuthUserRecord,
@@ -90,9 +89,8 @@ export class AuthService {
 
   async localVerify(context: AuthRequestContext): Promise<{
     verified: true;
-    session: {
+    auth: {
       userId: string;
-      sessionId?: string;
       deviceId?: string;
       role?: string;
     };
@@ -100,9 +98,8 @@ export class AuthService {
   }> {
     return {
       verified: true,
-      session: {
+      auth: {
         userId: context.auth.sub,
-        sessionId: context.auth.sessionId,
         deviceId: context.auth.deviceId,
         role: context.auth.role,
       },
@@ -133,17 +130,17 @@ export class AuthService {
 
   async logout(context: AuthRequestContext): Promise<{
     loggedOut: true;
-    session: {
+    auth: {
       userId: string;
-      sessionId?: string;
+      deviceId?: string;
     };
     client: ClientRequestContext;
   }> {
     return {
       loggedOut: true,
-      session: {
+      auth: {
         userId: context.auth.sub,
-        sessionId: context.auth.sessionId,
+        deviceId: context.auth.deviceId,
       },
       client: context.client,
     };
@@ -152,18 +149,16 @@ export class AuthService {
   async deviceVerify(context: AuthRequestContext): Promise<{
     verified: true;
     device: ClientRequestContext["device"];
-    session: {
+    auth: {
       userId: string;
-      sessionId?: string;
       tokenDeviceId?: string;
     };
   }> {
     return {
       verified: true,
       device: context.client.device,
-      session: {
+      auth: {
         userId: context.auth.sub,
-        sessionId: context.auth.sessionId,
         tokenDeviceId: context.auth.deviceId,
       },
     };
@@ -172,7 +167,6 @@ export class AuthService {
   async devices(context: AuthRequestContext): Promise<{
     devices: Array<{
       current: true;
-      sessionId?: string;
       tokenDeviceId?: string;
       detectedDevice: ClientRequestContext["device"];
       ip?: string;
@@ -182,7 +176,6 @@ export class AuthService {
       devices: [
         {
           current: true,
-          sessionId: context.auth.sessionId,
           tokenDeviceId: context.auth.deviceId,
           detectedDevice: context.client.device,
           ip: context.client.ip,
@@ -195,26 +188,21 @@ export class AuthService {
     user: AuthUserRecord,
     deviceId?: string,
   ): Promise<AuthSessionResult> {
-    const session = await this.authRepository.createSession(user, deviceId);
-
     const accessToken = this.tokenService.createAccessToken({
       sub: user.id,
       email: user.email,
       role: user.role,
-      sessionId: session.sessionId,
-      deviceId: session.deviceId,
+      deviceId,
     });
 
     const refreshToken = await this.tokenService.createRefreshToken({
       sub: user.id,
-      sessionId: session.sessionId,
-      deviceId: session.deviceId,
+      deviceId,
     });
 
     return {
       accessToken,
       refreshToken,
-      session,
       user: this.toUserProfile(user),
     };
   }

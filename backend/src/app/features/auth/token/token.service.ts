@@ -7,14 +7,12 @@ export interface AccessTokenPayload {
   sub: string;
   email?: string;
   role?: string;
-  sessionId?: string;
   deviceId?: string;
   [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface RefreshTokenPayload {
   sub: string;
-  sessionId: string;
   deviceId?: string;
   tokenVersion?: number;
   [key: string]: string | number | boolean | null | undefined;
@@ -235,7 +233,7 @@ export class TokenService {
       throw new Error("Invalid refresh token signature.");
     }
 
-    if (session.sub !== claims.sub || session.sessionId !== claims.sessionId) {
+    if (session.sub !== claims.sub || session.deviceId !== claims.deviceId) {
       throw new Error("Refresh token session mismatch.");
     }
 

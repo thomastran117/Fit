@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { BaseRepository } from "@/features/base/base.repository";
 import {
   type CreateLocalUserInput,
-  type AuthSessionRecord,
   type AuthUserRecord,
 } from "@/features/auth/auth.model";
 import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
@@ -73,16 +72,6 @@ export class AuthRepository extends BaseRepository {
     );
 
     return this.mapUser(user);
-  }
-
-  async createSession(user: AuthUserRecord, deviceId?: string): Promise<AuthSessionRecord> {
-    return {
-      userId: user.id,
-      sessionId: randomUUID(),
-      email: user.email,
-      role: user.role,
-      deviceId,
-    };
   }
 
   private mapUser(user: AuthUserPersistence): AuthUserRecord {

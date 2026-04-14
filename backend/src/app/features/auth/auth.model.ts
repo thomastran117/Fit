@@ -68,14 +68,6 @@ export interface AuthUserRecord {
   updatedAt: string;
 }
 
-export interface AuthSessionRecord {
-  userId: string;
-  sessionId: string;
-  email: string;
-  role: string;
-  deviceId?: string;
-}
-
 export interface AuthUserProfile {
   id: string;
   email: string;
@@ -88,7 +80,6 @@ export interface AuthUserProfile {
 export interface AuthSessionResult {
   accessToken: string;
   refreshToken: string;
-  session: AuthSessionRecord;
   user: AuthUserProfile;
 }
 
