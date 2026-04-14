@@ -13,10 +13,6 @@ import { EmailService } from "@/features/email/email.service";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
-import { RentingsController } from "@/features/rentings/rentings.controller";
-import { RentingsRepository } from "@/features/rentings/rentings.repository";
-import { RentingsSearchService } from "@/features/rentings/rentings.search.service";
-import { RentingsService } from "@/features/rentings/rentings.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
@@ -34,10 +30,6 @@ export interface ApplicationContainer {
   profileRepository: ProfileRepository;
   profileService: ProfileService;
   profileController: ProfileController;
-  rentingsRepository: RentingsRepository;
-  rentingsSearchService: RentingsSearchService;
-  rentingsService: RentingsService;
-  rentingsController: RentingsController;
 }
 
 let container: ApplicationContainer | null = null;
@@ -62,14 +54,6 @@ function createContainer(): ApplicationContainer {
   const profileRepository = new ProfileRepository();
   const profileService = new ProfileService(profileRepository, blobService);
   const profileController = new ProfileController(profileService);
-  const rentingsRepository = new RentingsRepository();
-  const rentingsSearchService = new RentingsSearchService(rentingsRepository);
-  const rentingsService = new RentingsService(
-    rentingsRepository,
-    rentingsSearchService,
-    blobService,
-  );
-  const rentingsController = new RentingsController(rentingsService);
   const authRepository = new AuthRepository();
   const authService = AuthService.create({
     authRepository,
@@ -97,10 +81,6 @@ function createContainer(): ApplicationContainer {
     profileRepository,
     profileService,
     profileController,
-    rentingsRepository,
-    rentingsSearchService,
-    rentingsService,
-    rentingsController,
   };
 }
 

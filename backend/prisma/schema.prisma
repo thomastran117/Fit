@@ -19,7 +19,6 @@ model User {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   devices       Device[]
   profile       Profile?
-  rentings      Renting[]
 
   @@map("users")
 }
@@ -61,101 +60,4 @@ model Device {
   @@unique([userId, deviceId])
   @@index([userId])
   @@map("devices")
-}
-
-model Renting {
-  id                String                     @id @db.VarChar(36)
-  ownerId           String                     @map("owner_id") @db.VarChar(36)
-  status            RentingStatus
-  name              String                     @db.VarChar(150)
-  description       String                     @db.Text
-  pricingCurrency   String                     @map("pricing_currency") @db.VarChar(3)
-  pricing           Json
-  tags              Json
-  attributes        Json
-  availabilityStatus RentingAvailabilityStatus @map("availability_status")
-  availabilityNotes String?                    @map("availability_notes") @db.VarChar(500)
-  latitude          Float
-  longitude         Float
-  city              String                     @db.VarChar(120)
-  region            String                     @db.VarChar(120)
-  country           String                     @db.VarChar(120)
-  postalCode        String?                    @map("postal_code") @db.VarChar(32)
-  publishedAt       DateTime?                  @map("published_at") @db.DateTime(6)
-  archivedAt        DateTime?                  @map("archived_at") @db.DateTime(6)
-  createdAt         DateTime                   @default(now()) @map("created_at") @db.DateTime(6)
-  updatedAt         DateTime                   @updatedAt @map("updated_at") @db.DateTime(6)
-  owner             User                       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  photos            RentingPhoto[]
-  availabilityBlocks RentingAvailabilityBlock[]
-  searchOutboxEntries RentingSearchOutbox[]
-
-  @@index([ownerId, status])
-  @@index([status, publishedAt])
-  @@index([country, region, city])
-  @@map("rentings")
-}
-
-model RentingPhoto {
-  id         String   @id @db.VarChar(36)
-  rentingId  String   @map("renting_id") @db.VarChar(36)
-  blobUrl    String   @map("blob_url") @db.VarChar(2048)
-  blobName   String   @map("blob_name") @db.VarChar(1024)
-  position   Int
-  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting    Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
-
-  @@unique([rentingId, position])
-  @@index([rentingId])
-  @@map("renting_photos")
-}
-
-model RentingAvailabilityBlock {
-  id         String   @id @db.VarChar(36)
-  rentingId  String   @map("renting_id") @db.VarChar(36)
-  startAt    DateTime @map("start_at") @db.DateTime(6)
-  endAt      DateTime @map("end_at") @db.DateTime(6)
-  note       String?  @db.VarChar(255)
-  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  renting    Renting  @relation(fields: [rentingId], references: [id], onDelete: Cascade)
-
-  @@index([rentingId, startAt, endAt])
-  @@map("renting_availability_blocks")
-}
-
-model RentingSearchOutbox {
-  id           String                     @id @db.VarChar(36)
-  rentingId    String                     @map("renting_id") @db.VarChar(36)
-  operation    RentingSearchOutboxOperation
-  attempts     Int                        @default(0)
-  availableAt  DateTime                   @default(now()) @map("available_at") @db.DateTime(6)
-  processingAt DateTime?                  @map("processing_at") @db.DateTime(6)
-  processedAt  DateTime?                  @map("processed_at") @db.DateTime(6)
-  lastError    String?                    @map("last_error") @db.VarChar(2048)
-  createdAt    DateTime                   @default(now()) @map("created_at") @db.DateTime(6)
-  updatedAt    DateTime                   @updatedAt @map("updated_at") @db.DateTime(6)
-  renting      Renting                    @relation(fields: [rentingId], references: [id], onDelete: Cascade)
-
-  @@index([availableAt, processedAt, processingAt])
-  @@index([rentingId, operation])
-  @@map("renting_search_outbox")
-}
-
-enum RentingStatus {
-  draft
-  published
-  archived
-}
-
-enum RentingAvailabilityStatus {
-  available
-  limited
-  unavailable
-}
-
-enum RentingSearchOutboxOperation {
-  upsert
-  delete
 }

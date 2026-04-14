@@ -8,8 +8,7 @@
   "main": "./dist/server.js",
   "scripts": {
     "dev": "tsx watch src/app/server.ts",
-    "dev:search-worker": "tsx watch src/app/search-worker.ts",
-    "build": "tsup src/app/server.ts src/app/search-worker.ts --format esm --platform node --target node22 --out-dir dist --clean",
+    "build": "tsup src/app/server.ts --format esm --platform node --target node22 --out-dir dist --clean",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
