@@ -3,6 +3,10 @@ import { createApplication } from "@/configuration/bootstrap/application";
 import { initializeContainer } from "@/configuration/bootstrap/container";
 import { loadEnvironment } from "@/configuration/environment/index";
 import {
+  connectElasticsearch,
+  disconnectElasticsearch,
+} from "@/configuration/resources/elasticsearch";
+import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
@@ -18,6 +22,7 @@ async function bootstrap(): Promise<void> {
 
   await connectDatabase();
   await connectRedis();
+  await connectElasticsearch();
   initializeContainer();
   const app = createApplication();
 
@@ -42,7 +47,11 @@ async function bootstrap(): Promise<void> {
     console.log(`Received ${signal}. Shutting down gracefully...`);
 
     server.close();
-    await Promise.allSettled([disconnectRedis(), disconnectDatabase()]);
+    await Promise.allSettled([
+      disconnectRedis(),
+      disconnectDatabase(),
+      disconnectElasticsearch(),
+    ]);
     process.exit(0);
   };
 
@@ -57,6 +66,10 @@ async function bootstrap(): Promise<void> {
 
 void bootstrap().catch(async (error: unknown) => {
   console.error("Failed to start server", error);
-  await Promise.allSettled([disconnectRedis(), disconnectDatabase()]);
+  await Promise.allSettled([
+    disconnectRedis(),
+    disconnectDatabase(),
+    disconnectElasticsearch(),
+  ]);
   process.exit(1);
 });

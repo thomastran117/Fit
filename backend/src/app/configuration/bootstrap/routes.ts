@@ -4,7 +4,7 @@ import { getContainer } from "@/configuration/bootstrap/container";
 import { jwtMiddleware } from "../middlewares/jwt-middleware";
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
-  const { authController, blobController, profileController } = getContainer();
+  const { authController, blobController, profileController, rentingsController } = getContainer();
 
   app.use("/auth/local/verify", jwtMiddleware);
   app.use("/auth/logout", jwtMiddleware);
@@ -44,6 +44,15 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.get("/profiles", profileController.list);
   app.get("/profile/me", profileController.getMe);
   app.put("/profile/me", profileController.updateMe);
+  app.post("/rentings", rentingsController.create);
+  app.get("/rentings", rentingsController.search);
+  app.get("/rentings/batch", rentingsController.batchPublic);
+  app.get("/rentings/me", rentingsController.listMine);
+  app.get("/rentings/me/batch", rentingsController.batchMine);
+  app.get("/rentings/:id", rentingsController.getById);
+  app.put("/rentings/:id", rentingsController.update);
+  app.post("/rentings/:id/publish", rentingsController.publish);
+  app.post("/rentings/:id/archive", rentingsController.archive);
 
   return app;
 }
