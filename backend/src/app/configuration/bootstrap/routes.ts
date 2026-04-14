@@ -1,17 +1,16 @@
 import type { Hono } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { getContainer } from "@/configuration/bootstrap/container";
-import { clientSignatureMiddleware } from "@/configuration/http/middleware/client-signature";
-import { jwtMiddleware } from "@/configuration/http/middleware/jwt";
+import { jwtMiddleware } from "../middlewares/jwt-middleware";
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   const { authController } = getContainer();
 
-  app.use("/auth/*", clientSignatureMiddleware);
   app.use("/auth/local/verify", jwtMiddleware);
   app.use("/auth/logout", jwtMiddleware);
   app.use("/auth/device/verify", jwtMiddleware);
   app.use("/auth/devices", jwtMiddleware);
+  app.use("/auth/devices/remove", jwtMiddleware);
 
   app.get("/", (context) => {
     return context.json({
@@ -28,6 +27,8 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
 
   app.post("/auth/local/login", authController.localAuthenticate);
   app.post("/auth/local/signup", authController.localSignup);
+  app.post("/auth/local/email/verify", authController.verifyEmail);
+  app.post("/auth/local/email/resend", authController.resendVerificationEmail);
   app.post("/auth/local/verify", authController.localVerify);
   app.post("/auth/oauth/google", authController.googleAuthenticate);
   app.post("/auth/oauth/microsoft", authController.microsoftAuthenticate);
@@ -36,6 +37,7 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.post("/auth/logout", authController.logout);
   app.post("/auth/device/verify", authController.deviceVerify);
   app.get("/auth/devices", authController.devices);
+  app.delete("/auth/devices/remove", authController.removeKnownDevice);
 
   return app;
 }

@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { BaseRepository } from "@/features/base/base.repository";
 import {
-  type AuthSessionRecord,
+  type CreateLocalUserInput,
   type AuthUserRecord,
-  type LocalSignupRequest,
 } from "@/features/auth/auth.model";
+import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 
 type AuthUserPersistence = {
   id: string;
@@ -19,6 +19,22 @@ type AuthUserPersistence = {
 };
 
 export class AuthRepository extends BaseRepository {
+  async findUserById(id: string): Promise<AuthUserRecord | null> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.findUnique({
+        where: {
+          id,
+        },
+      }),
+    );
+
+    if (!user) {
+      return null;
+    }
+
+    return this.mapUser(user);
+  }
+
   async findUserByEmail(email: string): Promise<AuthUserRecord | null> {
     const user = await this.executeAsync(() =>
       this.prisma.user.findUnique({
@@ -36,7 +52,7 @@ export class AuthRepository extends BaseRepository {
   }
 
   async createLocalUser(
-    input: LocalSignupRequest,
+    input: CreateLocalUserInput,
     passwordHash: string,
   ): Promise<AuthUserRecord> {
     const user = await this.executeAsync(() =>
@@ -56,14 +72,35 @@ export class AuthRepository extends BaseRepository {
     return this.mapUser(user);
   }
 
-  async createSession(user: AuthUserRecord, deviceId?: string): Promise<AuthSessionRecord> {
-    return {
-      userId: user.id,
-      sessionId: randomUUID(),
-      email: user.email,
-      role: user.role,
-      deviceId,
-    };
+  async createOAuthUser(input: VerifiedOAuthProfile): Promise<AuthUserRecord> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.create({
+        data: {
+          id: randomUUID(),
+          email: input.email.toLowerCase(),
+          passwordHash: `oauth:${input.provider}:${input.providerUserId}`,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
+          role: "user",
+          emailVerified: input.emailVerified,
+        },
+      }),
+    );
+
+    return this.mapUser(user);
+  }
+
+  async markEmailVerified(userId: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          emailVerified: true,
+        },
+      }),
+    );
   }
 
   private mapUser(user: AuthUserPersistence): AuthUserRecord {
