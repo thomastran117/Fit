@@ -6,8 +6,13 @@ import { OtpService } from "@/features/auth/otp/otp.service";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import { AuthService } from "@/features/auth/auth.service";
 import { TokenService } from "@/features/auth/token/token.service";
+import { BlobController } from "@/features/blob/blob.controller";
+import { BlobService } from "@/features/blob/blob.service";
 import { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
+import { ProfileController } from "@/features/profile/profile.controller";
+import { ProfileRepository } from "@/features/profile/profile.repository";
+import { ProfileService } from "@/features/profile/profile.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
@@ -20,6 +25,11 @@ export interface ApplicationContainer {
   authRepository: AuthRepository;
   authService: AuthService;
   authController: AuthController;
+  blobService: BlobService;
+  blobController: BlobController;
+  profileRepository: ProfileRepository;
+  profileService: ProfileService;
+  profileController: ProfileController;
 }
 
 let container: ApplicationContainer | null = null;
@@ -40,6 +50,10 @@ function createContainer(): ApplicationContainer {
   const tokenService = new TokenService({
     cache: cacheService,
   });
+  const blobService = new BlobService();
+  const profileRepository = new ProfileRepository();
+  const profileService = new ProfileService(profileRepository, blobService);
+  const profileController = new ProfileController(profileService);
   const authRepository = new AuthRepository();
   const authService = AuthService.create({
     authRepository,
@@ -49,6 +63,7 @@ function createContainer(): ApplicationContainer {
     emailService,
   });
   const authController = new AuthController(authService, captchaService);
+  const blobController = new BlobController(blobService);
 
   return {
     cacheService,
@@ -61,6 +76,11 @@ function createContainer(): ApplicationContainer {
     authRepository,
     authService,
     authController,
+    blobService,
+    blobController,
+    profileRepository,
+    profileService,
+    profileController,
   };
 }
 

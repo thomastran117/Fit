@@ -20,6 +20,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@azure/storage-blob": "^12.31.0",
     "@hono/node-server": "^1.19.4",
     "@prisma/client": "^6.7.0",
     "dotenv": "^17.2.3",
