@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
-import { UnauthorizedError } from "@/configuration/http/errors";
 import { getContainer } from "@/configuration/bootstrap/container";
+import UnauthorizedError from "@/errors/http/unauthorized.error";
 
 function readBearerToken(headerValue?: string): string {
   if (!headerValue) {
