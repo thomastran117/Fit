@@ -74,6 +74,19 @@ export class AuthRepository extends BaseRepository {
     return this.mapUser(user);
   }
 
+  async markEmailVerified(userId: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          emailVerified: true,
+        },
+      }),
+    );
+  }
+
   private mapUser(user: AuthUserPersistence): AuthUserRecord {
     return {
       id: user.id,

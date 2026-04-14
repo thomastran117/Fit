@@ -26,6 +26,8 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
 
   app.post("/auth/local/login", authController.localAuthenticate);
   app.post("/auth/local/signup", authController.localSignup);
+  app.post("/auth/local/email/verify", authController.verifyEmail);
+  app.post("/auth/local/email/resend", authController.resendVerificationEmail);
   app.post("/auth/local/verify", authController.localVerify);
   app.post("/auth/oauth/google", authController.googleAuthenticate);
   app.post("/auth/oauth/microsoft", authController.microsoftAuthenticate);

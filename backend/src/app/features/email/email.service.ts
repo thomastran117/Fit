@@ -3,7 +3,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 
 export interface SendVerificationEmailInput {
   to: string;
-  verificationToken: string;
+  verificationCode: string;
   firstName?: string;
 }
 
@@ -110,10 +110,9 @@ export class EmailService {
   }
 
   async sendVerificationEmail(input: SendVerificationEmailInput): Promise<void> {
-    const verificationUrl = this.createVerificationUrl(input.verificationToken);
     const greetingName = this.resolveGreetingName(input.firstName);
     const escapedGreetingName = escapeHtml(greetingName);
-    const escapedVerificationUrl = escapeHtml(verificationUrl);
+    const escapedVerificationCode = escapeHtml(input.verificationCode);
 
     this.dispatch({
       to: input.to,
@@ -123,16 +122,15 @@ export class EmailService {
         "",
         "Welcome to Rent. Please verify your email address to finish setting up your account.",
         "",
-        `Verify email: ${verificationUrl}`,
+        `Verification code: ${input.verificationCode}`,
         "",
-        "If you did not create this account, you can safely ignore this email.",
+        "This code expires soon. If you did not create this account, you can safely ignore this email.",
       ].join("\n"),
       html: [
         `<p>Hi ${escapedGreetingName},</p>`,
         "<p>Welcome to Rent. Please verify your email address to finish setting up your account.</p>",
-        `<p><a href="${escapedVerificationUrl}">Verify your email</a></p>`,
-        `<p>If the button does not work, use this link: <br /><a href="${escapedVerificationUrl}">${escapedVerificationUrl}</a></p>`,
-        "<p>If you did not create this account, you can safely ignore this email.</p>",
+        `<p>Your verification code is:</p><p style="font-size: 28px; font-weight: 700; letter-spacing: 0.3em;">${escapedVerificationCode}</p>`,
+        "<p>This code expires soon. If you did not create this account, you can safely ignore this email.</p>",
       ].join(""),
     });
   }
@@ -207,12 +205,6 @@ export class EmailService {
     }
 
     throw lastError instanceof Error ? lastError : new Error("Email delivery failed.");
-  }
-
-  private createVerificationUrl(token: string): string {
-    const url = new URL("/verify-email", this.appBaseUrl);
-    url.searchParams.set("token", token);
-    return url.toString();
   }
 
   private formatFromHeader(): string {

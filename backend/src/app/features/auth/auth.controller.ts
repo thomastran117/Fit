@@ -13,11 +13,18 @@ import type {
   LocalSignupRequestBody,
   OAuthAuthenticateInput,
   OAuthAuthenticateRequestBody,
+  ResendVerificationEmailInput,
+  ResendVerificationEmailRequestBody,
+  SignupVerificationPendingResult,
+  VerifyEmailInput,
+  VerifyEmailRequestBody,
 } from "@/features/auth/auth.model";
 import {
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
+  resendVerificationEmailRequestSchema,
+  verifyEmailRequestSchema,
 } from "@/features/auth/auth.model";
 
 export class AuthController {
@@ -38,7 +45,21 @@ export class AuthController {
     const input = await parseRequestBody(context, localSignupRequestSchema);
     const result = await this.authService.localSignup(this.toLocalSignupInput(context, input));
 
-    return this.json(context, result, 201);
+    return context.json(result, 202);
+  };
+
+  verifyEmail = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, verifyEmailRequestSchema);
+    const result = await this.authService.verifyEmail(this.toVerifyEmailInput(context, input));
+    return this.json(context, result);
+  };
+
+  resendVerificationEmail = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resendVerificationEmailRequestSchema);
+    const result = await this.authService.resendVerificationEmail(
+      this.toResendVerificationEmailInput(input),
+    );
+    return context.json(result, 202);
   };
 
   localVerify = async (context: Context<AppBindings>): Promise<Response> => {
@@ -160,6 +181,25 @@ export class AuthController {
 
   private resolveDeviceId(context: Context<AppBindings>, deviceId?: string): string | undefined {
     return deviceId ?? context.get("client").device.id;
+  }
+
+  private toVerifyEmailInput(
+    context: Context<AppBindings>,
+    input: VerifyEmailRequestBody,
+  ): VerifyEmailInput {
+    return {
+      email: input.email,
+      code: input.code,
+      deviceId: this.resolveDeviceId(context, input.deviceId),
+    };
+  }
+
+  private toResendVerificationEmailInput(
+    input: ResendVerificationEmailRequestBody,
+  ): ResendVerificationEmailInput {
+    return {
+      email: input.email,
+    };
   }
 
   private toAuthResponseBody(

@@ -23,11 +23,27 @@ export const oauthAuthenticateRequestSchema = z.object({
   lastName: optionalTrimmedString,
 });
 
+export const verifyEmailRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  code: z.string().trim().regex(/^\d{6}$/, "Verification code must be 6 digits."),
+  deviceId: optionalTrimmedString,
+});
+
+export const resendVerificationEmailRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+});
+
 export type LocalSignupRequestBody = z.infer<typeof localSignupRequestSchema>;
 
 export type LocalAuthenticateRequestBody = z.infer<typeof localAuthenticateRequestSchema>;
 
 export type OAuthAuthenticateRequestBody = z.infer<typeof oauthAuthenticateRequestSchema>;
+
+export type VerifyEmailRequestBody = z.infer<typeof verifyEmailRequestSchema>;
+
+export type ResendVerificationEmailRequestBody = z.infer<
+  typeof resendVerificationEmailRequestSchema
+>;
 
 export interface LocalAuthenticateInput {
   email: string;
@@ -48,6 +64,16 @@ export interface OAuthAuthenticateInput {
   deviceId?: string;
   firstName?: string;
   lastName?: string;
+}
+
+export interface VerifyEmailInput {
+  email: string;
+  code: string;
+  deviceId?: string;
+}
+
+export interface ResendVerificationEmailInput {
+  email: string;
 }
 
 export interface CreateLocalUserInput {
@@ -93,4 +119,10 @@ export interface AuthResponseBody {
   accessToken: string;
   refreshToken?: string;
   user: AuthResponseUser;
+}
+
+export interface SignupVerificationPendingResult {
+  verificationRequired: true;
+  email: string;
+  alreadyPending: boolean;
 }

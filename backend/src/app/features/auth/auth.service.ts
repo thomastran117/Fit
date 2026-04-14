@@ -1,15 +1,23 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import type { ClientRequestContext } from "@/configuration/http/bindings";
+import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
+import UnauthorizedError from "@/errors/http/unauthorized.error";
+import { EmailService } from "@/features/email/email.service";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import {
   type AuthSessionResult,
+  type SignupVerificationPendingResult,
   type AuthUserProfile,
   type AuthUserRecord,
   type LocalAuthenticateInput,
   type LocalSignupInput,
   type OAuthAuthenticateInput,
+  type ResendVerificationEmailInput,
+  type VerifyEmailInput,
 } from "@/features/auth/auth.model";
+import { OtpService } from "@/features/auth/otp/otp.service";
 import { AppleOAuthService } from "@/features/auth/oauth/apple.service";
 import { GoogleOAuthService } from "@/features/auth/oauth/google.service";
 import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
@@ -19,6 +27,8 @@ import { TokenService, type JwtClaims } from "@/features/auth/token/token.servic
 interface AuthServiceOptions {
   authRepository: AuthRepository;
   tokenService: TokenService;
+  otpService: OtpService;
+  emailService: EmailService;
   googleOAuthService?: GoogleOAuthService;
   microsoftOAuthService?: MicrosoftOAuthService;
   appleOAuthService?: AppleOAuthService;
@@ -36,6 +46,8 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly tokenService: TokenService,
+    private readonly otpService: OtpService,
+    private readonly emailService: EmailService,
     private readonly googleOAuthService: GoogleOAuthService,
     private readonly microsoftOAuthService: MicrosoftOAuthService,
     private readonly appleOAuthService: AppleOAuthService,
@@ -45,6 +57,8 @@ export class AuthService {
     return new AuthService(
       options.authRepository,
       options.tokenService,
+      options.otpService,
+      options.emailService,
       options.googleOAuthService ?? new GoogleOAuthService(),
       options.microsoftOAuthService ?? new MicrosoftOAuthService(),
       options.appleOAuthService ?? new AppleOAuthService(),
@@ -64,14 +78,26 @@ export class AuthService {
       throw new Error("Invalid email or password.");
     }
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedError("Please verify your email address before signing in.");
+    }
+
     return this.issueTokensForUser(user, input.deviceId);
   }
 
-  async localSignup(input: LocalSignupInput): Promise<AuthSessionResult> {
+  async localSignup(input: LocalSignupInput): Promise<SignupVerificationPendingResult> {
     const existingUser = await this.authRepository.findUserByEmail(input.email);
 
     if (existingUser) {
-      throw new Error("An account with this email already exists.");
+      if (!existingUser.emailVerified) {
+        return {
+          verificationRequired: true,
+          email: existingUser.email,
+          alreadyPending: true,
+        };
+      }
+
+      throw new ConflictError("An account with this email already exists.");
     }
 
     const passwordHash = await this.hashPassword(input.password);
@@ -84,7 +110,63 @@ export class AuthService {
       passwordHash,
     );
 
-    return this.issueTokensForUser(user, input.deviceId);
+    await this.sendVerificationCode(user);
+
+    return {
+      verificationRequired: true,
+      email: user.email,
+      alreadyPending: false,
+    };
+  }
+
+  async verifyEmail(input: VerifyEmailInput): Promise<AuthSessionResult> {
+    const user = await this.authRepository.findUserByEmail(input.email);
+
+    if (!user) {
+      throw new BadRequestError("Account could not be found for email verification.");
+    }
+
+    if (user.emailVerified) {
+      throw new ConflictError("Email address has already been verified.");
+    }
+
+    await this.otpService.verify({
+      purpose: "email-verification",
+      subject: user.email,
+      code: input.code,
+    });
+
+    await this.authRepository.markEmailVerified(user.id);
+
+    return this.issueTokensForUser(
+      {
+        ...user,
+        emailVerified: true,
+      },
+      input.deviceId,
+    );
+  }
+
+  async resendVerificationEmail(input: ResendVerificationEmailInput): Promise<{
+    resent: true;
+    email: string;
+  }> {
+    const user = await this.authRepository.findUserByEmail(input.email);
+
+    if (!user) {
+      throw new BadRequestError("Account could not be found for email verification.");
+    }
+
+    if (user.emailVerified) {
+      throw new ConflictError("Email address has already been verified.");
+    }
+
+    await this.sendVerificationCode(user);
+
+    return {
+      resent: true,
+      email: user.email,
+    };
   }
 
   async localVerify(context: AuthRequestContext): Promise<{
@@ -262,5 +344,18 @@ export class AuthService {
       role: user.role,
       emailVerified: user.emailVerified,
     };
+  }
+
+  private async sendVerificationCode(user: AuthUserRecord): Promise<void> {
+    const issuedOtp = await this.otpService.issue({
+      purpose: "email-verification",
+      subject: user.email,
+    });
+
+    await this.emailService.sendVerificationEmail({
+      to: user.email,
+      verificationCode: issuedOtp.code,
+      firstName: user.firstName,
+    });
   }
 }
