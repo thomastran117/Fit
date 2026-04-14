@@ -34,6 +34,10 @@ export const resendVerificationEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
 });
 
+export const removeKnownDeviceRequestSchema = z.object({
+  deviceId: z.string().trim().min(1, "Device ID is required."),
+});
+
 export type LocalSignupRequestBody = z.infer<typeof localSignupRequestSchema>;
 
 export type LocalAuthenticateRequestBody = z.infer<typeof localAuthenticateRequestSchema>;
@@ -45,6 +49,8 @@ export type VerifyEmailRequestBody = z.infer<typeof verifyEmailRequestSchema>;
 export type ResendVerificationEmailRequestBody = z.infer<
   typeof resendVerificationEmailRequestSchema
 >;
+
+export type RemoveKnownDeviceRequestBody = z.infer<typeof removeKnownDeviceRequestSchema>;
 
 export interface LocalAuthenticateInput {
   client: ClientRequestContext;
@@ -78,6 +84,11 @@ export interface VerifyEmailInput {
 
 export interface ResendVerificationEmailInput {
   email: string;
+}
+
+export interface RemoveKnownDeviceInput {
+  userId: string;
+  deviceId: string;
 }
 
 export interface CreateLocalUserInput {

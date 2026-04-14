@@ -1,4 +1,5 @@
 import type { ClientRequestContext } from "@/configuration/http/bindings";
+import BadRequestError from "@/errors/http/bad-request.error";
 import type { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
 import type { AuthUserRecord } from "@/features/auth/auth.model";
@@ -124,6 +125,14 @@ export class DeviceService {
       ...device,
       current: device.deviceId === currentDeviceId,
     }));
+  }
+
+  async removeKnownDevice(userId: string, deviceId: string): Promise<void> {
+    const wasRemoved = await this.deviceRepository.removeKnownDevice(userId, deviceId);
+
+    if (!wasRemoved) {
+      throw new BadRequestError("Known device could not be found.");
+    }
   }
 
   private async notifyUnknownDevice(

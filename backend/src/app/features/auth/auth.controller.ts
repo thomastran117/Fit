@@ -13,6 +13,8 @@ import type {
   LocalSignupRequestBody,
   OAuthAuthenticateInput,
   OAuthAuthenticateRequestBody,
+  RemoveKnownDeviceInput,
+  RemoveKnownDeviceRequestBody,
   ResendVerificationEmailInput,
   ResendVerificationEmailRequestBody,
   SignupVerificationPendingResult,
@@ -23,6 +25,7 @@ import {
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
+  removeKnownDeviceRequestSchema,
   resendVerificationEmailRequestSchema,
   verifyEmailRequestSchema,
 } from "@/features/auth/auth.model";
@@ -123,6 +126,14 @@ export class AuthController {
     return context.json(result);
   };
 
+  removeKnownDevice = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, removeKnownDeviceRequestSchema);
+    const result = await this.authService.removeKnownDevice(
+      this.toRemoveKnownDeviceInput(context, input),
+    );
+    return context.json(result);
+  };
+
   private json(
     context: Context<AppBindings>,
     body: AuthSessionResult,
@@ -202,6 +213,16 @@ export class AuthController {
   ): ResendVerificationEmailInput {
     return {
       email: input.email,
+    };
+  }
+
+  private toRemoveKnownDeviceInput(
+    context: Context<AppBindings>,
+    input: RemoveKnownDeviceRequestBody,
+  ): RemoveKnownDeviceInput {
+    return {
+      userId: context.get("auth").sub,
+      deviceId: input.deviceId,
     };
   }
 

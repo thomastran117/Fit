@@ -10,6 +10,7 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.use("/auth/logout", jwtMiddleware);
   app.use("/auth/device/verify", jwtMiddleware);
   app.use("/auth/devices", jwtMiddleware);
+  app.use("/auth/devices/remove", jwtMiddleware);
 
   app.get("/", (context) => {
     return context.json({
@@ -36,6 +37,7 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.post("/auth/logout", authController.logout);
   app.post("/auth/device/verify", authController.deviceVerify);
   app.get("/auth/devices", authController.devices);
+  app.delete("/auth/devices/remove", authController.removeKnownDevice);
 
   return app;
 }

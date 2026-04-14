@@ -147,6 +147,19 @@ export class DeviceRepository extends BaseRepository {
     return devices.map((device) => this.mapDevice(device));
   }
 
+  async removeKnownDevice(userId: string, deviceId: string): Promise<boolean> {
+    const result = await this.executeAsync(() =>
+      this.prisma.device.deleteMany({
+        where: {
+          userId,
+          deviceId,
+        },
+      }),
+    );
+
+    return result.count > 0;
+  }
+
   private mapDevice(device: DevicePersistence): KnownDeviceRecord {
     return {
       id: device.id,

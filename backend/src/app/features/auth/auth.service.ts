@@ -15,6 +15,7 @@ import {
   type LocalAuthenticateInput,
   type LocalSignupInput,
   type OAuthAuthenticateInput,
+  type RemoveKnownDeviceInput,
   type ResendVerificationEmailInput,
   type VerifyEmailInput,
 } from "@/features/auth/auth.model";
@@ -301,6 +302,18 @@ export class AuthService {
         lastSeenAt: device.lastSeenAt,
         verifiedAt: device.verifiedAt,
       })),
+    };
+  }
+
+  async removeKnownDevice(input: RemoveKnownDeviceInput): Promise<{
+    removed: true;
+    deviceId: string;
+  }> {
+    await this.deviceService.removeKnownDevice(input.userId, input.deviceId);
+
+    return {
+      removed: true,
+      deviceId: input.deviceId,
     };
   }
 
