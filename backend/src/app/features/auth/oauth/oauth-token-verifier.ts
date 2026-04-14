@@ -46,6 +46,36 @@ interface VerifyJwtOptions {
   allowedAlgorithms?: string[];
 }
 
+interface OAuthTokenVerifierOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffMultiplier?: number;
+  requestTimeoutMs?: number;
+}
+
+type NormalizedError = Readonly<{
+  code: string;
+  transient: boolean;
+}>;
+
+const DEFAULTS = {
+  maxRetries: 3,
+  initialDelayMs: 250,
+  maxDelayMs: 2_000,
+  backoffMultiplier: 2,
+  requestTimeoutMs: 3_000,
+} as const;
+
+const TRANSIENT_ERROR_CODES = new Set([
+  "ABORT_ERR",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ETIMEDOUT",
+]);
+
 function toBase64Url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url");
 }
@@ -118,6 +148,19 @@ export class OAuthTokenVerifier {
       keys: JsonWebKey[];
     }
   >();
+  private readonly maxRetries: number;
+  private readonly initialDelayMs: number;
+  private readonly maxDelayMs: number;
+  private readonly backoffMultiplier: number;
+  private readonly requestTimeoutMs: number;
+
+  constructor(options: OAuthTokenVerifierOptions = {}) {
+    this.maxRetries = options.maxRetries ?? DEFAULTS.maxRetries;
+    this.initialDelayMs = options.initialDelayMs ?? DEFAULTS.initialDelayMs;
+    this.maxDelayMs = options.maxDelayMs ?? DEFAULTS.maxDelayMs;
+    this.backoffMultiplier = options.backoffMultiplier ?? DEFAULTS.backoffMultiplier;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULTS.requestTimeoutMs;
+  }
 
   async verifyIdToken(token: string, options: VerifyJwtOptions): Promise<JwtPayload> {
     const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
@@ -200,24 +243,180 @@ export class OAuthTokenVerifier {
       return cached.keys;
     }
 
-    const response = await fetch(jwksUrl);
+    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
+      try {
+        const keys = await this.fetchJwksOnce(jwksUrl);
 
-    if (!response.ok) {
-      throw new UnauthorizedError("OAuth signing keys could not be fetched.");
+        OAuthTokenVerifier.jwksCache.set(jwksUrl, {
+          keys,
+          expiresAt: Date.now() + 60 * 60 * 1000,
+        });
+
+        return keys;
+      } catch (error) {
+        const normalized = this.normalizeError(error);
+
+        if (!normalized.transient || attempt === this.maxRetries) {
+          throw new UnauthorizedError("OAuth provider verification is currently unavailable.", {
+            reason: normalized.code,
+            failClosed: true,
+          });
+        }
+
+        await this.sleep(this.calculateDelayMs(attempt));
+      }
     }
 
-    const body = (await response.json()) as JsonWebKeySet;
-    const keys = body.keys ?? [];
-
-    if (!keys.length) {
-      throw new UnauthorizedError("OAuth signing keys are unavailable.");
-    }
-
-    OAuthTokenVerifier.jwksCache.set(jwksUrl, {
-      keys,
-      expiresAt: Date.now() + 60 * 60 * 1000,
+    throw new UnauthorizedError("OAuth provider verification is currently unavailable.", {
+      reason: "oauth-jwks-unavailable",
+      failClosed: true,
     });
+  }
 
-    return keys;
+  private async fetchJwksOnce(jwksUrl: string): Promise<JsonWebKey[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+
+    try {
+      const response = await fetch(jwksUrl, {
+        signal: controller.signal,
+      });
+
+      if (response.status >= 500) {
+        throw new OAuthVerifierTransientError(`OAuth JWKS responded with ${response.status}.`, {
+          code: `oauth-jwks-http-${response.status}`,
+        });
+      }
+
+      if (!response.ok) {
+        throw new UnauthorizedError("OAuth signing keys could not be fetched.");
+      }
+
+      const body = (await response.json()) as JsonWebKeySet;
+      const keys = body.keys ?? [];
+
+      if (!keys.length) {
+        throw new UnauthorizedError("OAuth signing keys are unavailable.");
+      }
+
+      return keys;
+    } catch (error) {
+      throw this.mapRequestError(error);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private mapRequestError(error: unknown): Error {
+    if (this.isAbortError(error)) {
+      return new OAuthVerifierTransientError("OAuth JWKS request timed out.", {
+        code: "oauth-jwks-timeout",
+      });
+    }
+
+    if (this.isFetchNetworkError(error)) {
+      return new OAuthVerifierTransientError("OAuth JWKS request failed.", {
+        code: this.readNodeErrorCode(error) ?? "oauth-jwks-network-error",
+      });
+    }
+
+    return error instanceof Error ? error : new Error("oauth-jwks-fetch-failed");
+  }
+
+  private normalizeError(error: unknown): NormalizedError {
+    if (error instanceof OAuthVerifierTransientError) {
+      return {
+        code: error.code ?? "oauth-jwks-transient-error",
+        transient: true,
+      };
+    }
+
+    const code = this.readNodeErrorCode(error);
+
+    if (code && TRANSIENT_ERROR_CODES.has(code)) {
+      return {
+        code,
+        transient: true,
+      };
+    }
+
+    if (this.isAbortError(error)) {
+      return {
+        code: "oauth-jwks-timeout",
+        transient: true,
+      };
+    }
+
+    return {
+      code: this.toErrorCode(error),
+      transient: false,
+    };
+  }
+
+  private calculateDelayMs(attempt: number): number {
+    const exponentialDelay = Math.min(
+      this.initialDelayMs * this.backoffMultiplier ** attempt,
+      this.maxDelayMs,
+    );
+    const jitterMs = Math.floor(Math.random() * Math.max(25, Math.floor(this.initialDelayMs / 2)));
+
+    return exponentialDelay + jitterMs;
+  }
+
+  private isAbortError(error: unknown): boolean {
+    return error instanceof Error && error.name === "AbortError";
+  }
+
+  private isFetchNetworkError(error: unknown): boolean {
+    if (!(error instanceof Error) || error.name !== "TypeError") {
+      return false;
+    }
+
+    return this.readNodeErrorCode(error) !== undefined || /fetch failed/i.test(error.message);
+  }
+
+  private readNodeErrorCode(error: unknown): string | undefined {
+    if (typeof error !== "object" || error === null || !("cause" in error)) {
+      return undefined;
+    }
+
+    const cause = (error as { cause?: unknown }).cause;
+
+    if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+      return undefined;
+    }
+
+    const code = (cause as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+
+  private toErrorCode(error: unknown): string {
+    if (error instanceof OAuthVerifierTransientError && error.code) {
+      return error.code;
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return "oauth-jwks-fetch-failed";
+  }
+
+  private sleep(delayMs: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
+
+class OAuthVerifierTransientError extends Error {
+  constructor(
+    message: string,
+    private readonly details: { code?: string } = {},
+  ) {
+    super(message);
+    this.name = "OAuthVerifierTransientError";
+  }
+
+  get code(): string | undefined {
+    return this.details.code;
   }
 }
