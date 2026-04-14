@@ -13,7 +13,11 @@ import { EmailService } from "@/features/email/email.service";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
+import { RentingsAnalyticsRepository } from "@/features/rentings/rentings.analytics.repository";
+import { RentingsAnalyticsService } from "@/features/rentings/rentings.analytics.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
+import { RentingsReviewsRepository } from "@/features/rentings/rentings.reviews.repository";
+import { RentingsReviewsService } from "@/features/rentings/rentings.reviews.service";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsSearchService } from "@/features/rentings/rentings.search.service";
 import { RentingsService } from "@/features/rentings/rentings.service";
@@ -35,6 +39,10 @@ export interface ApplicationContainer {
   profileService: ProfileService;
   profileController: ProfileController;
   rentingsRepository: RentingsRepository;
+  rentingsAnalyticsRepository: RentingsAnalyticsRepository;
+  rentingsAnalyticsService: RentingsAnalyticsService;
+  rentingsReviewsRepository: RentingsReviewsRepository;
+  rentingsReviewsService: RentingsReviewsService;
   rentingsSearchService: RentingsSearchService;
   rentingsService: RentingsService;
   rentingsController: RentingsController;
@@ -63,13 +71,27 @@ function createContainer(): ApplicationContainer {
   const profileService = new ProfileService(profileRepository, blobService);
   const profileController = new ProfileController(profileService);
   const rentingsRepository = new RentingsRepository();
+  const rentingsAnalyticsRepository = new RentingsAnalyticsRepository();
+  const rentingsAnalyticsService = new RentingsAnalyticsService(
+    rentingsAnalyticsRepository,
+    rentingsRepository,
+  );
+  const rentingsReviewsRepository = new RentingsReviewsRepository();
+  const rentingsReviewsService = new RentingsReviewsService(
+    rentingsReviewsRepository,
+    rentingsRepository,
+  );
   const rentingsSearchService = new RentingsSearchService(rentingsRepository);
   const rentingsService = new RentingsService(
     rentingsRepository,
     rentingsSearchService,
     blobService,
   );
-  const rentingsController = new RentingsController(rentingsService);
+  const rentingsController = new RentingsController(
+    rentingsService,
+    rentingsAnalyticsService,
+    rentingsReviewsService,
+  );
   const authRepository = new AuthRepository();
   const authService = AuthService.create({
     authRepository,
@@ -98,6 +120,10 @@ function createContainer(): ApplicationContainer {
     profileService,
     profileController,
     rentingsRepository,
+    rentingsAnalyticsRepository,
+    rentingsAnalyticsService,
+    rentingsReviewsRepository,
+    rentingsReviewsService,
     rentingsSearchService,
     rentingsService,
     rentingsController,
