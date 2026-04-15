@@ -86,8 +86,10 @@ export interface BookingRequestRecord {
   approvedAt?: string;
   declinedAt?: string;
   expiredAt?: string;
+  convertedAt?: string;
   holdExpiresAt: string;
   holdBlockId?: string;
+  rentingId?: string;
   createdAt: string;
   updatedAt: string;
   posting: BookingRequestPostingSummary;

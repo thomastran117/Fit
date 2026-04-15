@@ -24,6 +24,9 @@ import { PostingsReviewsService } from "@/features/postings/postings.reviews.ser
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
+import { RentingsController } from "@/features/rentings/rentings.controller";
+import { RentingsRepository } from "@/features/rentings/rentings.repository";
+import { RentingsService } from "@/features/rentings/rentings.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
@@ -45,6 +48,9 @@ export interface ApplicationContainer {
   profileService: ProfileService;
   profileController: ProfileController;
   postingsRepository: PostingsRepository;
+  rentingsRepository: RentingsRepository;
+  rentingsService: RentingsService;
+  rentingsController: RentingsController;
   postingsAnalyticsRepository: PostingsAnalyticsRepository;
   postingsAnalyticsService: PostingsAnalyticsService;
   postingsReviewsRepository: PostingsReviewsRepository;
@@ -74,6 +80,7 @@ function createContainer(): ApplicationContainer {
   });
   const blobService = new BlobService();
   const bookingsRepository = new BookingsRepository();
+  const rentingsRepository = new RentingsRepository();
   const profileRepository = new ProfileRepository();
   const profileService = new ProfileService(profileRepository, blobService);
   const profileController = new ProfileController(profileService);
@@ -87,8 +94,11 @@ function createContainer(): ApplicationContainer {
     bookingsRepository,
     postingsRepository,
     postingsAnalyticsRepository,
+    rentingsRepository,
   );
   const bookingsController = new BookingsController(bookingsService);
+  const rentingsService = new RentingsService(rentingsRepository);
+  const rentingsController = new RentingsController(rentingsService);
   const postingsReviewsRepository = new PostingsReviewsRepository();
   const postingsReviewsService = new PostingsReviewsService(
     postingsReviewsRepository,
@@ -132,6 +142,9 @@ function createContainer(): ApplicationContainer {
     bookingsRepository,
     bookingsService,
     bookingsController,
+    rentingsRepository,
+    rentingsService,
+    rentingsController,
     profileRepository,
     profileService,
     profileController,

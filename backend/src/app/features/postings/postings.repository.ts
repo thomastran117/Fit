@@ -41,6 +41,7 @@ type PostingPersistence = Prisma.PostingGetPayload<{
             id: true;
             status: true;
             holdExpiresAt: true;
+            convertedAt: true;
           };
         };
       };
@@ -80,6 +81,7 @@ export class PostingsRepository extends BaseRepository {
                     id: true,
                     status: true,
                     holdExpiresAt: true,
+                    convertedAt: true,
                   },
                 },
               },
@@ -122,6 +124,7 @@ export class PostingsRepository extends BaseRepository {
                       id: true,
                       status: true,
                       holdExpiresAt: true,
+                      convertedAt: true,
                     },
                   },
                 },
@@ -179,6 +182,7 @@ export class PostingsRepository extends BaseRepository {
                       id: true,
                       status: true,
                       holdExpiresAt: true,
+                      convertedAt: true,
                     },
                   },
                 },
@@ -277,6 +281,7 @@ export class PostingsRepository extends BaseRepository {
                   id: true,
                   status: true,
                   holdExpiresAt: true,
+                  convertedAt: true,
                 },
               },
             },
@@ -325,6 +330,7 @@ export class PostingsRepository extends BaseRepository {
                     id: true,
                     status: true,
                     holdExpiresAt: true,
+                    convertedAt: true,
                   },
                 },
               },
@@ -371,6 +377,7 @@ export class PostingsRepository extends BaseRepository {
                   id: true,
                   status: true,
                   holdExpiresAt: true,
+                  convertedAt: true,
                 },
               },
             },
@@ -411,6 +418,7 @@ export class PostingsRepository extends BaseRepository {
                   id: true,
                   status: true,
                   holdExpiresAt: true,
+                  convertedAt: true,
                 },
               },
             },
@@ -542,6 +550,7 @@ export class PostingsRepository extends BaseRepository {
                   id: true,
                   status: true,
                   holdExpiresAt: true,
+                  convertedAt: true,
                 },
               },
             },
@@ -828,6 +837,7 @@ export class PostingsRepository extends BaseRepository {
 
         return (
           block.bookingRequestHold.status === "approved" &&
+          !block.bookingRequestHold.convertedAt &&
           block.bookingRequestHold.holdExpiresAt.getTime() > now
         );
       })

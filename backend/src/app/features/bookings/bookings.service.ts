@@ -21,6 +21,7 @@ import type { BookingsRepository } from "@/features/bookings/bookings.repository
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -29,6 +30,7 @@ export class BookingsService {
     private readonly bookingsRepository: BookingsRepository,
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
+    private readonly rentingsRepository: RentingsRepository,
   ) {}
 
   async create(input: CreateBookingRequestInput): Promise<BookingRequestRecord> {
@@ -39,6 +41,7 @@ export class BookingsService {
     }
 
     const normalized = this.normalizeCreateInput(input, posting);
+    await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
     await this.assertNoBlockingAvailabilityOverlap(posting.id, normalized.startAt, normalized.endAt);
 
     const hasActiveOverlap = await this.bookingsRepository.hasActiveOverlap({
@@ -146,6 +149,7 @@ export class BookingsService {
       normalized.endAt,
       existing.id,
     );
+    await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
 
     const hasActiveOverlap = await this.bookingsRepository.hasActiveOverlap({
       postingId: posting.id,
@@ -212,6 +216,11 @@ export class BookingsService {
     this.assertCanDecide(bookingRequest, "approve");
 
     await this.requireBookablePosting(bookingRequest.postingId);
+    await this.assertNoRentingOverlap(
+      bookingRequest.postingId,
+      new Date(bookingRequest.startAt),
+      new Date(bookingRequest.endAt),
+    );
     await this.assertNoBlockingAvailabilityOverlap(
       bookingRequest.postingId,
       new Date(bookingRequest.startAt),
@@ -373,6 +382,14 @@ export class BookingsService {
 
     if (overlap) {
       throw new BadRequestError("The requested dates overlap with existing availability blocks.");
+    }
+  }
+
+  private async assertNoRentingOverlap(postingId: string, startAt: Date, endAt: Date): Promise<void> {
+    const overlap = await this.rentingsRepository.hasOverlap(postingId, startAt, endAt);
+
+    if (overlap) {
+      throw new BadRequestError("The requested dates are already reserved by an existing renting.");
     }
   }
 

@@ -19,6 +19,11 @@ import type {
 
 type BookingRequestPersistence = Prisma.BookingRequestGetPayload<{
   include: {
+    renting: {
+      select: {
+        id: true;
+      };
+    };
     posting: {
       include: {
         photos: {
@@ -53,6 +58,11 @@ export class BookingsRepository extends BaseRepository {
           holdExpiresAt: input.holdExpiresAt,
         },
         include: {
+          renting: {
+            select: {
+              id: true,
+            },
+          },
           posting: {
             include: {
               photos: {
@@ -76,6 +86,11 @@ export class BookingsRepository extends BaseRepository {
           id,
         },
         include: {
+          renting: {
+            select: {
+              id: true,
+            },
+          },
           posting: {
             include: {
               photos: {
@@ -145,6 +160,11 @@ export class BookingsRepository extends BaseRepository {
             estimatedTotal: new Prisma.Decimal(input.estimatedTotal),
           },
           include: {
+            renting: {
+              select: {
+                id: true,
+              },
+            },
             posting: {
               include: {
                 photos: {
@@ -177,6 +197,11 @@ export class BookingsRepository extends BaseRepository {
           take: input.pageSize,
           orderBy: [{ createdAt: "desc" }],
           include: {
+            renting: {
+              select: {
+                id: true,
+              },
+            },
             posting: {
               include: {
                 photos: {
@@ -217,6 +242,11 @@ export class BookingsRepository extends BaseRepository {
           take: input.pageSize,
           orderBy: [{ createdAt: "desc" }],
           include: {
+            renting: {
+              select: {
+                id: true,
+              },
+            },
             posting: {
               include: {
                 photos: {
@@ -248,6 +278,7 @@ export class BookingsRepository extends BaseRepository {
           status: {
             in: ["pending", "approved"],
           },
+          convertedAt: null,
           holdExpiresAt: {
             gt: now,
           },
@@ -293,6 +324,11 @@ export class BookingsRepository extends BaseRepository {
               id: bookingRequestId,
             },
             include: {
+              renting: {
+                select: {
+                  id: true,
+                },
+              },
               posting: {
                 include: {
                   photos: {
@@ -329,8 +365,9 @@ export class BookingsRepository extends BaseRepository {
                   bookingRequestHold: null,
                 },
                 {
-                  bookingRequestHold: {
+              bookingRequestHold: {
                     status: "approved",
+                    convertedAt: null,
                     holdExpiresAt: {
                       gt: now,
                     },
@@ -356,6 +393,7 @@ export class BookingsRepository extends BaseRepository {
               status: {
                 in: ["pending", "approved"],
               },
+              convertedAt: null,
               holdExpiresAt: {
                 gt: now,
               },
@@ -400,6 +438,11 @@ export class BookingsRepository extends BaseRepository {
               holdBlockId: holdBlock.id,
             },
             include: {
+              renting: {
+                select: {
+                  id: true,
+                },
+              },
               posting: {
                 include: {
                   photos: {
@@ -457,6 +500,11 @@ export class BookingsRepository extends BaseRepository {
             decisionNote: note ?? null,
           },
           include: {
+            renting: {
+              select: {
+                id: true,
+              },
+            },
             posting: {
               include: {
                 photos: {
@@ -482,6 +530,7 @@ export class BookingsRepository extends BaseRepository {
           status: {
             in: ["pending", "approved"],
           },
+          convertedAt: null,
           holdExpiresAt: {
             lte: now,
           },
@@ -527,6 +576,7 @@ export class BookingsRepository extends BaseRepository {
             {
               bookingRequestHold: {
                 status: "approved",
+                convertedAt: null,
                 holdExpiresAt: {
                   gt: now,
                 },
@@ -562,6 +612,7 @@ export class BookingsRepository extends BaseRepository {
             status: true,
             holdExpiresAt: true,
             holdBlockId: true,
+            convertedAt: true,
           },
         });
 
@@ -570,6 +621,10 @@ export class BookingsRepository extends BaseRepository {
         }
 
         if (!["pending", "approved"].includes(existing.status)) {
+          return false;
+        }
+
+        if (existing.convertedAt) {
           return false;
         }
 
@@ -629,8 +684,10 @@ export class BookingsRepository extends BaseRepository {
       approvedAt: bookingRequest.approvedAt?.toISOString(),
       declinedAt: bookingRequest.declinedAt?.toISOString(),
       expiredAt: bookingRequest.expiredAt?.toISOString(),
+      convertedAt: bookingRequest.convertedAt?.toISOString(),
       holdExpiresAt: bookingRequest.holdExpiresAt.toISOString(),
       holdBlockId: bookingRequest.holdBlockId ?? undefined,
+      rentingId: bookingRequest.renting?.id ?? undefined,
       createdAt: bookingRequest.createdAt.toISOString(),
       updatedAt: bookingRequest.updatedAt.toISOString(),
       posting: {

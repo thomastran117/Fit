@@ -10,6 +10,7 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     bookingsController,
     profileController,
     postingsController,
+    rentingsController,
   } = getContainer();
 
   app.use("/auth/local/verify", jwtMiddleware);
@@ -72,6 +73,9 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.put("/booking-requests/:id", bookingsController.updateOwn);
   app.post("/booking-requests/:id/approve", bookingsController.approve);
   app.post("/booking-requests/:id/decline", bookingsController.decline);
+  app.post("/booking-requests/:id/convert", rentingsController.convertBookingRequest);
+  app.get("/rentings/me", rentingsController.listMine);
+  app.get("/rentings/:id", rentingsController.getById);
 
   return app;
 }
