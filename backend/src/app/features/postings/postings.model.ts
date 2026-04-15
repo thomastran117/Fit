@@ -131,6 +131,8 @@ export const publicSearchPostingsQuerySchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().positive().max(20_000).optional(),
+  startAt: z.string().datetime("Search start time must be an ISO datetime.").optional(),
+  endAt: z.string().datetime("Search end time must be an ISO datetime.").optional(),
   sort: postingSortSchema.default("relevance"),
 });
 
@@ -288,6 +290,10 @@ export interface SearchPostingsInput {
     latitude: number;
     longitude: number;
     radiusKm?: number;
+  };
+  availabilityWindow?: {
+    startAt: string;
+    endAt: string;
   };
   sort: PostingSort;
 }

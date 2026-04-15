@@ -475,6 +475,59 @@ export class PostingsRepository extends BaseRepository {
       );
     }
 
+    if (input.availabilityWindow) {
+      const requestedStartAt = new Date(input.availabilityWindow.startAt);
+      const requestedEndAt = new Date(input.availabilityWindow.endAt);
+      const now = new Date();
+
+      whereClauses.push(
+        Prisma.sql`NOT EXISTS (
+          SELECT 1
+          FROM posting_availability_blocks pab
+          LEFT JOIN booking_requests br
+            ON br.hold_block_id = pab.id
+          WHERE pab.posting_id = postings.id
+            AND pab.start_at < ${requestedEndAt}
+            AND pab.end_at > ${requestedStartAt}
+            AND (
+              br.id IS NULL
+              OR (
+                br.status = 'approved'
+                AND br.converted_at IS NULL
+                AND br.hold_expires_at > ${now}
+              )
+            )
+        )`,
+      );
+
+      whereClauses.push(
+        Prisma.sql`NOT EXISTS (
+          SELECT 1
+          FROM booking_requests br
+          WHERE br.posting_id = postings.id
+            AND br.status IN ('pending', 'approved')
+            AND br.converted_at IS NULL
+            AND (
+              br.conversion_reservation_expires_at IS NULL
+              OR br.conversion_reservation_expires_at <= ${now}
+            )
+            AND br.hold_expires_at > ${now}
+            AND br.start_at < ${requestedEndAt}
+            AND br.end_at > ${requestedStartAt}
+        )`,
+      );
+
+      whereClauses.push(
+        Prisma.sql`NOT EXISTS (
+          SELECT 1
+          FROM rentings r
+          WHERE r.posting_id = postings.id
+            AND r.start_at < ${requestedEndAt}
+            AND r.end_at > ${requestedStartAt}
+        )`,
+      );
+    }
+
     const distanceExpression = input.geo
       ? Prisma.sql`(
           6371 * ACOS(

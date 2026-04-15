@@ -321,6 +321,15 @@ export class PostingsService {
     if (input.sort === "nearest" && !input.geo) {
       throw new BadRequestError("Nearest sorting requires latitude and longitude.");
     }
+
+    if (input.availabilityWindow) {
+      const startAt = new Date(input.availabilityWindow.startAt);
+      const endAt = new Date(input.availabilityWindow.endAt);
+
+      if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || startAt >= endAt) {
+        throw new BadRequestError("Availability window must define a valid, non-empty range.");
+      }
+    }
   }
 
   private async requireOwnerPosting(id: string, ownerId: string): Promise<PostingRecord> {

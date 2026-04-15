@@ -232,6 +232,8 @@ export class PostingsController {
         latitude: url.searchParams.get("latitude") ?? undefined,
         longitude: url.searchParams.get("longitude") ?? undefined,
         radiusKm: url.searchParams.get("radiusKm") ?? undefined,
+        startAt: url.searchParams.get("startAt") ?? undefined,
+        endAt: url.searchParams.get("endAt") ?? undefined,
         sort: url.searchParams.get("sort") ?? undefined,
       });
 
@@ -319,6 +321,15 @@ export class PostingsController {
   }
 
   private toSearchPostingsInput(query: PublicSearchPostingsQuery): SearchPostingsInput {
+    if ((query.startAt === undefined) !== (query.endAt === undefined)) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path: "startAt",
+          message: "startAt and endAt must be provided together.",
+        },
+      ]);
+    }
+
     return {
       page: query.page,
       pageSize: query.pageSize,
@@ -333,6 +344,13 @@ export class PostingsController {
               latitude: query.latitude,
               longitude: query.longitude,
               radiusKm: query.radiusKm,
+            }
+          : undefined,
+      availabilityWindow:
+        query.startAt !== undefined && query.endAt !== undefined
+          ? {
+              startAt: query.startAt,
+              endAt: query.endAt,
             }
           : undefined,
       sort: query.sort,
