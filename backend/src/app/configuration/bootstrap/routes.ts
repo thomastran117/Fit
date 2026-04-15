@@ -4,7 +4,13 @@ import { getContainer } from "@/configuration/bootstrap/container";
 import { jwtMiddleware } from "../middlewares/jwt-middleware";
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
-  const { authController, blobController, profileController, postingsController } = getContainer();
+  const {
+    authController,
+    blobController,
+    bookingsController,
+    profileController,
+    postingsController,
+  } = getContainer();
 
   app.use("/auth/local/verify", jwtMiddleware);
   app.use("/auth/logout", jwtMiddleware);
@@ -55,10 +61,17 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.get("/postings/:id/reviews", postingsController.listReviews);
   app.post("/postings/:id/reviews", postingsController.createReview);
   app.put("/postings/:id/reviews/me", postingsController.updateOwnReview);
+  app.post("/postings/:id/booking-requests", bookingsController.createForPosting);
+  app.get("/postings/:id/booking-requests", bookingsController.listForOwnerPosting);
   app.get("/postings/:id", postingsController.getById);
   app.put("/postings/:id", postingsController.update);
   app.post("/postings/:id/publish", postingsController.publish);
   app.post("/postings/:id/archive", postingsController.archive);
+  app.get("/booking-requests/me", bookingsController.listMine);
+  app.get("/booking-requests/:id", bookingsController.getById);
+  app.put("/booking-requests/:id", bookingsController.updateOwn);
+  app.post("/booking-requests/:id/approve", bookingsController.approve);
+  app.post("/booking-requests/:id/decline", bookingsController.decline);
 
   return app;
 }

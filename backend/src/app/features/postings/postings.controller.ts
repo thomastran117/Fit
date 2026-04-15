@@ -185,6 +185,7 @@ export class PostingsController {
       attributes: body.attributes,
       availabilityStatus: body.availabilityStatus,
       availabilityNotes: body.availabilityNotes ?? null,
+      maxBookingDurationDays: body.maxBookingDurationDays ?? null,
       availabilityBlocks: body.availabilityBlocks,
       location: {
         latitude: body.location.latitude,

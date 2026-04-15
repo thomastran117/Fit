@@ -8,6 +8,9 @@ import { AuthService } from "@/features/auth/auth.service";
 import { TokenService } from "@/features/auth/token/token.service";
 import { BlobController } from "@/features/blob/blob.controller";
 import { BlobService } from "@/features/blob/blob.service";
+import { BookingsController } from "@/features/bookings/bookings.controller";
+import { BookingsRepository } from "@/features/bookings/bookings.repository";
+import { BookingsService } from "@/features/bookings/bookings.service";
 import { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
 import { ProfileController } from "@/features/profile/profile.controller";
@@ -35,6 +38,9 @@ export interface ApplicationContainer {
   authController: AuthController;
   blobService: BlobService;
   blobController: BlobController;
+  bookingsRepository: BookingsRepository;
+  bookingsService: BookingsService;
+  bookingsController: BookingsController;
   profileRepository: ProfileRepository;
   profileService: ProfileService;
   profileController: ProfileController;
@@ -67,6 +73,7 @@ function createContainer(): ApplicationContainer {
     cache: cacheService,
   });
   const blobService = new BlobService();
+  const bookingsRepository = new BookingsRepository();
   const profileRepository = new ProfileRepository();
   const profileService = new ProfileService(profileRepository, blobService);
   const profileController = new ProfileController(profileService);
@@ -76,6 +83,12 @@ function createContainer(): ApplicationContainer {
     postingsAnalyticsRepository,
     postingsRepository,
   );
+  const bookingsService = new BookingsService(
+    bookingsRepository,
+    postingsRepository,
+    postingsAnalyticsRepository,
+  );
+  const bookingsController = new BookingsController(bookingsService);
   const postingsReviewsRepository = new PostingsReviewsRepository();
   const postingsReviewsService = new PostingsReviewsService(
     postingsReviewsRepository,
@@ -116,6 +129,9 @@ function createContainer(): ApplicationContainer {
     authController,
     blobService,
     blobController,
+    bookingsRepository,
+    bookingsService,
+    bookingsController,
     profileRepository,
     profileService,
     profileController,

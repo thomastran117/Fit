@@ -105,7 +105,19 @@ export interface EnqueuePostingViewedEventInput {
   deviceType: string;
 }
 
+export interface EnqueueBookingRequestedEventInput {
+  postingId: string;
+  ownerId: string;
+  occurredAt: string;
+  estimatedTotal: number;
+}
+
 export interface ProcessPostingViewedEventInput extends EnqueuePostingViewedEventInput {
+  eventDate: string;
+  eventHour: string;
+}
+
+export interface ProcessBookingRequestedEventInput extends EnqueueBookingRequestedEventInput {
   eventDate: string;
   eventHour: string;
 }

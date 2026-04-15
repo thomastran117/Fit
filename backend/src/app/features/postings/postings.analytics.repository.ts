@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import type {
+  EnqueueBookingRequestedEventInput,
   EnqueuePostingViewedEventInput,
   ListPostingAnalyticsInput,
   OwnerPostingsAnalyticsSummary,
+  ProcessBookingRequestedEventInput,
   ProcessPostingViewedEventInput,
   PostingAnalyticsBucket,
   PostingAnalyticsDetail,
@@ -64,6 +66,23 @@ export class PostingsAnalyticsRepository extends BaseRepository {
             ipAddressHash: input.ipAddressHash ?? null,
             userAgentHash: input.userAgentHash ?? null,
             deviceType: input.deviceType,
+          } as Prisma.InputJsonValue,
+        },
+      }),
+    );
+  }
+
+  async enqueueBookingRequestedEvent(input: EnqueueBookingRequestedEventInput): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingAnalyticsOutbox.create({
+        data: {
+          id: randomUUID(),
+          postingId: input.postingId,
+          ownerId: input.ownerId,
+          eventType: "booking_requested",
+          payload: {
+            occurredAt: input.occurredAt,
+            estimatedTotal: input.estimatedTotal,
           } as Prisma.InputJsonValue,
         },
       }),
@@ -206,6 +225,28 @@ export class PostingsAnalyticsRepository extends BaseRepository {
 
         await this.upsertHourlyRollup(transaction, input.postingId, input.ownerId, eventHour, uniqueIncrement);
         await this.upsertDailyRollup(transaction, input.postingId, input.ownerId, eventDate, uniqueIncrement);
+      }),
+    );
+  }
+
+  async processBookingRequestedEvent(input: ProcessBookingRequestedEventInput): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        const eventDate = new Date(input.eventDate);
+        const eventHour = new Date(input.eventHour);
+
+        await this.upsertHourlyBookingRequestRollup(
+          transaction,
+          input.postingId,
+          input.ownerId,
+          eventHour,
+        );
+        await this.upsertDailyBookingRequestRollup(
+          transaction,
+          input.postingId,
+          input.ownerId,
+          eventDate,
+        );
       }),
     );
   }
@@ -464,6 +505,68 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         views: 1,
         uniqueViews: uniqueIncrement,
         bookingRequests: 0,
+        estimatedRevenue: new Prisma.Decimal(0),
+      },
+    });
+  }
+
+  private async upsertHourlyBookingRequestRollup(
+    transaction: Prisma.TransactionClient,
+    postingId: string,
+    ownerId: string,
+    bucketStart: Date,
+  ): Promise<void> {
+    await transaction.postingAnalyticsHourly.upsert({
+      where: {
+        postingId_bucketStart: {
+          postingId,
+          bucketStart,
+        },
+      },
+      update: {
+        bookingRequests: {
+          increment: 1,
+        },
+      },
+      create: {
+        id: randomUUID(),
+        postingId,
+        ownerId,
+        bucketStart,
+        views: 0,
+        uniqueViews: 0,
+        bookingRequests: 1,
+        estimatedRevenue: new Prisma.Decimal(0),
+      },
+    });
+  }
+
+  private async upsertDailyBookingRequestRollup(
+    transaction: Prisma.TransactionClient,
+    postingId: string,
+    ownerId: string,
+    bucketStart: Date,
+  ): Promise<void> {
+    await transaction.postingAnalyticsDaily.upsert({
+      where: {
+        postingId_bucketStart: {
+          postingId,
+          bucketStart,
+        },
+      },
+      update: {
+        bookingRequests: {
+          increment: 1,
+        },
+      },
+      create: {
+        id: randomUUID(),
+        postingId,
+        ownerId,
+        bucketStart,
+        views: 0,
+        uniqueViews: 0,
+        bookingRequests: 1,
         estimatedRevenue: new Prisma.Decimal(0),
       },
     });

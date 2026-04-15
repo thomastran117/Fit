@@ -21,6 +21,8 @@ model User {
   profile       Profile?
   postings      Posting[]
   postingReviews PostingReview[] @relation("PostingReviewAuthor")
+  bookingRequestsAsRenter BookingRequest[] @relation("BookingRequestRenter")
+  bookingRequestsAsOwner  BookingRequest[] @relation("BookingRequestOwner")
 
   @@map("users")
 }
@@ -76,6 +78,7 @@ model Posting {
   attributes        Json
   availabilityStatus PostingAvailabilityStatus @map("availability_status")
   availabilityNotes String?                    @map("availability_notes") @db.VarChar(500)
+  maxBookingDurationDays Int?                  @map("max_booking_duration_days")
   latitude          Float
   longitude         Float
   city              String                     @db.VarChar(120)
@@ -95,6 +98,7 @@ model Posting {
   dailyAnalytics    PostingAnalyticsDaily[]
   analyticsOutboxEntries PostingAnalyticsOutbox[]
   reviews           PostingReview[]
+  bookingRequests   BookingRequest[]
 
   @@index([ownerId, status])
   @@index([status, publishedAt])
@@ -126,9 +130,46 @@ model PostingAvailabilityBlock {
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   posting    Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  bookingRequestHold BookingRequest? @relation("BookingRequestHold")
 
   @@index([postingId, startAt, endAt])
   @@map("posting_availability_blocks")
+}
+
+model BookingRequest {
+  id             String               @id @db.VarChar(36)
+  postingId       String               @map("posting_id") @db.VarChar(36)
+  renterId        String               @map("renter_id") @db.VarChar(36)
+  ownerId         String               @map("owner_id") @db.VarChar(36)
+  status          BookingRequestStatus
+  startAt         DateTime             @map("start_at") @db.DateTime(6)
+  endAt           DateTime             @map("end_at") @db.DateTime(6)
+  durationDays    Int                  @map("duration_days")
+  guestCount      Int                  @map("guest_count")
+  note            String?              @db.VarChar(1000)
+  pricingCurrency String               @map("pricing_currency") @db.VarChar(3)
+  pricingSnapshot Json                 @map("pricing_snapshot")
+  dailyPriceAmount Decimal             @map("daily_price_amount") @db.Decimal(18, 2)
+  estimatedTotal  Decimal              @map("estimated_total") @db.Decimal(18, 2)
+  decisionNote    String?              @map("decision_note") @db.VarChar(1000)
+  approvedAt      DateTime?            @map("approved_at") @db.DateTime(6)
+  declinedAt      DateTime?            @map("declined_at") @db.DateTime(6)
+  expiredAt       DateTime?            @map("expired_at") @db.DateTime(6)
+  holdExpiresAt   DateTime             @map("hold_expires_at") @db.DateTime(6)
+  holdBlockId     String?              @unique @map("hold_block_id") @db.VarChar(36)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.DateTime(6)
+  posting         Posting              @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  renter          User                 @relation("BookingRequestRenter", fields: [renterId], references: [id], onDelete: Cascade)
+  owner           User                 @relation("BookingRequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  holdBlock       PostingAvailabilityBlock? @relation("BookingRequestHold", fields: [holdBlockId], references: [id], onDelete: SetNull)
+
+  @@index([postingId, status, startAt])
+  @@index([postingId, holdExpiresAt])
+  @@index([ownerId, status, createdAt])
+  @@index([renterId, status, createdAt])
+  @@index([status, holdExpiresAt])
+  @@map("booking_requests")
 }
 
 model PostingSearchOutbox {
@@ -280,5 +321,12 @@ enum PostingAnalyticsEventType {
   booking_requested
   booking_accepted
   payment_captured
+}
+
+enum BookingRequestStatus {
+  pending
+  approved
+  declined
+  expired
 }
 
