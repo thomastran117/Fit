@@ -6,7 +6,7 @@ import { parseRequestBody } from "@/configuration/validation/request";
 import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthService } from "@/features/auth/auth.service";
 import { CaptchaService } from "@/features/auth/captcha/captcha.service";
-import { tokenService } from "@/features/auth/token/token.service";
+import { TokenService } from "@/features/auth/token/token.service";
 import type {
   AuthResponseBody,
   AuthSessionResult,
@@ -39,6 +39,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly captchaService: CaptchaService,
+    private readonly tokenService: TokenService,
   ) {}
 
   localAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
@@ -155,7 +156,7 @@ export class AuthController {
         httpOnly: true,
         secure: this.isSecureCookieEnabled(),
         sameSite: "Lax",
-        maxAge: tokenService.getRefreshTokenExpiresInSeconds(),
+        maxAge: this.tokenService.getRefreshTokenExpiresInSeconds(),
       });
     }
 

@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
-import { getContainer } from "@/configuration/bootstrap/container";
+import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 
 function readBearerToken(headerValue?: string): string {
@@ -19,7 +19,7 @@ function readBearerToken(headerValue?: string): string {
 
 export const jwtMiddleware = createMiddleware<AppBindings>(async (context, next) => {
   const token = readBearerToken(context.req.header("authorization"));
-  const claims = getContainer().tokenService.verifyAccessToken(token);
+  const claims = getRequestContainer(context).resolve(containerTokens.tokenService).verifyAccessToken(token);
 
   context.set("auth", claims);
   await next();

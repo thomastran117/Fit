@@ -5,7 +5,6 @@ import {
   parseRequestBody,
 } from "@/configuration/validation/request";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
-import { getContainer } from "@/configuration/bootstrap/container";
 import {
   listPostingAnalyticsQuerySchema,
   postingAnalyticsDetailQuerySchema,
@@ -36,12 +35,14 @@ import {
   upsertPostingRequestSchema,
 } from "@/features/postings/postings.model";
 import { PostingsService } from "@/features/postings/postings.service";
+import type { TokenService } from "@/features/auth/token/token.service";
 
 export class PostingsController {
   constructor(
     private readonly postingsService: PostingsService,
     private readonly postingsAnalyticsService: PostingsAnalyticsService,
     private readonly postingsReviewsService: PostingsReviewsService,
+    private readonly tokenService: TokenService,
   ) {}
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
@@ -444,7 +445,7 @@ export class PostingsController {
       throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
     }
 
-    return getContainer().tokenService.verifyAccessToken(token);
+    return this.tokenService.verifyAccessToken(token);
   }
 
   private toValidationError(error: unknown, message: string): RequestValidationError {

@@ -4,7 +4,6 @@ import {
   RequestValidationError,
   parseRequestBody,
 } from "@/configuration/validation/request";
-import { getContainer } from "@/configuration/bootstrap/container";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type {
   CreateBookingRequestInput,
@@ -21,9 +20,13 @@ import {
   updateBookingRequestSchema,
 } from "@/features/bookings/bookings.model";
 import type { BookingsService } from "@/features/bookings/bookings.service";
+import type { TokenService } from "@/features/auth/token/token.service";
 
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly tokenService: TokenService,
+  ) {}
 
   createForPosting = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
@@ -223,7 +226,7 @@ export class BookingsController {
       throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
     }
 
-    return getContainer().tokenService.verifyAccessToken(token);
+    return this.tokenService.verifyAccessToken(token);
   }
 
   private toValidationError(error: unknown, message: string): RequestValidationError {

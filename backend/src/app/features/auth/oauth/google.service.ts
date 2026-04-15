@@ -31,7 +31,7 @@ function normalizeEmailVerified(value: boolean | string | undefined): boolean {
 }
 
 class GoogleOAuthService {
-  constructor(private readonly tokenVerifier: OAuthTokenVerifier = new OAuthTokenVerifier()) {}
+  constructor(private readonly tokenVerifier: OAuthTokenVerifier) {}
 
   async verify(input: OAuthAuthenticateInput): Promise<VerifiedOAuthProfile> {
     const payload = await this.tokenVerifier.verifyIdToken(input.idToken, {

@@ -1,9 +1,9 @@
+import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
 import { loadEnvironment } from "@/configuration/environment/index";
 import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type {
   ProcessBookingRequestedEventInput,
   ProcessRentingConfirmedEventInput,
@@ -29,8 +29,8 @@ function readNumber(name: string, fallback: number): number {
 async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
+  const container = initializeContainer();
 
-  const repository = new PostingsAnalyticsRepository();
   const pollIntervalMs = readNumber("POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS", 2_000);
   const batchSize = readNumber("POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE", 50);
 
@@ -58,7 +58,10 @@ async function bootstrap(): Promise<void> {
   });
 
   while (!isShuttingDown) {
+    const scope = container.createScope();
+
     try {
+      const repository = scope.resolve(containerTokens.postingsAnalyticsRepository);
       const jobs = await repository.claimOutboxBatch(batchSize);
 
       if (jobs.length === 0) {
@@ -138,6 +141,8 @@ async function bootstrap(): Promise<void> {
     } catch (error) {
       console.error("Postings analytics worker loop failed", error);
       await sleep(pollIntervalMs);
+    } finally {
+      await scope.dispose();
     }
   }
 }

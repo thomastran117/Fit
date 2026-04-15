@@ -104,11 +104,6 @@ export class EmailService {
     this.maxDelayMs = options.maxDelayMs ?? DEFAULTS.maxDelayMs;
     this.backoffMultiplier = options.backoffMultiplier ?? DEFAULTS.backoffMultiplier;
   }
-
-  static create(options: EmailServiceOptions = {}): EmailService {
-    return new EmailService(options);
-  }
-
   async sendVerificationEmail(input: SendVerificationEmailInput): Promise<void> {
     const greetingName = this.resolveGreetingName(input.firstName);
     const escapedGreetingName = escapeHtml(greetingName);

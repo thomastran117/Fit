@@ -1,9 +1,9 @@
+import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
 import { loadEnvironment } from "@/configuration/environment/index";
 import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-import { BookingsRepository } from "@/features/bookings/bookings.repository";
 
 function readNumber(name: string, fallback: number): number {
   const rawValue = process.env[name];
@@ -24,8 +24,8 @@ function readNumber(name: string, fallback: number): number {
 async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
+  const container = initializeContainer();
 
-  const repository = new BookingsRepository();
   const pollIntervalMs = readNumber("BOOKING_REQUEST_EXPIRY_POLL_INTERVAL_MS", 5_000);
   const batchSize = readNumber("BOOKING_REQUEST_EXPIRY_BATCH_SIZE", 50);
 
@@ -53,7 +53,10 @@ async function bootstrap(): Promise<void> {
   });
 
   while (!isShuttingDown) {
+    const scope = container.createScope();
+
     try {
+      const repository = scope.resolve(containerTokens.bookingsRepository);
       const jobs = await repository.listExpiredCandidates(batchSize);
 
       if (jobs.length === 0) {
@@ -75,6 +78,8 @@ async function bootstrap(): Promise<void> {
     } catch (error) {
       console.error("Booking request expiry worker loop failed", error);
       await sleep(pollIntervalMs);
+    } finally {
+      await scope.dispose();
     }
   }
 }

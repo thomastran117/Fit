@@ -17,7 +17,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "start": "node dist/server.js",
-    "check": "tsc --noEmit --project tsconfig.json"
+    "check": "tsc --noEmit --project tsconfig.json",
+    "test": "tsx src/app/configuration/bootstrap/container.test.ts"
   },
   "engines": {
     "node": ">=22"

@@ -1,4 +1,4 @@
-import { initializeContainer } from "@/configuration/bootstrap/container";
+import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
 import { loadEnvironment } from "@/configuration/environment/index";
 import {
   connectElasticsearch,
@@ -8,9 +8,6 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-import { PostingsRepository } from "@/features/postings/postings.repository";
-import { PostingsSearchService } from "@/features/postings/postings.search.service";
-
 function readNumber(name: string, fallback: number): number {
   const rawValue = process.env[name];
 
@@ -31,10 +28,7 @@ async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
   await connectElasticsearch();
-  initializeContainer();
-
-  const repository = new PostingsRepository();
-  const searchService = new PostingsSearchService(repository);
+  const container = initializeContainer();
   const pollIntervalMs = readNumber("POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS", 2_000);
   const batchSize = readNumber("POSTINGS_SEARCH_OUTBOX_BATCH_SIZE", 25);
 
@@ -62,7 +56,12 @@ async function bootstrap(): Promise<void> {
   });
 
   while (!isShuttingDown) {
+    const scope = container.createScope();
+
     try {
+      const repository = scope.resolve(containerTokens.postingsRepository);
+      const searchService = scope.resolve(containerTokens.postingsSearchService);
+
       if (!searchService.isElasticsearchEnabled()) {
         await sleep(pollIntervalMs);
         continue;
@@ -107,6 +106,8 @@ async function bootstrap(): Promise<void> {
     } catch (error) {
       console.error("Postings search worker loop failed", error);
       await sleep(pollIntervalMs);
+    } finally {
+      await scope.dispose();
     }
   }
 }
