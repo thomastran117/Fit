@@ -1,22 +1,45 @@
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
+import { CONVERSION_RESERVATION_MINUTES } from "@/features/bookings/bookings.model";
+import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import type { ConvertBookingRequestInput, ListMyRentingsInput, ListRentingsResult, RentingRecord } from "@/features/rentings/rentings.model";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 
 export class RentingsService {
-  constructor(private readonly rentingsRepository: RentingsRepository) {}
+  constructor(
+    private readonly rentingsRepository: RentingsRepository,
+    private readonly bookingsRepository: BookingsRepository,
+  ) {}
 
   async convertApprovedBookingRequest(input: ConvertBookingRequestInput): Promise<RentingRecord> {
-    const renting = await this.rentingsRepository.convertApprovedBookingRequest(
-      input.bookingRequestId,
-      input.ownerId,
+    const reservationExpiresAt = new Date(
+      Date.now() + CONVERSION_RESERVATION_MINUTES * 60 * 1000,
     );
 
-    if (!renting) {
-      throw new ResourceNotFoundError("Booking request could not be found.");
-    }
+    await this.bookingsRepository.reserveForConversion(
+      input.bookingRequestId,
+      input.ownerId,
+      reservationExpiresAt,
+    );
 
-    return renting;
+    try {
+      const renting = await this.rentingsRepository.convertApprovedBookingRequest(
+        input.bookingRequestId,
+        input.ownerId,
+      );
+
+      if (!renting) {
+        throw new ResourceNotFoundError("Booking request could not be found.");
+      }
+
+      return renting;
+    } catch (error) {
+      await this.bookingsRepository.releaseConversionReservation(
+        input.bookingRequestId,
+        input.ownerId,
+      );
+      throw error;
+    }
   }
 
   async getById(id: string, userId: string): Promise<RentingRecord> {

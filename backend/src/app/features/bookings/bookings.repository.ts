@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
 import {
   DEFAULT_MAX_BOOKING_DURATION_DAYS,
   type PostingPricing,
@@ -531,6 +532,16 @@ export class BookingsRepository extends BaseRepository {
             in: ["pending", "approved"],
           },
           convertedAt: null,
+          OR: [
+            {
+              conversionReservationExpiresAt: null,
+            },
+            {
+              conversionReservationExpiresAt: {
+                lte: now,
+              },
+            },
+          ],
           holdExpiresAt: {
             lte: now,
           },
@@ -613,6 +624,7 @@ export class BookingsRepository extends BaseRepository {
             holdExpiresAt: true,
             holdBlockId: true,
             convertedAt: true,
+            conversionReservationExpiresAt: true,
           },
         });
 
@@ -628,6 +640,13 @@ export class BookingsRepository extends BaseRepository {
           return false;
         }
 
+        if (
+          existing.conversionReservationExpiresAt &&
+          existing.conversionReservationExpiresAt.getTime() > Date.now()
+        ) {
+          return false;
+        }
+
         if (existing.holdExpiresAt.getTime() > Date.now()) {
           return false;
         }
@@ -639,11 +658,23 @@ export class BookingsRepository extends BaseRepository {
             holdExpiresAt: {
               lte: new Date(),
             },
+            OR: [
+              {
+                conversionReservationExpiresAt: null,
+              },
+              {
+                conversionReservationExpiresAt: {
+                  lte: new Date(),
+                },
+              },
+            ],
           },
           data: {
             status: "expired",
             expiredAt: new Date(),
             holdBlockId: null,
+            conversionReservedAt: null,
+            conversionReservationExpiresAt: null,
           },
         });
 
@@ -660,6 +691,60 @@ export class BookingsRepository extends BaseRepository {
         }
 
         return true;
+      }),
+    );
+  }
+
+  async reserveForConversion(
+    bookingRequestId: string,
+    ownerId: string,
+    reservationExpiresAt: Date,
+  ): Promise<void> {
+    const now = new Date();
+    const result = await this.executeAsync(() =>
+      this.prisma.bookingRequest.updateMany({
+        where: {
+          id: bookingRequestId,
+          ownerId,
+          status: "approved",
+          convertedAt: null,
+          holdExpiresAt: {
+            gt: now,
+          },
+          OR: [
+            {
+              conversionReservationExpiresAt: null,
+            },
+            {
+              conversionReservationExpiresAt: {
+                lte: now,
+              },
+            },
+          ],
+        },
+        data: {
+          conversionReservedAt: now,
+          conversionReservationExpiresAt: reservationExpiresAt,
+        },
+      }),
+    );
+
+    if (result.count !== 1) {
+      throw new ConflictError("This booking request is already reserved for conversion.");
+    }
+  }
+
+  async releaseConversionReservation(bookingRequestId: string, ownerId: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.bookingRequest.updateMany({
+        where: {
+          id: bookingRequestId,
+          ownerId,
+        },
+        data: {
+          conversionReservedAt: null,
+          conversionReservationExpiresAt: null,
+        },
       }),
     );
   }
@@ -685,6 +770,9 @@ export class BookingsRepository extends BaseRepository {
       declinedAt: bookingRequest.declinedAt?.toISOString(),
       expiredAt: bookingRequest.expiredAt?.toISOString(),
       convertedAt: bookingRequest.convertedAt?.toISOString(),
+      conversionReservedAt: bookingRequest.conversionReservedAt?.toISOString(),
+      conversionReservationExpiresAt:
+        bookingRequest.conversionReservationExpiresAt?.toISOString(),
       holdExpiresAt: bookingRequest.holdExpiresAt.toISOString(),
       holdBlockId: bookingRequest.holdBlockId ?? undefined,
       rentingId: bookingRequest.renting?.id ?? undefined,

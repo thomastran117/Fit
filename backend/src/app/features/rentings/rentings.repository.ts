@@ -71,6 +71,13 @@ export class RentingsRepository extends BaseRepository {
           throw new BadRequestError("This booking request has already expired.");
         }
 
+        if (
+          !bookingRequest.conversionReservationExpiresAt ||
+          bookingRequest.conversionReservationExpiresAt.getTime() <= now.getTime()
+        ) {
+          throw new BadRequestError("This booking request is not currently reserved for conversion.");
+        }
+
         const overlapWithRenting = await transaction.renting.findFirst({
           where: {
             postingId: bookingRequest.postingId,
@@ -145,6 +152,8 @@ export class RentingsRepository extends BaseRepository {
           },
           data: {
             convertedAt: now,
+            conversionReservedAt: null,
+            conversionReservationExpiresAt: null,
             holdBlockId: null,
           },
         });

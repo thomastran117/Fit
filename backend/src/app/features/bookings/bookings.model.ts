@@ -11,6 +11,7 @@ export const MAX_BOOKING_DECISION_NOTE_LENGTH = 1000;
 export const MAX_BOOKING_GUEST_COUNT = 20;
 export const PENDING_BOOKING_HOLD_HOURS = 24;
 export const APPROVED_BOOKING_HOLD_HOURS = 72;
+export const CONVERSION_RESERVATION_MINUTES = 5;
 
 const trimmedStringSchema = z.string().trim().min(1);
 const nullableTrimmedStringSchema = z
@@ -87,6 +88,8 @@ export interface BookingRequestRecord {
   declinedAt?: string;
   expiredAt?: string;
   convertedAt?: string;
+  conversionReservedAt?: string;
+  conversionReservationExpiresAt?: string;
   holdExpiresAt: string;
   holdBlockId?: string;
   rentingId?: string;

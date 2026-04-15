@@ -97,7 +97,7 @@ function createContainer(): ApplicationContainer {
     rentingsRepository,
   );
   const bookingsController = new BookingsController(bookingsService);
-  const rentingsService = new RentingsService(rentingsRepository);
+  const rentingsService = new RentingsService(rentingsRepository, bookingsRepository);
   const rentingsController = new RentingsController(rentingsService);
   const postingsReviewsRepository = new PostingsReviewsRepository();
   const postingsReviewsService = new PostingsReviewsService(
