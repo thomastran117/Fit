@@ -1,6 +1,12 @@
 ALTER TABLE `postings`
   ADD COLUMN `max_booking_duration_days` INTEGER NULL;
 
+ALTER TABLE `posting_analytics_hourly`
+  ADD COLUMN `confirmed_bookings` INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE `posting_analytics_daily`
+  ADD COLUMN `confirmed_bookings` INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE `booking_requests` (
   `id` VARCHAR(36) NOT NULL,
   `posting_id` VARCHAR(36) NOT NULL,

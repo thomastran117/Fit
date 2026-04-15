@@ -3,10 +3,12 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import type {
   EnqueueBookingRequestedEventInput,
+  EnqueueRentingConfirmedEventInput,
   EnqueuePostingViewedEventInput,
   ListPostingAnalyticsInput,
   OwnerPostingsAnalyticsSummary,
   ProcessBookingRequestedEventInput,
+  ProcessRentingConfirmedEventInput,
   ProcessPostingViewedEventInput,
   PostingAnalyticsBucket,
   PostingAnalyticsDetail,
@@ -23,6 +25,7 @@ interface AnalyticsAggregateRow {
   views: bigint | number | null;
   uniqueViews: bigint | number | null;
   bookingRequests: bigint | number | null;
+  confirmedBookings: bigint | number | null;
   estimatedRevenue: Prisma.Decimal | number | string | null;
 }
 
@@ -80,6 +83,23 @@ export class PostingsAnalyticsRepository extends BaseRepository {
           postingId: input.postingId,
           ownerId: input.ownerId,
           eventType: "booking_requested",
+          payload: {
+            occurredAt: input.occurredAt,
+            estimatedTotal: input.estimatedTotal,
+          } as Prisma.InputJsonValue,
+        },
+      }),
+    );
+  }
+
+  async enqueueRentingConfirmedEvent(input: EnqueueRentingConfirmedEventInput): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingAnalyticsOutbox.create({
+        data: {
+          id: randomUUID(),
+          postingId: input.postingId,
+          ownerId: input.ownerId,
+          eventType: "booking_accepted",
           payload: {
             occurredAt: input.occurredAt,
             estimatedTotal: input.estimatedTotal,
@@ -251,6 +271,31 @@ export class PostingsAnalyticsRepository extends BaseRepository {
     );
   }
 
+  async processRentingConfirmedEvent(input: ProcessRentingConfirmedEventInput): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        const eventDate = new Date(input.eventDate);
+        const eventHour = new Date(input.eventHour);
+        const estimatedTotal = new Prisma.Decimal(input.estimatedTotal);
+
+        await this.upsertHourlyBookingAcceptedRollup(
+          transaction,
+          input.postingId,
+          input.ownerId,
+          eventHour,
+          estimatedTotal,
+        );
+        await this.upsertDailyBookingAcceptedRollup(
+          transaction,
+          input.postingId,
+          input.ownerId,
+          eventDate,
+          estimatedTotal,
+        );
+      }),
+    );
+  }
+
   async getOwnerSummary(input: PostingAnalyticsSummaryInput): Promise<OwnerPostingsAnalyticsSummary> {
     const tableSql = this.dailyTableSql();
     const range = this.createWindowRange(input.window);
@@ -264,6 +309,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
           COALESCE(SUM(views), 0) AS views,
           COALESCE(SUM(unique_views), 0) AS uniqueViews,
           COALESCE(SUM(booking_requests), 0) AS bookingRequests,
+          COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
           COALESCE(SUM(estimated_revenue), 0) AS estimatedRevenue
         FROM ${tableSql}
         WHERE ${whereSql}
@@ -304,6 +350,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
             COALESCE(SUM(ra.views), 0) AS views,
             COALESCE(SUM(ra.unique_views), 0) AS uniqueViews,
             COALESCE(SUM(ra.booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(ra.confirmed_bookings), 0) AS confirmedBookings,
             COALESCE(SUM(ra.estimated_revenue), 0) AS estimatedRevenue
           FROM ${tableSql} ra
           INNER JOIN postings r ON r.id = ra.posting_id
@@ -367,6 +414,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
             COALESCE(SUM(views), 0) AS views,
             COALESCE(SUM(unique_views), 0) AS uniqueViews,
             COALESCE(SUM(booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
             COALESCE(SUM(estimated_revenue), 0) AS estimatedRevenue
           FROM ${totalsTable}
           WHERE ${whereTotalsSql}
@@ -377,6 +425,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
             COALESCE(SUM(views), 0) AS views,
             COALESCE(SUM(unique_views), 0) AS uniqueViews,
             COALESCE(SUM(booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
             COALESCE(SUM(estimated_revenue), 0) AS estimatedRevenue
           FROM ${detailTable}
           WHERE ${whereTotalsSql}
@@ -470,6 +519,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         views: 1,
         uniqueViews: uniqueIncrement,
         bookingRequests: 0,
+        confirmedBookings: 0,
         estimatedRevenue: new Prisma.Decimal(0),
       },
     });
@@ -505,6 +555,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         views: 1,
         uniqueViews: uniqueIncrement,
         bookingRequests: 0,
+        confirmedBookings: 0,
         estimatedRevenue: new Prisma.Decimal(0),
       },
     });
@@ -536,6 +587,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         views: 0,
         uniqueViews: 0,
         bookingRequests: 1,
+        confirmedBookings: 0,
         estimatedRevenue: new Prisma.Decimal(0),
       },
     });
@@ -567,7 +619,80 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         views: 0,
         uniqueViews: 0,
         bookingRequests: 1,
+        confirmedBookings: 0,
         estimatedRevenue: new Prisma.Decimal(0),
+      },
+    });
+  }
+
+  private async upsertHourlyBookingAcceptedRollup(
+    transaction: Prisma.TransactionClient,
+    postingId: string,
+    ownerId: string,
+    bucketStart: Date,
+    estimatedTotal: Prisma.Decimal,
+  ): Promise<void> {
+    await transaction.postingAnalyticsHourly.upsert({
+      where: {
+        postingId_bucketStart: {
+          postingId,
+          bucketStart,
+        },
+      },
+      update: {
+        confirmedBookings: {
+          increment: 1,
+        },
+        estimatedRevenue: {
+          increment: estimatedTotal,
+        },
+      },
+      create: {
+        id: randomUUID(),
+        postingId,
+        ownerId,
+        bucketStart,
+        views: 0,
+        uniqueViews: 0,
+        bookingRequests: 0,
+        confirmedBookings: 1,
+        estimatedRevenue: estimatedTotal,
+      },
+    });
+  }
+
+  private async upsertDailyBookingAcceptedRollup(
+    transaction: Prisma.TransactionClient,
+    postingId: string,
+    ownerId: string,
+    bucketStart: Date,
+    estimatedTotal: Prisma.Decimal,
+  ): Promise<void> {
+    await transaction.postingAnalyticsDaily.upsert({
+      where: {
+        postingId_bucketStart: {
+          postingId,
+          bucketStart,
+        },
+      },
+      update: {
+        confirmedBookings: {
+          increment: 1,
+        },
+        estimatedRevenue: {
+          increment: estimatedTotal,
+        },
+      },
+      create: {
+        id: randomUUID(),
+        postingId,
+        ownerId,
+        bucketStart,
+        views: 0,
+        uniqueViews: 0,
+        bookingRequests: 0,
+        confirmedBookings: 1,
+        estimatedRevenue: estimatedTotal,
       },
     });
   }
@@ -607,6 +732,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
       views: Number(row?.views ?? 0),
       uniqueViews: Number(row?.uniqueViews ?? 0),
       bookingRequests: Number(row?.bookingRequests ?? 0),
+      confirmedBookings: Number(row?.confirmedBookings ?? 0),
       estimatedRevenue: Number(row?.estimatedRevenue ?? 0),
     };
   }
@@ -614,9 +740,10 @@ export class PostingsAnalyticsRepository extends BaseRepository {
   private createDataAvailability() {
     return {
       views: "live" as const,
-      bookingRequests: "pending" as const,
-      estimatedRevenue: "pending" as const,
-      isPartial: true,
+      bookingRequests: "live" as const,
+      confirmedBookings: "live" as const,
+      estimatedRevenue: "live" as const,
+      isPartial: false as const,
     };
   }
 

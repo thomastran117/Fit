@@ -29,14 +29,16 @@ export interface PostingAnalyticsMetrics {
   views: number;
   uniqueViews: number;
   bookingRequests: number;
+  confirmedBookings: number;
   estimatedRevenue: number;
 }
 
 export interface PostingAnalyticsDataAvailability {
   views: "live";
-  bookingRequests: "pending";
-  estimatedRevenue: "pending";
-  isPartial: boolean;
+  bookingRequests: "live";
+  confirmedBookings: "live";
+  estimatedRevenue: "live";
+  isPartial: false;
 }
 
 export interface PostingAnalyticsRange {
@@ -112,6 +114,13 @@ export interface EnqueueBookingRequestedEventInput {
   estimatedTotal: number;
 }
 
+export interface EnqueueRentingConfirmedEventInput {
+  postingId: string;
+  ownerId: string;
+  occurredAt: string;
+  estimatedTotal: number;
+}
+
 export interface ProcessPostingViewedEventInput extends EnqueuePostingViewedEventInput {
   eventDate: string;
   eventHour: string;
@@ -122,11 +131,20 @@ export interface ProcessBookingRequestedEventInput extends EnqueueBookingRequest
   eventHour: string;
 }
 
+export interface ProcessRentingConfirmedEventInput extends EnqueueRentingConfirmedEventInput {
+  eventDate: string;
+  eventHour: string;
+}
+
 export interface PostingAnalyticsOutboxRecord {
   id: string;
   postingId: string;
   ownerId: string;
-  eventType: "posting_viewed" | "booking_requested" | "booking_accepted" | "payment_captured";
+  eventType:
+    | "posting_viewed"
+    | "booking_requested"
+    | "booking_accepted"
+    | "payment_captured";
   payload: Record<string, unknown>;
   attempts: number;
   availableAt: string;

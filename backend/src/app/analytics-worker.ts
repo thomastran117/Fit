@@ -6,6 +6,7 @@ import {
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type {
   ProcessBookingRequestedEventInput,
+  ProcessRentingConfirmedEventInput,
   ProcessPostingViewedEventInput,
 } from "@/features/postings/postings.analytics.model";
 
@@ -102,6 +103,21 @@ async function bootstrap(): Promise<void> {
             };
 
             await repository.processBookingRequestedEvent(input);
+          }
+
+          if (job.eventType === "booking_accepted") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessRentingConfirmedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+              estimatedTotal: readOptionalNumber(payload.estimatedTotal) ?? 0,
+            };
+
+            await repository.processRentingConfirmedEvent(input);
           }
 
           await repository.markOutboxProcessed(job.id);
