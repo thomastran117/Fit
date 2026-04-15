@@ -4,7 +4,11 @@ import {
   disconnectDatabase,
 } from "@/configuration/resources/database";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
-import type { ProcessPostingViewedEventInput } from "@/features/postings/postings.analytics.model";
+import type {
+  ProcessBookingRequestedEventInput,
+  ProcessRentingConfirmedEventInput,
+  ProcessPostingViewedEventInput,
+} from "@/features/postings/postings.analytics.model";
 
 function readNumber(name: string, fallback: number): number {
   const rawValue = process.env[name];
@@ -86,6 +90,36 @@ async function bootstrap(): Promise<void> {
             await repository.processPostingViewedEvent(input);
           }
 
+          if (job.eventType === "booking_requested") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessBookingRequestedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+              estimatedTotal: readOptionalNumber(payload.estimatedTotal) ?? 0,
+            };
+
+            await repository.processBookingRequestedEvent(input);
+          }
+
+          if (job.eventType === "booking_accepted") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessRentingConfirmedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+              estimatedTotal: readOptionalNumber(payload.estimatedTotal) ?? 0,
+            };
+
+            await repository.processRentingConfirmedEvent(input);
+          }
+
           await repository.markOutboxProcessed(job.id);
         } catch (error) {
           console.error("Failed to process postings analytics outbox job", {
@@ -130,6 +164,10 @@ function readString(value: unknown, fieldName: string): string {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function sleep(delayMs: number): Promise<void> {

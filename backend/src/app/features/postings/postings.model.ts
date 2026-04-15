@@ -4,6 +4,8 @@ export const MAX_POSTING_PHOTOS = 10;
 export const MAX_BATCH_IDS = 50;
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 50;
+export const DEFAULT_MAX_BOOKING_DURATION_DAYS = 30;
+export const MAX_BOOKING_DURATION_DAYS_LIMIT = 365;
 
 export const postingStatusSchema = z.enum(["draft", "published", "archived"]);
 export const postingAvailabilityStatusSchema = z.enum([
@@ -92,6 +94,13 @@ export const upsertPostingRequestSchema = z.object({
   availabilityNotes: nullableTrimmedStringSchema.pipe(
     z.string().trim().max(500).nullable().optional(),
   ),
+  maxBookingDurationDays: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_BOOKING_DURATION_DAYS_LIMIT)
+    .nullable()
+    .optional(),
   availabilityBlocks: z.array(postingAvailabilityBlockSchema).max(200).default([]),
   location: z.object({
     latitude: z.number().min(-90).max(90),
@@ -122,6 +131,8 @@ export const publicSearchPostingsQuerySchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().positive().max(20_000).optional(),
+  startAt: z.string().datetime("Search start time must be an ISO datetime.").optional(),
+  endAt: z.string().datetime("Search end time must be an ISO datetime.").optional(),
   sort: postingSortSchema.default("relevance"),
 });
 
@@ -185,6 +196,8 @@ export interface PostingRecord {
   attributes: Record<string, string | number | boolean | string[]>;
   availabilityStatus: PostingAvailabilityStatus;
   availabilityNotes?: string;
+  maxBookingDurationDays?: number;
+  effectiveMaxBookingDurationDays: number;
   availabilityBlocks: PostingAvailabilityBlockRecord[];
   location: PostingLocationRecord;
   publishedAt?: string;
@@ -239,6 +252,7 @@ export interface UpsertPostingInput {
   attributes: Record<string, string | number | boolean | string[]>;
   availabilityStatus: PostingAvailabilityStatus;
   availabilityNotes?: string | null;
+  maxBookingDurationDays?: number | null;
   availabilityBlocks: PostingAvailabilityBlockInput[];
   location: PostingLocationRecord;
 }
@@ -276,6 +290,10 @@ export interface SearchPostingsInput {
     latitude: number;
     longitude: number;
     radiusKm?: number;
+  };
+  availabilityWindow?: {
+    startAt: string;
+    endAt: string;
   };
   sort: PostingSort;
 }

@@ -79,6 +79,15 @@ export class PostingsSearchService {
   }
 
   private async searchIdsWithFallback(input: SearchPostingsInput): Promise<SearchIdsResult> {
+    if (input.availabilityWindow) {
+      const fallback = await this.postingsRepository.searchPublicFallback(input);
+
+      return {
+        ...fallback,
+        source: "database",
+      };
+    }
+
     if (this.isElasticsearchEnabled()) {
       try {
         return await this.searchIdsInElasticsearch(input);

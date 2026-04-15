@@ -3,7 +3,9 @@ import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { BlobService } from "@/features/blob/blob.service";
 import {
+  DEFAULT_MAX_BOOKING_DURATION_DAYS,
   MAX_BATCH_IDS,
+  MAX_BOOKING_DURATION_DAYS_LIMIT,
   MAX_POSTING_PHOTOS,
   type BatchPostingsResult,
   type ListOwnerPostingsInput,
@@ -146,6 +148,7 @@ export class PostingsService {
       attributes: this.normalizeAttributes(input.attributes),
       availabilityStatus: input.availabilityStatus,
       availabilityNotes: input.availabilityNotes?.trim() || null,
+      maxBookingDurationDays: input.maxBookingDurationDays ?? null,
       availabilityBlocks: normalizedBlocks,
       location: {
         ...input.location,
@@ -278,6 +281,18 @@ export class PostingsService {
     if (!this.isValidCoordinate(input.location.longitude, -180, 180)) {
       throw new BadRequestError("Longitude must be between -180 and 180.");
     }
+
+    if (
+      input.maxBookingDurationDays !== undefined &&
+      input.maxBookingDurationDays !== null &&
+      (!Number.isInteger(input.maxBookingDurationDays) ||
+        input.maxBookingDurationDays < 1 ||
+        input.maxBookingDurationDays > MAX_BOOKING_DURATION_DAYS_LIMIT)
+    ) {
+      throw new BadRequestError(
+        `Maximum booking duration must be an integer between 1 and ${MAX_BOOKING_DURATION_DAYS_LIMIT} days.`,
+      );
+    }
   }
 
   private assertManagedBlob(blobUrl: string, blobName: string): void {
@@ -305,6 +320,15 @@ export class PostingsService {
 
     if (input.sort === "nearest" && !input.geo) {
       throw new BadRequestError("Nearest sorting requires latitude and longitude.");
+    }
+
+    if (input.availabilityWindow) {
+      const startAt = new Date(input.availabilityWindow.startAt);
+      const endAt = new Date(input.availabilityWindow.endAt);
+
+      if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || startAt >= endAt) {
+        throw new BadRequestError("Availability window must define a valid, non-empty range.");
+      }
     }
   }
 
@@ -339,6 +363,8 @@ export class PostingsService {
   private toPublicPosting(posting: PostingRecord | PublicPostingRecord): PublicPostingRecord {
     return {
       ...posting,
+      effectiveMaxBookingDurationDays:
+        posting.maxBookingDurationDays ?? DEFAULT_MAX_BOOKING_DURATION_DAYS,
       location: {
         city: posting.location.city,
         region: posting.location.region,

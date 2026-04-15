@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
+import {
+  DEFAULT_MAX_BOOKING_DURATION_DAYS,
+} from "@/features/postings/postings.model";
 import type {
   BatchPublicPostingsInput,
   BatchPostingsResult,
@@ -32,6 +35,16 @@ type PostingPersistence = Prisma.PostingGetPayload<{
       orderBy: {
         startAt: "asc";
       };
+      include: {
+        bookingRequestHold: {
+          select: {
+            id: true;
+            status: true;
+            holdExpiresAt: true;
+            convertedAt: true;
+          };
+        };
+      };
     };
   };
 }>;
@@ -61,6 +74,16 @@ export class PostingsRepository extends BaseRepository {
             availabilityBlocks: {
               orderBy: {
                 startAt: "asc",
+              },
+              include: {
+                bookingRequestHold: {
+                  select: {
+                    id: true,
+                    status: true,
+                    holdExpiresAt: true,
+                    convertedAt: true,
+                  },
+                },
               },
             },
           },
@@ -94,6 +117,16 @@ export class PostingsRepository extends BaseRepository {
               availabilityBlocks: {
                 orderBy: {
                   startAt: "asc",
+                },
+                include: {
+                  bookingRequestHold: {
+                    select: {
+                      id: true,
+                      status: true,
+                      holdExpiresAt: true,
+                      convertedAt: true,
+                    },
+                  },
                 },
               },
             },
@@ -143,6 +176,16 @@ export class PostingsRepository extends BaseRepository {
                 orderBy: {
                   startAt: "asc",
                 },
+                include: {
+                  bookingRequestHold: {
+                    select: {
+                      id: true,
+                      status: true,
+                      holdExpiresAt: true,
+                      convertedAt: true,
+                    },
+                  },
+                },
               },
             },
           });
@@ -186,6 +229,15 @@ export class PostingsRepository extends BaseRepository {
                 orderBy: {
                   startAt: "asc",
                 },
+                include: {
+                  bookingRequestHold: {
+                    select: {
+                      id: true,
+                      status: true,
+                      holdExpiresAt: true,
+                    },
+                  },
+                },
               },
             },
           });
@@ -222,6 +274,16 @@ export class PostingsRepository extends BaseRepository {
           availabilityBlocks: {
             orderBy: {
               startAt: "asc",
+            },
+            include: {
+              bookingRequestHold: {
+                select: {
+                  id: true,
+                  status: true,
+                  holdExpiresAt: true,
+                  convertedAt: true,
+                },
+              },
             },
           },
         },
@@ -262,6 +324,16 @@ export class PostingsRepository extends BaseRepository {
               orderBy: {
                 startAt: "asc",
               },
+              include: {
+                bookingRequestHold: {
+                  select: {
+                    id: true,
+                    status: true,
+                    holdExpiresAt: true,
+                    convertedAt: true,
+                  },
+                },
+              },
             },
           },
         }),
@@ -299,6 +371,16 @@ export class PostingsRepository extends BaseRepository {
             orderBy: {
               startAt: "asc",
             },
+            include: {
+              bookingRequestHold: {
+                select: {
+                  id: true,
+                  status: true,
+                  holdExpiresAt: true,
+                  convertedAt: true,
+                },
+              },
+            },
           },
         },
       }),
@@ -329,6 +411,16 @@ export class PostingsRepository extends BaseRepository {
           availabilityBlocks: {
             orderBy: {
               startAt: "asc",
+            },
+            include: {
+              bookingRequestHold: {
+                select: {
+                  id: true,
+                  status: true,
+                  holdExpiresAt: true,
+                  convertedAt: true,
+                },
+              },
             },
           },
         },
@@ -380,6 +472,59 @@ export class PostingsRepository extends BaseRepository {
     if (input.maxDailyPrice !== undefined) {
       whereClauses.push(
         Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) <= ${input.maxDailyPrice}`,
+      );
+    }
+
+    if (input.availabilityWindow) {
+      const requestedStartAt = new Date(input.availabilityWindow.startAt);
+      const requestedEndAt = new Date(input.availabilityWindow.endAt);
+      const now = new Date();
+
+      whereClauses.push(
+        Prisma.sql`NOT EXISTS (
+          SELECT 1
+          FROM posting_availability_blocks pab
+          LEFT JOIN booking_requests br
+            ON br.hold_block_id = pab.id
+          WHERE pab.posting_id = postings.id
+            AND pab.start_at < ${requestedEndAt}
+            AND pab.end_at > ${requestedStartAt}
+            AND (
+              br.id IS NULL
+              OR (
+                br.status = 'approved'
+                AND br.converted_at IS NULL
+                AND br.hold_expires_at > ${now}
+              )
+            )
+        )`,
+      );
+
+      whereClauses.push(
+        Prisma.sql`NOT EXISTS (
+          SELECT 1
+          FROM booking_requests br
+          WHERE br.posting_id = postings.id
+            AND br.status IN ('pending', 'approved')
+            AND br.converted_at IS NULL
+            AND (
+              br.conversion_reservation_expires_at IS NULL
+              OR br.conversion_reservation_expires_at <= ${now}
+            )
+            AND br.hold_expires_at > ${now}
+            AND br.start_at < ${requestedEndAt}
+            AND br.end_at > ${requestedStartAt}
+        )`,
+      );
+
+      whereClauses.push(
+        Prisma.sql`NOT EXISTS (
+          SELECT 1
+          FROM rentings r
+          WHERE r.posting_id = postings.id
+            AND r.start_at < ${requestedEndAt}
+            AND r.end_at > ${requestedStartAt}
+        )`,
       );
     }
 
@@ -451,6 +596,16 @@ export class PostingsRepository extends BaseRepository {
           availabilityBlocks: {
             orderBy: {
               startAt: "asc",
+            },
+            include: {
+              bookingRequestHold: {
+                select: {
+                  id: true,
+                  status: true,
+                  holdExpiresAt: true,
+                  convertedAt: true,
+                },
+              },
             },
           },
         },
@@ -655,6 +810,7 @@ export class PostingsRepository extends BaseRepository {
       attributes: input.attributes as Prisma.InputJsonValue,
       availabilityStatus: input.availabilityStatus,
       availabilityNotes: input.availabilityNotes ?? null,
+      maxBookingDurationDays: input.maxBookingDurationDays ?? null,
       latitude: input.location.latitude,
       longitude: input.location.longitude,
       city: input.location.city,
@@ -690,6 +846,7 @@ export class PostingsRepository extends BaseRepository {
       attributes: input.attributes as Prisma.InputJsonValue,
       availabilityStatus: input.availabilityStatus,
       availabilityNotes: input.availabilityNotes ?? null,
+      maxBookingDurationDays: input.maxBookingDurationDays ?? null,
       latitude: input.location.latitude,
       longitude: input.location.longitude,
       city: input.location.city,
@@ -724,6 +881,29 @@ export class PostingsRepository extends BaseRepository {
       string,
       string | number | boolean | string[]
     >;
+    const now = Date.now();
+    const availabilityBlocks = posting.availabilityBlocks
+      .filter((block) => {
+        if (!block.bookingRequestHold) {
+          return true;
+        }
+
+        return (
+          block.bookingRequestHold.status === "approved" &&
+          !block.bookingRequestHold.convertedAt &&
+          block.bookingRequestHold.holdExpiresAt.getTime() > now
+        );
+      })
+      .map(
+        (block): PostingAvailabilityBlockRecord => ({
+          id: block.id,
+          startAt: block.startAt.toISOString(),
+          endAt: block.endAt.toISOString(),
+          note: block.note ?? undefined,
+          createdAt: block.createdAt.toISOString(),
+          updatedAt: block.updatedAt.toISOString(),
+        }),
+      );
 
     return {
       id: posting.id,
@@ -745,16 +925,10 @@ export class PostingsRepository extends BaseRepository {
       attributes,
       availabilityStatus: posting.availabilityStatus as PostingAvailabilityStatus,
       availabilityNotes: posting.availabilityNotes ?? undefined,
-      availabilityBlocks: posting.availabilityBlocks.map(
-        (block): PostingAvailabilityBlockRecord => ({
-          id: block.id,
-          startAt: block.startAt.toISOString(),
-          endAt: block.endAt.toISOString(),
-          note: block.note ?? undefined,
-          createdAt: block.createdAt.toISOString(),
-          updatedAt: block.updatedAt.toISOString(),
-        }),
-      ),
+      maxBookingDurationDays: posting.maxBookingDurationDays ?? undefined,
+      effectiveMaxBookingDurationDays:
+        posting.maxBookingDurationDays ?? DEFAULT_MAX_BOOKING_DURATION_DAYS,
+      availabilityBlocks,
       location: {
         latitude: posting.latitude,
         longitude: posting.longitude,

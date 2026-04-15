@@ -8,6 +8,9 @@ import { AuthService } from "@/features/auth/auth.service";
 import { TokenService } from "@/features/auth/token/token.service";
 import { BlobController } from "@/features/blob/blob.controller";
 import { BlobService } from "@/features/blob/blob.service";
+import { BookingsController } from "@/features/bookings/bookings.controller";
+import { BookingsRepository } from "@/features/bookings/bookings.repository";
+import { BookingsService } from "@/features/bookings/bookings.service";
 import { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
 import { ProfileController } from "@/features/profile/profile.controller";
@@ -21,6 +24,9 @@ import { PostingsReviewsService } from "@/features/postings/postings.reviews.ser
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
+import { RentingsController } from "@/features/rentings/rentings.controller";
+import { RentingsRepository } from "@/features/rentings/rentings.repository";
+import { RentingsService } from "@/features/rentings/rentings.service";
 
 export interface ApplicationContainer {
   cacheService: CacheService;
@@ -35,10 +41,16 @@ export interface ApplicationContainer {
   authController: AuthController;
   blobService: BlobService;
   blobController: BlobController;
+  bookingsRepository: BookingsRepository;
+  bookingsService: BookingsService;
+  bookingsController: BookingsController;
   profileRepository: ProfileRepository;
   profileService: ProfileService;
   profileController: ProfileController;
   postingsRepository: PostingsRepository;
+  rentingsRepository: RentingsRepository;
+  rentingsService: RentingsService;
+  rentingsController: RentingsController;
   postingsAnalyticsRepository: PostingsAnalyticsRepository;
   postingsAnalyticsService: PostingsAnalyticsService;
   postingsReviewsRepository: PostingsReviewsRepository;
@@ -67,6 +79,8 @@ function createContainer(): ApplicationContainer {
     cache: cacheService,
   });
   const blobService = new BlobService();
+  const bookingsRepository = new BookingsRepository();
+  const rentingsRepository = new RentingsRepository();
   const profileRepository = new ProfileRepository();
   const profileService = new ProfileService(profileRepository, blobService);
   const profileController = new ProfileController(profileService);
@@ -76,6 +90,19 @@ function createContainer(): ApplicationContainer {
     postingsAnalyticsRepository,
     postingsRepository,
   );
+  const bookingsService = new BookingsService(
+    bookingsRepository,
+    postingsRepository,
+    postingsAnalyticsRepository,
+    rentingsRepository,
+  );
+  const bookingsController = new BookingsController(bookingsService);
+  const rentingsService = new RentingsService(
+    rentingsRepository,
+    bookingsRepository,
+    postingsAnalyticsRepository,
+  );
+  const rentingsController = new RentingsController(rentingsService);
   const postingsReviewsRepository = new PostingsReviewsRepository();
   const postingsReviewsService = new PostingsReviewsService(
     postingsReviewsRepository,
@@ -116,6 +143,12 @@ function createContainer(): ApplicationContainer {
     authController,
     blobService,
     blobController,
+    bookingsRepository,
+    bookingsService,
+    bookingsController,
+    rentingsRepository,
+    rentingsService,
+    rentingsController,
     profileRepository,
     profileService,
     profileController,
