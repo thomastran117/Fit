@@ -89,11 +89,6 @@ export class CaptchaService {
     this.backoffMultiplier = options.backoffMultiplier ?? DEFAULTS.backoffMultiplier;
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULTS.requestTimeoutMs;
   }
-
-  static create(options: CaptchaServiceOptions = {}): CaptchaService {
-    return new CaptchaService(options);
-  }
-
   async verify(input: VerifyCaptchaInput): Promise<CaptchaVerificationResult> {
     if (!this.secretKey) {
       return this.buildFailOpenResult(["turnstile-not-configured"]);

@@ -1,14 +1,17 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
-import { getContainer } from "@/configuration/bootstrap/container";
 import { RequestValidationError } from "@/configuration/validation/request";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type { ListMyRentingsInput, ListRentingsQuery } from "@/features/rentings/rentings.model";
 import { listRentingsQuerySchema } from "@/features/rentings/rentings.model";
 import type { RentingsService } from "@/features/rentings/rentings.service";
+import type { TokenService } from "@/features/auth/token/token.service";
 
 export class RentingsController {
-  constructor(private readonly rentingsService: RentingsService) {}
+  constructor(
+    private readonly rentingsService: RentingsService,
+    private readonly tokenService: TokenService,
+  ) {}
 
   convertBookingRequest = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = this.requireAuth(context);
@@ -110,6 +113,6 @@ export class RentingsController {
       throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
     }
 
-    return getContainer().tokenService.verifyAccessToken(token);
+    return this.tokenService.verifyAccessToken(token);
   }
 }

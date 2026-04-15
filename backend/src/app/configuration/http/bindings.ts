@@ -1,4 +1,5 @@
 import type { JwtClaims } from "@/features/auth/token/token.service";
+import type { ServiceContainer } from "@/configuration/bootstrap/container";
 
 export type OutputFormat = "json" | "xml";
 
@@ -27,6 +28,7 @@ export interface AppBindings {
     auth: JwtClaims;
     client: ClientRequestContext;
     clientSignature: ClientSignatureContext;
+    container: ServiceContainer;
     outputFormat: OutputFormat;
   };
 }

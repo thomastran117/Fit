@@ -26,17 +26,6 @@ import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
 import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 import { TokenService, type JwtClaims } from "@/features/auth/token/token.service";
 
-interface AuthServiceOptions {
-  authRepository: AuthRepository;
-  tokenService: TokenService;
-  otpService: OtpService;
-  deviceService: DeviceService;
-  emailService: EmailService;
-  googleOAuthService?: GoogleOAuthService;
-  microsoftOAuthService?: MicrosoftOAuthService;
-  appleOAuthService?: AppleOAuthService;
-}
-
 interface AuthRequestContext {
   auth: JwtClaims;
   client: ClientRequestContext;
@@ -56,19 +45,6 @@ export class AuthService {
     private readonly microsoftOAuthService: MicrosoftOAuthService,
     private readonly appleOAuthService: AppleOAuthService,
   ) {}
-
-  static create(options: AuthServiceOptions): AuthService {
-    return new AuthService(
-      options.authRepository,
-      options.tokenService,
-      options.otpService,
-      options.deviceService,
-      options.emailService,
-      options.googleOAuthService ?? new GoogleOAuthService(),
-      options.microsoftOAuthService ?? new MicrosoftOAuthService(),
-      options.appleOAuthService ?? new AppleOAuthService(),
-    );
-  }
 
   async localAuthenticate(input: LocalAuthenticateInput): Promise<AuthSessionResult> {
     const user = await this.authRepository.findUserByEmail(input.email);

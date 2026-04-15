@@ -68,5 +68,3 @@ export class CacheService {
     }) as Promise<TResult>;
   }
 }
-
-export const cacheService = new CacheService();

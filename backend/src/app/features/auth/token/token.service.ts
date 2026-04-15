@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { cacheService, type CacheService } from "@/features/cache/cache.service";
+import type { CacheService } from "@/features/cache/cache.service";
 
 type RefreshTokenMode = "stateless" | "stateful";
 
@@ -36,7 +36,7 @@ interface StatefulRefreshSession extends RefreshTokenClaims {
 }
 
 interface TokenServiceOptions {
-  cache?: CacheService;
+  cache: CacheService;
   accessTokenSecret?: string;
   refreshTokenSecret?: string;
   accessTokenTtlSeconds?: number;
@@ -105,8 +105,8 @@ export class TokenService {
   private readonly refreshTokenMode?: RefreshTokenMode;
   private readonly refreshTokenCachePrefix?: string;
 
-  constructor(options: TokenServiceOptions = {}) {
-    this.cache = options.cache ?? cacheService;
+  constructor(options: TokenServiceOptions) {
+    this.cache = options.cache;
     this.accessTokenSecret = options.accessTokenSecret;
     this.refreshTokenSecret = options.refreshTokenSecret;
     this.accessTokenTtlSeconds = options.accessTokenTtlSeconds;
@@ -364,5 +364,3 @@ export class TokenService {
     return this.refreshTokenCachePrefix ?? process.env.REFRESH_TOKEN_CACHE_PREFIX ?? "auth:refresh";
   }
 }
-
-export const tokenService = new TokenService();

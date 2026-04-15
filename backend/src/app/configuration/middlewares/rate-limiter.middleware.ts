@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
-import { getContainer } from "@/configuration/bootstrap/container";
+import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
 import TooManyRequestError from "@/errors/http/too-many-request.error";
 
 type RateLimiterStrategy = "sliding-window" | "token-bucket";
@@ -146,17 +146,22 @@ function getClientIp(context: Parameters<typeof rateLimiterMiddleware>[0]): stri
   return context.get("client").ip ?? "unknown";
 }
 
-async function evaluateSlidingWindow(key: string): Promise<SlidingWindowResult> {
+async function evaluateSlidingWindow(
+  context: Parameters<typeof rateLimiterMiddleware>[0],
+  key: string,
+): Promise<SlidingWindowResult> {
   const now = Date.now();
   const windowMs = getWindowSeconds() * 1000;
   const limit = getLimit();
   const member = `${now}:${randomUUID()}`;
 
-  const result = await getContainer().cacheService.eval<[number, number, number]>(
-    SLIDING_WINDOW_SCRIPT,
-    [key],
-    [String(now), String(windowMs), String(limit), member],
-  );
+  const result = await getRequestContainer(context)
+    .resolve(containerTokens.cacheService)
+    .eval<[number, number, number]>(
+      SLIDING_WINDOW_SCRIPT,
+      [key],
+      [String(now), String(windowMs), String(limit), member],
+    );
 
   return {
     allowed: result[0] === 1,
@@ -165,17 +170,22 @@ async function evaluateSlidingWindow(key: string): Promise<SlidingWindowResult> 
   };
 }
 
-async function evaluateTokenBucket(key: string): Promise<TokenBucketResult> {
+async function evaluateTokenBucket(
+  context: Parameters<typeof rateLimiterMiddleware>[0],
+  key: string,
+): Promise<TokenBucketResult> {
   const now = Date.now();
   const capacity = getTokenBucketCapacity();
   const refillRate = getTokenBucketRefillRate();
   const ttlMs = Math.max(Math.ceil((capacity / refillRate) * 1000 * 2), 1000);
 
-  const result = await getContainer().cacheService.eval<[number, number, number]>(
-    TOKEN_BUCKET_SCRIPT,
-    [key],
-    [String(now), String(capacity), String(refillRate), String(ttlMs)],
-  );
+  const result = await getRequestContainer(context)
+    .resolve(containerTokens.cacheService)
+    .eval<[number, number, number]>(
+      TOKEN_BUCKET_SCRIPT,
+      [key],
+      [String(now), String(capacity), String(refillRate), String(ttlMs)],
+    );
 
   return {
     allowed: result[0] === 1,
@@ -194,8 +204,8 @@ export const rateLimiterMiddleware = createMiddleware<AppBindings>(async (contex
   const strategy = readStrategy();
   const evaluation =
     strategy === "sliding-window"
-      ? await evaluateSlidingWindow(key)
-      : await evaluateTokenBucket(key);
+      ? await evaluateSlidingWindow(context, key)
+      : await evaluateTokenBucket(context, key);
 
   context.header("x-ratelimit-limit", String(getLimit()));
   context.header("x-ratelimit-remaining", String(Math.max(0, evaluation.remaining)));
