@@ -9,6 +9,8 @@
   --brand-muted: #5d6778;
   --brand-gold: #d4a85f;
   --brand-forest: #426d56;
+  --brand-accent: #2563eb;
+  --brand-accent-soft: #dbeafe;
   --brand-line: rgba(255, 255, 255, 0.62);
   --font-sans-stack:
     "Avenir Next", "Segoe UI", "Helvetica Neue", "Arial Nova", sans-serif;
@@ -25,6 +27,8 @@
   --color-brand-muted: var(--brand-muted);
   --color-brand-gold: var(--brand-gold);
   --color-brand-forest: var(--brand-forest);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-soft: var(--brand-accent-soft);
   --color-brand-line: var(--brand-line);
   --font-sans: var(--font-sans-stack);
   --font-serif-display: var(--font-serif-display-stack);

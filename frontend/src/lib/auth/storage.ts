@@ -4,6 +4,8 @@ import type { StoredAuthSession } from "@/lib/auth/types";
 
 const SESSION_STORAGE_KEY = "rentify.auth.session";
 const AUTH_STORAGE_EVENT = "rentify-auth-storage";
+let cachedRawSession: string | null | undefined;
+let cachedParsedSession: StoredAuthSession | null | undefined;
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined";
@@ -16,14 +18,25 @@ export function readStoredSession(): StoredAuthSession | null {
 
   const rawValue = window.localStorage.getItem(SESSION_STORAGE_KEY);
 
+  if (rawValue === cachedRawSession && cachedParsedSession !== undefined) {
+    return cachedParsedSession;
+  }
+
   if (!rawValue) {
+    cachedRawSession = null;
+    cachedParsedSession = null;
     return null;
   }
 
   try {
-    return JSON.parse(rawValue) as StoredAuthSession;
+    const parsedSession = JSON.parse(rawValue) as StoredAuthSession;
+    cachedRawSession = rawValue;
+    cachedParsedSession = parsedSession;
+    return parsedSession;
   } catch {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    cachedRawSession = null;
+    cachedParsedSession = null;
     return null;
   }
 }

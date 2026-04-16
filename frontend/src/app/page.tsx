@@ -1,5 +1,4 @@
-import { AuthenticatedHome } from "@/components/auth/authenticated-home";
 
 export default function Home() {
-  return <AuthenticatedHome />;
+  return <h1> hello </h1>;
 }
