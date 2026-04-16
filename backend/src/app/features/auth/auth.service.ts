@@ -56,7 +56,7 @@ export class AuthService {
     const isPasswordValid = await this.verifyPassword(input.password, user.passwordHash);
 
     if (!isPasswordValid) {
-      throw new Error("Invalid email or password.");
+      throw new UnauthorizedError("Invalid email or password.");
     }
 
     if (!user.emailVerified) {
