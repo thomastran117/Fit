@@ -32,7 +32,6 @@ interface TurnstileWidgetProps {
 export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
-  const renderFailedRef = useRef(false);
 
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -50,7 +49,6 @@ export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
         theme: "light",
         size: "flexible",
         callback: (token: string) => {
-          renderFailedRef.current = false;
           setHasError(false);
           onChange(token);
         },
@@ -64,7 +62,9 @@ export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
       });
     } catch (err) {
       console.error("Turnstile render failed", err);
-      renderFailedRef.current = true;
+      queueMicrotask(() => {
+        setHasError(true);
+      });
     }
 
     return () => {
@@ -89,8 +89,6 @@ export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
     );
   }
 
-  const showError = hasError || renderFailedRef.current;
-
   return (
     <div className="space-y-3">
       <Script
@@ -104,7 +102,7 @@ export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
         <div ref={containerRef} />
       </div>
 
-      {showError && (
+      {hasError && (
         <p className="text-sm text-rose-700">
           Cloudflare Turnstile could not be loaded. Refresh the page and try again.
         </p>
