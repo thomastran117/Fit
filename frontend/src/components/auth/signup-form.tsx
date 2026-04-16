@@ -512,7 +512,7 @@ export function SignupForm() {
               />
             </SignupField>
 
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-5">
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-medium text-slate-700">
                   Password

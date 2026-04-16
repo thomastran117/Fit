@@ -23,29 +23,6 @@ export function SignupFormCard({ children }: SignupFormCardProps) {
             conversations from one polished workspace.
           </p>
         </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-700">
-              Secure
-            </p>
-            <p className="mt-1 text-sm text-slate-700">Protected with email verification.</p>
-          </div>
-
-          <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
-              Organized
-            </p>
-            <p className="mt-1 text-sm text-slate-700">Keep bookings, listings, and messages together.</p>
-          </div>
-
-          <div className="rounded-2xl border border-pink-100 bg-pink-50/70 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pink-700">
-              Fast setup
-            </p>
-            <p className="mt-1 text-sm text-slate-700">Get into your workspace with a quick onboarding flow.</p>
-          </div>
-        </div>
       </div>
 
       {children}
