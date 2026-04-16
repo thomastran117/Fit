@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthCaptchaPanel } from "@/components/auth/auth-captcha-panel";
+import { AuthOAuthButtons } from "@/components/auth/oauth-buttons";
 import { SignupVerificationPanel } from "@/components/auth/signup-verification-panel";
-import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { useAuth } from "@/components/auth/auth-context";
+import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
-import type { SignupVerificationPendingResult } from "@/lib/auth/types";
+import type { AuthResponseBody, SignupVerificationPendingResult } from "@/lib/auth/types";
 
 interface SignupErrors {
   firstName?: string;
@@ -299,14 +301,14 @@ function SignupField({
 
 export function SignupForm() {
   const router = useRouter();
-  const { status } = useAuth();
+  const { status, setSession } = useAuth();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaToken, setCaptchaToken, clearCaptchaToken] = useAuthCaptchaToken();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<SignupErrors>({});
@@ -320,6 +322,12 @@ export function SignupForm() {
       router.replace("/");
     }
   }, [router, status]);
+
+  function handleOAuthSuccess(session: AuthResponseBody) {
+    setGeneralError(null);
+    setSession(session);
+    router.replace("/");
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -351,6 +359,7 @@ export function SignupForm() {
         captchaToken,
       });
 
+      clearCaptchaToken();
       setVerificationPending(result);
     } catch (error) {
       const failure = getSignupFailureResult(error);
@@ -360,7 +369,7 @@ export function SignupForm() {
         ...current,
         ...(failure.fieldErrors ?? {}),
       }));
-      setCaptchaToken("");
+      clearCaptchaToken();
     } finally {
       setPending(false);
     }
@@ -389,192 +398,239 @@ export function SignupForm() {
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
-      {generalError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {generalError}
-        </div>
-      ) : null}
+    <div className="space-y-5">
+      <AuthOAuthButtons onSuccess={handleOAuthSuccess} onError={setGeneralError} />
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <SignupField
-          id="firstName"
-          label="First name"
-          error={errors.firstName}
-          hasValue={firstNameHasValue}
-          activeClassName="border-indigo-300 ring-4 ring-indigo-50"
-          icon={
-            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
-              <UserIcon />
-            </div>
-          }
-        >
-          <input
-            id="firstName"
-            name="firstName"
-            type="text"
-            autoComplete="given-name"
-            placeholder="Jane"
-            value={firstName}
-            onChange={(event) => setFirstName(event.target.value)}
-            className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-          />
-        </SignupField>
-
-        <SignupField
-          id="lastName"
-          label="Last name"
-          error={errors.lastName}
-          hasValue={lastNameHasValue}
-          activeClassName="border-sky-300 ring-4 ring-sky-50"
-          icon={
-            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
-              <UserIcon />
-            </div>
-          }
-        >
-          <input
-            id="lastName"
-            name="lastName"
-            type="text"
-            autoComplete="family-name"
-            placeholder="Doe"
-            value={lastName}
-            onChange={(event) => setLastName(event.target.value)}
-            className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-          />
-        </SignupField>
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-slate-200" />
+        <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+          Or use email
+        </span>
+        <div className="h-px flex-1 bg-slate-200" />
       </div>
 
-      <SignupField
-        id="email"
-        label="Email"
-        error={errors.email}
-        hasValue={emailHasValue}
-        activeClassName="border-indigo-300 ring-4 ring-indigo-50"
-        icon={
-          <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
-            <MailIcon />
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        {generalError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {generalError}
           </div>
-        }
-      >
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-        />
-      </SignupField>
-
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium text-slate-700">
-            Password
-          </label>
-
-          <div
-            className={`relative rounded-2xl border bg-white/90 transition ${
-              errors.password
-                ? "border-rose-300 ring-4 ring-rose-100"
-                : passwordHasValue
-                  ? "border-sky-300 ring-4 ring-sky-50"
-                  : "border-slate-200 hover:border-sky-200"
-            }`}
-          >
-            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
-              <LockIcon />
-            </div>
-
-            <input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-            />
-
-            <button
-              type="button"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              aria-pressed={showPassword}
-              onClick={() => setShowPassword((current) => !current)}
-              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-            >
-              {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-            </button>
-          </div>
-
-          {errors.password ? <p className="text-sm text-rose-700">{errors.password}</p> : null}
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
-            Confirm password
-          </label>
-
-          <div
-            className={`relative rounded-2xl border bg-white/90 transition ${
-              errors.confirmPassword
-                ? "border-rose-300 ring-4 ring-rose-100"
-                : confirmPasswordHasValue
-                  ? "border-indigo-300 ring-4 ring-indigo-50"
-                  : "border-slate-200 hover:border-indigo-200"
-            }`}
-          >
-            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
-              <LockIcon />
-            </div>
-
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type={showConfirmPassword ? "text" : "password"}
-              autoComplete="new-password"
-              placeholder="Repeat your password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-            />
-
-            <button
-              type="button"
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-              aria-pressed={showConfirmPassword}
-              onClick={() => setShowConfirmPassword((current) => !current)}
-              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-            >
-              {showConfirmPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-            </button>
-          </div>
-
-          {errors.confirmPassword ? (
-            <p className="text-sm text-rose-700">{errors.confirmPassword}</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-4">
-        <TurnstileWidget value={captchaToken} onChange={setCaptchaToken} />
-
-        {errors.captchaToken ? (
-          <p className="mt-2 text-sm text-rose-700">{errors.captchaToken}</p>
         ) : null}
-      </div>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {pending ? "Creating account..." : "Create account"}
-      </button>
-    </form>
+        <div className="rounded-[1.75rem] border border-slate-200/80 bg-white/65 p-4 sm:p-5">
+          <div className="mb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Profile
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              This helps personalize your account from the start.
+            </p>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <SignupField
+              id="firstName"
+              label="First name"
+              error={errors.firstName}
+              hasValue={firstNameHasValue}
+              activeClassName="border-indigo-300 ring-4 ring-indigo-50"
+              icon={
+                <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+                  <UserIcon />
+                </div>
+              }
+            >
+              <input
+                id="firstName"
+                name="firstName"
+                type="text"
+                autoComplete="given-name"
+                placeholder="Jane"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </SignupField>
+
+            <SignupField
+              id="lastName"
+              label="Last name"
+              error={errors.lastName}
+              hasValue={lastNameHasValue}
+              activeClassName="border-sky-300 ring-4 ring-sky-50"
+              icon={
+                <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
+                  <UserIcon />
+                </div>
+              }
+            >
+              <input
+                id="lastName"
+                name="lastName"
+                type="text"
+                autoComplete="family-name"
+                placeholder="Doe"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </SignupField>
+          </div>
+        </div>
+
+        <div className="rounded-[1.75rem] border border-slate-200/80 bg-white/65 p-4 sm:p-5">
+          <div className="mb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Credentials
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Use an email you can verify and a password you will remember.
+            </p>
+          </div>
+
+          <div className="space-y-5">
+            <SignupField
+              id="email"
+              label="Email"
+              error={errors.email}
+              hasValue={emailHasValue}
+              activeClassName="border-indigo-300 ring-4 ring-indigo-50"
+              icon={
+                <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+                  <MailIcon />
+                </div>
+              }
+            >
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </SignupField>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm font-medium text-slate-700">
+                  Password
+                </label>
+
+                <div
+                  className={`relative rounded-2xl border bg-white/90 transition ${
+                    errors.password
+                      ? "border-rose-300 ring-4 ring-rose-100"
+                      : passwordHasValue
+                        ? "border-sky-300 ring-4 ring-sky-50"
+                        : "border-slate-200 hover:border-sky-200"
+                  }`}
+                >
+                  <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
+                    <LockIcon />
+                  </div>
+
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                  >
+                    {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                  </button>
+                </div>
+
+                {errors.password ? (
+                  <p className="text-sm text-rose-700">{errors.password}</p>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Use 8 or more characters for a stronger account.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
+                  Confirm password
+                </label>
+
+                <div
+                  className={`relative rounded-2xl border bg-white/90 transition ${
+                    errors.confirmPassword
+                      ? "border-rose-300 ring-4 ring-rose-100"
+                      : confirmPasswordHasValue
+                        ? "border-indigo-300 ring-4 ring-indigo-50"
+                        : "border-slate-200 hover:border-indigo-200"
+                  }`}
+                >
+                  <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+                    <LockIcon />
+                  </div>
+
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder="Repeat your password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+
+                  <button
+                    type="button"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showConfirmPassword}
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                    className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                  >
+                    {showConfirmPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                  </button>
+                </div>
+
+                {errors.confirmPassword ? (
+                  <p className="text-sm text-rose-700">{errors.confirmPassword}</p>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Re-enter your password to confirm there are no typos.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <AuthCaptchaPanel
+          token={captchaToken}
+          error={errors.captchaToken}
+          onChange={setCaptchaToken}
+          onReset={clearCaptchaToken}
+          title="Security check"
+          description="Complete this once and we will keep it ready while you move through auth."
+        />
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pending ? "Creating account..." : "Create account"}
+        </button>
+      </form>
+    </div>
   );
 }

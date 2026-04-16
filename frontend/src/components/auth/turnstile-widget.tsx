@@ -33,7 +33,9 @@ export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
 
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [scriptLoaded, setScriptLoaded] = useState(
+    () => typeof window !== "undefined" && Boolean(window.turnstile),
+  );
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
@@ -92,6 +94,7 @@ export function TurnstileWidget({ value, onChange }: TurnstileWidgetProps) {
   return (
     <div className="space-y-3">
       <Script
+        id="cloudflare-turnstile"
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         strategy="afterInteractive"
         onLoad={() => setScriptLoaded(true)}

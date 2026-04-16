@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TurnstileWidget } from "@/components/auth/turnstile-widget";
+import { AuthCaptchaPanel } from "@/components/auth/auth-captcha-panel";
+import { AuthOAuthButtons } from "@/components/auth/oauth-buttons";
 import { useAuth } from "@/components/auth/auth-context";
+import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
+import type { AuthResponseBody } from "@/lib/auth/types";
 
 interface LoginErrors {
   email?: string;
@@ -292,7 +295,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaToken, setCaptchaToken, clearCaptchaToken] = useAuthCaptchaToken();
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<LoginErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -303,6 +306,12 @@ export function LoginForm({ nextPath }: LoginFormProps) {
       router.replace(nextPath);
     }
   }, [nextPath, router, status]);
+
+  function handleOAuthSuccess(session: AuthResponseBody) {
+    setGeneralError(null);
+    setSession(session);
+    router.replace(nextPath);
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -324,6 +333,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         captchaToken,
       });
 
+      clearCaptchaToken();
       setSession(session);
       router.replace(nextPath);
     } catch (error) {
@@ -334,7 +344,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         ...current,
         ...(failure.fieldErrors ?? {}),
       }));
-      setCaptchaToken("");
+      clearCaptchaToken();
     } finally {
       setPending(false);
     }
@@ -356,104 +366,117 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
-      {generalError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {generalError}
-        </div>
-      ) : null}
+    <div className="space-y-5">
+      <AuthOAuthButtons onSuccess={handleOAuthSuccess} onError={setGeneralError} />
 
-      <LoginField
-        id="email"
-        label="Email"
-        error={errors.email}
-        hasValue={emailHasValue}
-        iconClassName="border-indigo-300 ring-4 ring-indigo-50"
-        icon={
-          <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
-            <MailIcon />
-          </div>
-        }
-      >
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-        />
-      </LoginField>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <label htmlFor="password" className="text-sm font-medium text-slate-700">
-            Password
-          </label>
-
-          <Link
-            href="/forgot-password"
-            className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
-          >
-            Forgot password?
-          </Link>
-        </div>
-
-        <div
-          className={`relative rounded-2xl border bg-white/90 transition ${
-            errors.password
-              ? "border-rose-300 ring-4 ring-rose-100"
-              : passwordHasValue
-                ? "border-sky-300 ring-4 ring-sky-50"
-                : "border-slate-200 hover:border-sky-200"
-          }`}
-        >
-          <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
-            <LockIcon />
-          </div>
-
-          <input
-            id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
-          />
-
-          <button
-            type="button"
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            aria-pressed={showPassword}
-            onClick={() => setShowPassword((current) => !current)}
-            className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-          >
-            {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-          </button>
-        </div>
-
-        {errors.password ? <p className="text-sm text-rose-700">{errors.password}</p> : null}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-slate-200" />
+        <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+          Or use email
+        </span>
+        <div className="h-px flex-1 bg-slate-200" />
       </div>
 
-      <div className="rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-4">
-        <TurnstileWidget value={captchaToken} onChange={setCaptchaToken} />
-
-        {errors.captchaToken ? (
-          <p className="mt-2 text-sm text-rose-700">{errors.captchaToken}</p>
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        {generalError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {generalError}
+          </div>
         ) : null}
-      </div>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {pending ? "Signing in..." : "Sign in"}
-      </button>
-    </form>
+        <LoginField
+          id="email"
+          label="Email"
+          error={errors.email}
+          hasValue={emailHasValue}
+          iconClassName="border-indigo-300 ring-4 ring-indigo-50"
+          icon={
+            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+              <MailIcon />
+            </div>
+          }
+        >
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+          />
+        </LoginField>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="password" className="text-sm font-medium text-slate-700">
+              Password
+            </label>
+
+            <Link
+              href="/forgot-password"
+              className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
+            >
+              Forgot password?
+            </Link>
+          </div>
+
+          <div
+            className={`relative rounded-2xl border bg-white/90 transition ${
+              errors.password
+                ? "border-rose-300 ring-4 ring-rose-100"
+                : passwordHasValue
+                  ? "border-sky-300 ring-4 ring-sky-50"
+                  : "border-slate-200 hover:border-sky-200"
+            }`}
+          >
+            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
+              <LockIcon />
+            </div>
+
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+            />
+
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((current) => !current)}
+              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+            >
+              {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+            </button>
+          </div>
+
+          {errors.password ? <p className="text-sm text-rose-700">{errors.password}</p> : null}
+        </div>
+
+        <AuthCaptchaPanel
+          token={captchaToken}
+          error={errors.captchaToken}
+          onChange={setCaptchaToken}
+          onReset={clearCaptchaToken}
+          title="Security check"
+          description="Complete this once and we will keep it ready while you move through auth."
+        />
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pending ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+    </div>
   );
 }
