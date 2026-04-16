@@ -619,8 +619,6 @@ export function SignupForm() {
           error={errors.captchaToken}
           onChange={setCaptchaToken}
           onReset={clearCaptchaToken}
-          title="Security check"
-          description="Complete this once and we will keep it ready while you move through auth."
         />
 
         <button

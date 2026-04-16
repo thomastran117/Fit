@@ -7,8 +7,6 @@ interface AuthCaptchaPanelProps {
   error?: string;
   onChange: (token: string) => void;
   onReset: () => void;
-  title: string;
-  description: string;
 }
 
 export function AuthCaptchaPanel({
@@ -16,26 +14,13 @@ export function AuthCaptchaPanel({
   error,
   onChange,
   onReset,
-  title,
-  description,
 }: AuthCaptchaPanelProps) {
   return (
     <div className="rounded-[1.75rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-4">
-      <div className="mb-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">
-          {title}
-        </p>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
-      </div>
-
       <TurnstileWidget value={token} onChange={onChange} />
 
       {token ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
-          <p className="text-sm text-emerald-900">
-            Verification is ready and preserved while you move through auth.
-          </p>
-
           <button
             type="button"
             onClick={onReset}
