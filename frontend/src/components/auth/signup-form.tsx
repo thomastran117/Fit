@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SignupVerificationPanel } from "@/components/auth/signup-verification-panel";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { useAuth } from "@/components/auth/auth-context";
 import { authApi } from "@/lib/auth/api";
@@ -297,37 +297,6 @@ function SignupField({
   );
 }
 
-interface VerificationPendingNoticeProps {
-  result: SignupVerificationPendingResult;
-}
-
-function VerificationPendingNotice({ result }: VerificationPendingNoticeProps) {
-  return (
-    <div className="space-y-5">
-      <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-emerald-900">
-        <p className="text-sm font-semibold">
-          {result.alreadyPending ? "Verification still pending" : "Check your inbox"}
-        </p>
-        <p className="mt-2 text-sm leading-6">
-          {result.alreadyPending
-            ? `An account for ${result.email} is already waiting for email verification.`
-            : `We sent a verification code to ${result.email}.`}
-        </p>
-        <p className="mt-2 text-sm leading-6">
-          Verify your email before signing in to your Rentify workspace.
-        </p>
-      </div>
-
-      <Link
-        href="/login"
-        className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)]"
-      >
-        Continue to sign in
-      </Link>
-    </div>
-  );
-}
-
 export function SignupForm() {
   const router = useRouter();
   const { status } = useAuth();
@@ -416,7 +385,7 @@ export function SignupForm() {
   }
 
   if (verificationPending) {
-    return <VerificationPendingNotice result={verificationPending} />;
+    return <SignupVerificationPanel result={verificationPending} />;
   }
 
   return (
