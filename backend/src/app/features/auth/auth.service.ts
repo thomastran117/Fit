@@ -50,7 +50,7 @@ export class AuthService {
     const user = await this.authRepository.findUserByEmail(input.email);
 
     if (!user) {
-      throw new Error("Invalid email or password.");
+      throw new UnauthorizedError("Invalid email or password.");
     }
 
     const isPasswordValid = await this.verifyPassword(input.password, user.passwordHash);
