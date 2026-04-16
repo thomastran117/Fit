@@ -1,8 +1,19 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is the Rentify frontend built with [Next.js](https://nextjs.org) and `tailwindcss`.
 
 ## Getting Started
 
-First, run the development server:
+Create a local env file first:
+
+```bash
+cp .env.example .env.local
+```
+
+Frontend env values:
+
+- `NEXT_PUBLIC_API_BASE_URL` points to the backend API origin
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` enables the Cloudflare Turnstile widget on auth pages
+
+Then run the development server:
 
 ```bash
 npm run dev
@@ -14,11 +25,13 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open the frontend origin in your browser to see the auth flow.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Current auth routes:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/login`
+- `/signup`
+- `/verify-email`
 
 ## Learn More
 
