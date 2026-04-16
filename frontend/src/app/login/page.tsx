@@ -43,6 +43,58 @@ function readNextPath(): string {
   return new URLSearchParams(window.location.search).get("next") || "/";
 }
 
+function MailIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5v-9Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m5 7 7 5 7-5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path
+        d="M7 10V8a5 5 0 0 1 10 0v2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="4"
+        y="10"
+        width="16"
+        height="10"
+        rx="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function EyeOpenIcon() {
   return (
     <svg
@@ -73,11 +125,7 @@ function EyeClosedIcon() {
       className="h-5 w-5"
       aria-hidden="true"
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 3l18 18"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -94,27 +142,6 @@ function EyeClosedIcon() {
         d="M6.228 6.228A10.958 10.958 0 0 0 2.458 12c1.274 4.057 5.065 7 9.542 7 1.55 0 3.026-.354 4.34-.987"
       />
     </svg>
-  );
-}
-
-function BrandMark() {
-  return (
-    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        className="h-5 w-5"
-        aria-hidden="true"
-      >
-        <path
-          d="M7 10.75 12 6l5 4.75V17a1 1 0 0 1-1 1h-2.75v-4.25h-2.5V18H8a1 1 0 0 1-1-1v-6.25Z"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
   );
 }
 
@@ -180,9 +207,9 @@ export default function LoginPage() {
   if (status === "loading") {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f8fafc] px-6">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(148,163,184,0.14),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(191,219,254,0.20),_transparent_28%)]" />
-        <div className="relative rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-600 shadow-sm">
-          Preparing Rentify...
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.14),_transparent_24%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.16),_transparent_26%),linear-gradient(180deg,#f8fafc_0%,#eef4ff_100%)]" />
+        <div className="relative rounded-full border border-white/70 bg-white/90 px-5 py-3 text-sm font-medium text-slate-600 shadow-lg backdrop-blur">
+          Preparing your workspace...
         </div>
       </div>
     );
@@ -193,102 +220,91 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f8fafc] text-slate-900">
-      <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="relative hidden overflow-hidden border-r border-slate-200/70 lg:flex">
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.45),rgba(255,255,255,0.8)),radial-gradient(circle_at_20%_20%,rgba(125,211,252,0.2),transparent_28%),radial-gradient(circle_at_80%_30%,rgba(196,181,253,0.18),transparent_26%),radial-gradient(circle_at_50%_90%,rgba(226,232,240,0.8),transparent_30%)]" />
+    <main className="relative min-h-screen overflow-hidden bg-[#f8fafc] text-slate-900">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,_rgba(99,102,241,0.14),_transparent_22%),radial-gradient(circle_at_85%_18%,_rgba(56,189,248,0.16),_transparent_20%),radial-gradient(circle_at_50%_100%,_rgba(244,114,182,0.12),_transparent_24%),linear-gradient(180deg,#f8fafc_0%,#f6f8ff_35%,#eef6ff_100%)]" />
+      <div className="absolute left-[-8rem] top-16 h-72 w-72 rounded-full bg-indigo-200/30 blur-3xl" />
+      <div className="absolute right-[-6rem] top-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
+      <div className="absolute bottom-[-8rem] left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-pink-200/20 blur-3xl" />
 
-          <div className="relative flex w-full flex-col justify-between px-10 py-10 xl:px-14 xl:py-12">
-            <div className="flex items-center gap-3">
-              <BrandMark />
-              <div>
-                <p className="text-sm font-semibold tracking-[0.18em] text-slate-500 uppercase">
-                  Rentify
-                </p>
-                <p className="text-sm text-slate-500">
-                  Rental management platform
-                </p>
-              </div>
+      <div className="relative grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="hidden lg:flex lg:items-center lg:px-14 xl:px-20">
+          <div className="max-w-xl">
+            <div className="inline-flex items-center rounded-full border border-indigo-200/60 bg-white/70 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 shadow-sm backdrop-blur">
+              Welcome back
             </div>
 
-            <div className="max-w-xl">
-              <div className="mb-6 inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 backdrop-blur">
-                Modern rental workspace
+            <h1 className="mt-6 text-5xl font-semibold leading-[1.02] tracking-[-0.05em] text-slate-950 xl:text-6xl">
+              Sign in to a brighter, cleaner rental workspace.
+            </h1>
+
+            <p className="mt-6 max-w-lg text-base leading-7 text-slate-600 xl:text-lg">
+              Manage listings, bookings, and conversations from a calm interface
+              with soft color, better focus, and less clutter.
+            </p>
+
+            <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-3xl border border-white/70 bg-white/70 p-5 shadow-[0_12px_40px_rgba(99,102,241,0.08)] backdrop-blur">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                  <MailIcon />
+                </div>
+                <p className="text-sm font-semibold text-slate-900">Fast access</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Quickly reach your booking dashboard.
+                </p>
               </div>
 
-              <h1 className="max-w-lg text-5xl font-semibold leading-[1.02] tracking-[-0.05em] text-slate-950 xl:text-6xl">
-                A calmer, cleaner way to manage bookings.
-              </h1>
-
-              <p className="mt-6 max-w-xl text-base leading-7 text-slate-600 xl:text-lg">
-                Monitor listings, respond to requests, and stay on top of every
-                reservation from one thoughtfully designed dashboard.
-              </p>
-
-              <div className="mt-10 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-3xl border border-white/70 bg-white/75 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur">
-                  <p className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
-                    24/7
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Keep your listings and booking flow active at all times.
-                  </p>
+              <div className="rounded-3xl border border-white/70 bg-white/70 p-5 shadow-[0_12px_40px_rgba(56,189,248,0.08)] backdrop-blur">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+                  <LockIcon />
                 </div>
-
-                <div className="rounded-3xl border border-white/70 bg-white/75 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur">
-                  <p className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
-                    Fast
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Move from inquiry to confirmation with less friction.
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-white/70 bg-white/75 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur">
-                  <p className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
-                    Clear
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Focus on what matters with a simplified interface.
-                  </p>
-                </div>
+                <p className="text-sm font-semibold text-slate-900">Secure flow</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Protected access with verification built in.
+                </p>
               </div>
-            </div>
 
-            <div className="flex items-center justify-between text-sm text-slate-500">
-              <p>Designed for modern rental operations</p>
-              <p>Secure account access</p>
+              <div className="rounded-3xl border border-white/70 bg-white/70 p-5 shadow-[0_12px_40px_rgba(244,114,182,0.08)] backdrop-blur">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-pink-50 text-pink-600">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M5 12h14"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M12 5v14"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-slate-900">Less clutter</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  A softer layout that keeps attention on the essentials.
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="relative flex items-center justify-center px-6 py-10 sm:px-8 lg:px-12">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),rgba(248,250,252,1)_40%)]" />
-
-          <div className="relative w-full max-w-[520px]">
-            <div className="mb-8 flex items-center gap-3 lg:hidden">
-              <BrandMark />
-              <div>
-                <p className="text-sm font-semibold tracking-[0.18em] text-slate-500 uppercase">
-                  Rentify
-                </p>
-                <p className="text-sm text-slate-500">
-                  Rental management platform
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-8">
+          <div className="w-full max-w-[540px]">
+            <div className="rounded-[2rem] border border-white/70 bg-white/78 p-6 shadow-[0_30px_80px_rgba(79,70,229,0.10)] backdrop-blur-xl sm:p-8">
               <div className="mb-8">
-                <p className="text-sm font-medium text-slate-500">
-                  Welcome back
-                </p>
+                <p className="text-sm font-medium text-indigo-600">Account access</p>
                 <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.15rem]">
-                  Sign in to your account
+                  Sign in
                 </h2>
                 <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">
-                  Access your bookings, listings, and conversations from one
-                  clean workspace.
+                  Access your bookings, listings, and messages from one polished
+                  workspace.
                 </p>
               </div>
 
@@ -306,15 +322,19 @@ export default function LoginPage() {
                   >
                     Email
                   </label>
+
                   <div
-                    className={`rounded-2xl border bg-white transition ${
+                    className={`relative rounded-2xl border bg-white/90 transition ${
                       errors.email
                         ? "border-rose-300 ring-4 ring-rose-100"
                         : emailHasValue
-                          ? "border-slate-300 ring-4 ring-slate-100"
-                          : "border-slate-200"
+                          ? "border-indigo-300 ring-4 ring-indigo-50"
+                          : "border-slate-200 hover:border-indigo-200"
                     }`}
                   >
+                    <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+                      <MailIcon />
+                    </div>
                     <input
                       id="email"
                       name="email"
@@ -323,9 +343,10 @@ export default function LoginPage() {
                       placeholder="you@example.com"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      className="h-14 w-full rounded-2xl bg-transparent px-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+                      className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
                     />
                   </div>
+
                   {errors.email ? (
                     <p className="text-sm text-rose-700">{errors.email}</p>
                   ) : null}
@@ -342,21 +363,25 @@ export default function LoginPage() {
 
                     <Link
                       href="/forgot-password"
-                      className="text-sm font-medium text-slate-500 transition hover:text-slate-900"
+                      className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
                     >
                       Forgot password?
                     </Link>
                   </div>
 
                   <div
-                    className={`relative rounded-2xl border bg-white transition ${
+                    className={`relative rounded-2xl border bg-white/90 transition ${
                       errors.password
                         ? "border-rose-300 ring-4 ring-rose-100"
                         : passwordHasValue
-                          ? "border-slate-300 ring-4 ring-slate-100"
-                          : "border-slate-200"
+                          ? "border-sky-300 ring-4 ring-sky-50"
+                          : "border-slate-200 hover:border-sky-200"
                     }`}
                   >
+                    <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
+                      <LockIcon />
+                    </div>
+
                     <input
                       id="password"
                       name="password"
@@ -365,7 +390,7 @@ export default function LoginPage() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
-                      className="h-14 w-full rounded-2xl bg-transparent px-4 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+                      className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
                     />
 
                     <button
@@ -384,8 +409,8 @@ export default function LoginPage() {
                   ) : null}
                 </div>
 
-                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-
+                <div className="rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-4">
+                  
                   <TurnstileWidget value={captchaToken} onChange={setCaptchaToken} />
 
                   {errors.captchaToken ? (
@@ -398,7 +423,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={pending}
-                  className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {pending ? "Signing in..." : "Sign in"}
                 </button>
@@ -414,7 +439,7 @@ export default function LoginPage() {
 
               <Link
                 href="/signup"
-                className="mt-6 inline-flex h-14 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                className="mt-6 inline-flex h-14 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-5 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40"
               >
                 Create an account
               </Link>
