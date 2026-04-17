@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SiteHeader } from "@/components/navigation/site-header";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -15,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <SiteHeader />
+          <div className="flex-1">{children}</div>
+        </Providers>
       </body>
     </html>
   );

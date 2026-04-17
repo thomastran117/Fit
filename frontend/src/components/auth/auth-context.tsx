@@ -3,9 +3,12 @@
 import {
   createContext,
   useContext,
+  useMemo,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { SessionManager } from "@/components/auth/session-manager";
 import type { AuthResponseBody, StoredAuthSession } from "@/lib/auth/types";
 import {
   clearStoredSession,
@@ -35,26 +38,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
     getStoredSessionSnapshot,
     () => undefined,
   );
+  const [isInitialSessionRestorePending, setIsInitialSessionRestorePending] = useState(true);
 
   const status: AuthStatus =
-    session === undefined
+    session === undefined || isInitialSessionRestorePending
       ? "loading"
       : session
         ? "authenticated"
         : "anonymous";
 
-  const value: AuthContextValue = {
-    status,
-    session: session ?? null,
-    setSession(nextSession) {
-      writeStoredSession(nextSession);
-    },
-    clearSession() {
-      clearStoredSession();
-    },
-  };
+  const value: AuthContextValue = useMemo(
+    () => ({
+      status,
+      session: session ?? null,
+      setSession(nextSession) {
+        writeStoredSession(nextSession);
+      },
+      clearSession() {
+        clearStoredSession();
+      },
+    }),
+    [session, status],
+  );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      <SessionManager
+        session={session}
+        onComplete={() => {
+          setIsInitialSessionRestorePending(false);
+        }}
+      />
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {
