@@ -13,10 +13,16 @@ interface AuthOAuthButtonsProps {
 }
 
 interface PopupAuthResult {
-  idToken?: string;
+  code?: string;
   error?: string;
   errorDescription?: string;
   state?: string;
+}
+
+interface MicrosoftTokenResponse {
+  id_token?: string;
+  error?: string;
+  error_description?: string;
 }
 
 const MICROSOFT_SCOPE = "openid email profile";
@@ -26,6 +32,17 @@ function createRandomString(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function createPkceChallenge(verifier: string): Promise<string> {
+  const encodedVerifier = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", encodedVerifier);
+  const bytes = new Uint8Array(digest);
+
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function getPopupFeatures(): string {
@@ -52,42 +69,52 @@ function parsePopupPayload(rawPayload: string): PopupAuthResult {
   const params = new URLSearchParams(normalized);
 
   return {
-    idToken: params.get("id_token") ?? undefined,
+    code: params.get("code") ?? undefined,
     error: params.get("error") ?? undefined,
     errorDescription: params.get("error_description") ?? undefined,
     state: params.get("state") ?? undefined,
   };
 }
 
-function buildOAuthUrl(provider: OAuthProvider, state: string, nonce: string): string {
-  const redirectUri = `${window.location.origin}/auth/popup-callback`;
+async function buildOAuthUrl(
+  provider: OAuthProvider,
+  state: string,
+  nonce: string,
+  codeVerifier: string,
+): Promise<string> {
+  const redirectUri = `${window.location.origin}/auth/${provider}`;
+  const codeChallenge = await createPkceChallenge(codeVerifier);
 
   if (provider === "google") {
     const params = new URLSearchParams({
       client_id: publicEnv.googleOAuthClientId,
       redirect_uri: redirectUri,
-      response_type: "id_token",
+      response_type: "code",
       scope: GOOGLE_SCOPE,
       prompt: "select_account",
       nonce,
       state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
     });
 
-    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+      return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
   const params = new URLSearchParams({
     client_id: publicEnv.microsoftOAuthClientId,
     redirect_uri: redirectUri,
-    response_type: "id_token",
-    response_mode: "fragment",
+    response_type: "code",
+    response_mode: "query",
     scope: MICROSOFT_SCOPE,
     prompt: "select_account",
     nonce,
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
   });
 
-  return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`;
+  return `https://login.microsoftonline.com/${publicEnv.microsoftOAuthTenant}/oauth2/v2.0/authorize?${params.toString()}`;
 }
 
 function readProviderError(provider: OAuthProvider, payload: PopupAuthResult): string {
@@ -102,21 +129,76 @@ function readProviderError(provider: OAuthProvider, payload: PopupAuthResult): s
   return `${provider === "google" ? "Google" : "Microsoft"} sign-in could not be completed.`;
 }
 
-function authenticateWithProvider(
-  provider: OAuthProvider,
-  idToken: string,
-): Promise<AuthResponseBody> {
-  if (provider === "google") {
-    return authApi.authenticateWithGoogle({ idToken });
+async function exchangeMicrosoftCodeForIdToken(
+  code: string,
+  codeVerifier: string,
+): Promise<string> {
+  const tokenUrl = `https://login.microsoftonline.com/${publicEnv.microsoftOAuthTenant}/oauth2/v2.0/token`;
+  const body = new URLSearchParams({
+    client_id: publicEnv.microsoftOAuthClientId,
+    redirect_uri: `${window.location.origin}/auth/microsoft`,
+    grant_type: "authorization_code",
+    code,
+    code_verifier: codeVerifier,
+    scope: MICROSOFT_SCOPE,
+  });
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "application/json",
+    },
+    body,
+  });
+  const payload = (await response.json()) as MicrosoftTokenResponse;
+
+  if (!response.ok) {
+    throw new Error(
+      payload.error_description?.replace(/\+/g, " ") ||
+        payload.error ||
+        "Microsoft sign-in could not be completed.",
+    );
   }
 
-  return authApi.authenticateWithMicrosoft({ idToken });
+  if (!payload.id_token) {
+    throw new Error("Microsoft token response did not include an ID token.");
+  }
+
+  return payload.id_token;
 }
 
-async function openProviderPopup(provider: OAuthProvider): Promise<string> {
+function authenticateWithProvider(
+  provider: OAuthProvider,
+  input: { code?: string; codeVerifier?: string; idToken?: string },
+  nonce: string,
+): Promise<AuthResponseBody> {
+  if (provider === "google") {
+    return authApi.authenticateWithGoogle({
+      code: input.code ?? "",
+      codeVerifier: input.codeVerifier ?? "",
+      nonce,
+    });
+  }
+
+  return authApi.authenticateWithMicrosoft({
+    idToken: input.idToken,
+    code: input.code,
+    codeVerifier: input.codeVerifier,
+    nonce,
+  });
+}
+
+async function openProviderPopup(
+  provider: OAuthProvider,
+): Promise<{ code: string; codeVerifier: string; nonce: string }> {
   const state = createRandomString();
   const nonce = createRandomString();
-  const popup = window.open(buildOAuthUrl(provider, state, nonce), `${provider}-oauth`, getPopupFeatures());
+  const codeVerifier = createRandomString() + createRandomString();
+  const popup = window.open(
+    await buildOAuthUrl(provider, state, nonce, codeVerifier),
+    `${provider}-oauth`,
+    getPopupFeatures(),
+  );
 
   if (!popup) {
     throw new Error("Your browser blocked the sign-in popup. Please allow popups and try again.");
@@ -158,7 +240,7 @@ async function openProviderPopup(provider: OAuthProvider): Promise<string> {
         return;
       }
 
-      if (payload.error || !payload.idToken) {
+      if (payload.error || !payload.code) {
         cleanup();
         popup.close();
         reject(new Error(readProviderError(provider, payload)));
@@ -167,7 +249,11 @@ async function openProviderPopup(provider: OAuthProvider): Promise<string> {
 
       cleanup();
       popup.close();
-      resolve(payload.idToken);
+      resolve({
+        code: payload.code,
+        codeVerifier,
+        nonce,
+      });
     };
 
     window.addEventListener("message", handleMessage);
@@ -219,8 +305,24 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
     onError("");
 
     try {
-      const idToken = await openProviderPopup(provider);
-      const session = await authenticateWithProvider(provider, idToken);
+      const result = await openProviderPopup(provider);
+      const providerInput =
+        provider === "microsoft"
+          ? {
+              idToken: await exchangeMicrosoftCodeForIdToken(
+                result.code,
+                result.codeVerifier,
+              ),
+            }
+          : {
+              code: result.code,
+              codeVerifier: result.codeVerifier,
+            };
+      const session = await authenticateWithProvider(
+        provider,
+        providerInput,
+        result.nonce,
+      );
       onSuccess(session);
     } catch (error) {
       onError(error instanceof Error ? error.message : "OAuth sign-in could not be completed.");
@@ -241,10 +343,24 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
             type="button"
             onClick={() => handleProviderClick("google")}
             disabled={pendingProvider !== null}
-            className="inline-flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/30 disabled:cursor-not-allowed disabled:opacity-60"
+            className="group inline-flex h-14 w-full cursor-pointer items-center justify-between rounded-[1.35rem] border border-slate-200 bg-white/95 px-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-[0_18px_40px_rgba(234,67,53,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <GoogleIcon />
-            {pendingProvider === "google" ? "Connecting..." : "Continue with Google"}
+            <span className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
+                <GoogleIcon />
+              </span>
+              <span className="space-y-0.5">
+                <span className="block text-sm font-semibold text-slate-900">
+                  {pendingProvider === "google" ? "Connecting to Google..." : "Google"}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  Continue with your Google account
+                </span>
+              </span>
+            </span>
+            <span className="text-sm font-semibold text-rose-500 transition group-hover:text-rose-600">
+              Go
+            </span>
           </button>
         ) : null}
 
@@ -253,10 +369,24 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
             type="button"
             onClick={() => handleProviderClick("microsoft")}
             disabled={pendingProvider !== null}
-            className="inline-flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 text-sm font-semibold text-slate-900 transition hover:border-sky-200 hover:bg-sky-50/30 disabled:cursor-not-allowed disabled:opacity-60"
+            className="group inline-flex h-14 w-full cursor-pointer items-center justify-between rounded-[1.35rem] border border-slate-200 bg-white/95 px-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_18px_40px_rgba(14,165,233,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <MicrosoftIcon />
-            {pendingProvider === "microsoft" ? "Connecting..." : "Continue with Microsoft"}
+            <span className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
+                <MicrosoftIcon />
+              </span>
+              <span className="space-y-0.5">
+                <span className="block text-sm font-semibold text-slate-900">
+                  {pendingProvider === "microsoft" ? "Connecting to Microsoft..." : "Microsoft"}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  Continue with your Microsoft account
+                </span>
+              </span>
+            </span>
+            <span className="text-sm font-semibold text-sky-500 transition group-hover:text-sky-600">
+              Go
+            </span>
           </button>
         ) : null}
       </div>

@@ -19,12 +19,37 @@ export const localAuthenticateRequestSchema = z.object({
   deviceId: optionalTrimmedString,
 });
 
-export const oauthAuthenticateRequestSchema = z.object({
-  idToken: z.string().trim().min(1, "ID token is required."),
-  deviceId: optionalTrimmedString,
-  firstName: optionalTrimmedString,
-  lastName: optionalTrimmedString,
-});
+export const oauthAuthenticateRequestSchema = z
+  .object({
+    code: optionalTrimmedString,
+    codeVerifier: optionalTrimmedString,
+    idToken: optionalTrimmedString,
+    nonce: z.string().trim().min(1, "Nonce is required."),
+    deviceId: optionalTrimmedString,
+    firstName: optionalTrimmedString,
+    lastName: optionalTrimmedString,
+  })
+  .superRefine((input, context) => {
+    if (input.idToken) {
+      return;
+    }
+
+    if (!input.code) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Authorization code is required.",
+        path: ["code"],
+      });
+    }
+
+    if (!input.codeVerifier) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Code verifier is required.",
+        path: ["codeVerifier"],
+      });
+    }
+  });
 
 export const verifyEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
@@ -71,7 +96,10 @@ export interface LocalSignupInput {
 
 export interface OAuthAuthenticateInput {
   client: ClientRequestContext;
-  idToken: string;
+  code?: string;
+  codeVerifier?: string;
+  idToken?: string;
+  nonce: string;
   deviceId?: string;
   firstName?: string;
   lastName?: string;

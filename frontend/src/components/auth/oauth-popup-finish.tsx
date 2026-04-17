@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-export default function OAuthPopupCallbackPage() {
+export function OAuthPopupFinish() {
   useEffect(() => {
     if (!window.opener) {
       return;
@@ -23,7 +23,9 @@ export default function OAuthPopupCallbackPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f8fafc] px-6 text-slate-700">
-      <p className="text-sm">Finishing sign-in...</p>
+      <div className="rounded-full border border-white/80 bg-white/90 px-5 py-3 text-sm font-medium shadow-lg backdrop-blur">
+        Finishing sign-in...
+      </div>
     </main>
   );
 }

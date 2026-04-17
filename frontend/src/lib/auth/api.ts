@@ -30,7 +30,10 @@ interface ResendVerificationEmailInput {
 }
 
 interface OAuthAuthenticateInput {
-  idToken: string;
+  nonce: string;
+  code?: string;
+  codeVerifier?: string;
+  idToken?: string;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -75,6 +78,9 @@ async function postJson<TResponse, TBody extends object = object>(
 export const authApi = {
   login(input: LoginInput): Promise<AuthResponseBody> {
     return postJson<AuthResponseBody>("/auth/local/login", input);
+  },
+  logout(): Promise<{ loggedOut: true }> {
+    return postJson<{ loggedOut: true }>("/auth/logout", {});
   },
   authenticateWithGoogle(input: OAuthAuthenticateInput): Promise<AuthResponseBody> {
     return postJson<AuthResponseBody>("/auth/oauth/google", input);

@@ -85,9 +85,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.appleOAuthService,
     lifetime: "transient",
-    dependencies: [containerTokens.oauthTokenVerifier],
-    resolve: ({ resolve }) =>
-      new AppleOAuthService(resolve(containerTokens.oauthTokenVerifier)),
+    dependencies: [],
+    resolve: () => new AppleOAuthService(),
   });
   container.register({
     token: containerTokens.deviceRepository,

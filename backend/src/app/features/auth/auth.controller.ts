@@ -193,7 +193,10 @@ export class AuthController {
     input: OAuthAuthenticateRequestBody,
   ): OAuthAuthenticateInput {
     return {
+      code: input.code,
+      codeVerifier: input.codeVerifier,
       idToken: input.idToken,
+      nonce: input.nonce,
       client: context.get("client"),
       firstName: input.firstName,
       lastName: input.lastName,
