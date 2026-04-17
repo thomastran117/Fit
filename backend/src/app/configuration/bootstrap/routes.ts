@@ -73,6 +73,14 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<AuthController>(containerTokens.authController, "resendVerificationEmail"),
   );
   app.post(
+    "/auth/local/unlock",
+    resolveHandler<AuthController>(containerTokens.authController, "unlockLocalLogin"),
+  );
+  app.post(
+    "/auth/local/unlock/resend",
+    resolveHandler<AuthController>(containerTokens.authController, "resendUnlockLocalLogin"),
+  );
+  app.post(
     "/auth/local/verify",
     resolveHandler<AuthController>(containerTokens.authController, "localVerify"),
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthCaptchaPanel } from "@/components/auth/auth-captcha-panel";
+import { LoginUnlockPanel } from "@/components/auth/login-unlock-panel";
 import { AuthOAuthButtons } from "@/components/auth/oauth-buttons";
 import { useAuth } from "@/components/auth/auth-context";
 import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
@@ -53,6 +54,7 @@ interface ApiErrorShape {
 type LoginFailureResult = {
   generalError: string | null;
   fieldErrors?: Partial<LoginErrors>;
+  unlockRequired?: boolean;
 };
 
 function getLoginFailureResult(error: unknown): LoginFailureResult {
@@ -135,6 +137,14 @@ function getLoginFailureResult(error: unknown): LoginFailureResult {
           generalError: message || "There is a problem with this account.",
         };
     }
+  }
+
+  if (status === 423) {
+    return {
+      generalError:
+        message || "This sign-in is locked. Use the code from your email to unlock it.",
+      unlockRequired: true,
+    };
   }
 
   if (status !== undefined && status >= 500) {
@@ -300,6 +310,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   const [errors, setErrors] = useState<LoginErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [unlockEmail, setUnlockEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -309,6 +320,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
   function handleOAuthSuccess(session: AuthResponseBody) {
     setGeneralError(null);
+    setUnlockEmail(null);
     setSession(session);
     router.replace(nextPath);
   }
@@ -319,6 +331,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
     const nextErrors = validateLogin({ email, password, captchaToken });
     setErrors(nextErrors);
     setGeneralError(null);
+    setUnlockEmail(null);
 
     if (Object.keys(nextErrors).length > 0) {
       return;
@@ -340,6 +353,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
       const failure = getLoginFailureResult(error);
 
       setGeneralError(failure.generalError);
+      setUnlockEmail(failure.unlockRequired ? email.trim().toLowerCase() : null);
       setErrors((current) => ({
         ...current,
         ...(failure.fieldErrors ?? {}),
@@ -363,6 +377,22 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
   if (status === "authenticated") {
     return null;
+  }
+
+  if (unlockEmail) {
+    return (
+      <LoginUnlockPanel
+        email={unlockEmail}
+        onUnlocked={(message) => {
+          setUnlockEmail(null);
+          setGeneralError(message);
+        }}
+        onCancel={() => {
+          setUnlockEmail(null);
+          setGeneralError(null);
+        }}
+      />
+    );
   }
 
   return (

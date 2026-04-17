@@ -18,9 +18,13 @@ import type {
   OAuthAuthenticateRequestBody,
   RemoveKnownDeviceInput,
   RemoveKnownDeviceRequestBody,
+  ResendUnlockLocalLoginInput,
+  ResendUnlockLocalLoginRequestBody,
   ResendVerificationEmailInput,
   ResendVerificationEmailRequestBody,
   SignupVerificationPendingResult,
+  UnlockLocalLoginInput,
+  UnlockLocalLoginRequestBody,
   VerifyEmailInput,
   VerifyEmailRequestBody,
 } from "@/features/auth/auth.model";
@@ -29,7 +33,9 @@ import {
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
   removeKnownDeviceRequestSchema,
+  resendUnlockLocalLoginRequestSchema,
   resendVerificationEmailRequestSchema,
+  unlockLocalLoginRequestSchema,
   verifyEmailRequestSchema,
 } from "@/features/auth/auth.model";
 
@@ -70,6 +76,20 @@ export class AuthController {
     const input = await parseRequestBody(context, resendVerificationEmailRequestSchema);
     const result = await this.authService.resendVerificationEmail(
       this.toResendVerificationEmailInput(input),
+    );
+    return context.json(result, 202);
+  };
+
+  unlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, unlockLocalLoginRequestSchema);
+    const result = await this.authService.unlockLocalLogin(this.toUnlockLocalLoginInput(input));
+    return context.json(result);
+  };
+
+  resendUnlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resendUnlockLocalLoginRequestSchema);
+    const result = await this.authService.resendUnlockLocalLogin(
+      this.toResendUnlockLocalLoginInput(input),
     );
     return context.json(result, 202);
   };
@@ -180,6 +200,7 @@ export class AuthController {
     input: LocalSignupRequestBody,
   ): LocalSignupInput {
     return {
+      client: context.get("client"),
       email: input.email,
       password: input.password,
       firstName: input.firstName,
@@ -235,6 +256,21 @@ export class AuthController {
     return {
       userId: context.get("auth").sub,
       deviceId: input.deviceId,
+    };
+  }
+
+  private toUnlockLocalLoginInput(input: UnlockLocalLoginRequestBody): UnlockLocalLoginInput {
+    return {
+      email: input.email,
+      code: input.code,
+    };
+  }
+
+  private toResendUnlockLocalLoginInput(
+    input: ResendUnlockLocalLoginRequestBody,
+  ): ResendUnlockLocalLoginInput {
+    return {
+      email: input.email,
     };
   }
 

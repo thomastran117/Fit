@@ -136,6 +136,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.googleOAuthService,
       containerTokens.microsoftOAuthService,
       containerTokens.appleOAuthService,
+      containerTokens.cacheService,
     ],
     resolve: ({ resolve }) =>
       new AuthService(
@@ -147,6 +148,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.googleOAuthService),
         resolve(containerTokens.microsoftOAuthService),
         resolve(containerTokens.appleOAuthService),
+        resolve(containerTokens.cacheService),
       ),
   });
   container.register({

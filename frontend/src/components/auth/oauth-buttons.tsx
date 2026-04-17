@@ -344,22 +344,22 @@ function OAuthProviderButton({
 export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) {
   const [pendingProvider, setPendingProvider] = useState<OAuthProvider | null>(null);
 
-  const providerConfigs: ProviderButtonConfig[] = [
+  const providerConfigs = ([
     {
-      provider: "google",
+      provider: "google" as const,
       label: "Continue with Google",
       pendingLabel: "Connecting to Google...",
       enabled: Boolean(publicEnv.googleOAuthClientId),
       icon: <GoogleIcon />,
     },
     {
-      provider: "microsoft",
+      provider: "microsoft" as const,
       label: "Continue with Microsoft",
       pendingLabel: "Connecting to Microsoft...",
       enabled: Boolean(publicEnv.microsoftOAuthClientId),
       icon: <MicrosoftIcon />,
     },
-  ].filter((provider) => provider.enabled);
+  ] satisfies ProviderButtonConfig[]).filter((provider) => provider.enabled);
 
   async function handleProviderClick(provider: OAuthProvider) {
     setPendingProvider(provider);

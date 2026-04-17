@@ -17,6 +17,12 @@ export interface SendNewDeviceEmailInput {
   detectedAt?: Date;
 }
 
+export interface SendLoginUnlockEmailInput {
+  to: string;
+  unlockCode: string;
+  firstName?: string;
+}
+
 interface EmailServiceOptions {
   transporter?: Transporter;
   gmailUser?: string;
@@ -155,6 +161,35 @@ export class EmailService {
         `<ul>${htmlDetails}</ul>`,
         "<p>If this was you, no action is needed.</p>",
         "<p>If this wasn't you, please change your password and review account access immediately.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendLoginUnlockEmail(input: SendLoginUnlockEmailInput): Promise<void> {
+    const greetingName = this.resolveGreetingName(input.firstName);
+    const escapedGreetingName = escapeHtml(greetingName);
+    const escapedUnlockCode = escapeHtml(input.unlockCode);
+
+    this.dispatch({
+      to: input.to,
+      subject: "Unlock your Rent sign-in",
+      text: [
+        `Hi ${greetingName},`,
+        "",
+        "We temporarily locked local sign-in after too many unsuccessful password attempts.",
+        "",
+        `Unlock code: ${input.unlockCode}`,
+        "",
+        "Enter this code on the unlock screen to restore access.",
+        "If this wasn't you, you can ignore this email and consider changing your password.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${escapedGreetingName},</p>`,
+        "<p>We temporarily locked local sign-in after too many unsuccessful password attempts.</p>",
+        "<p>Your unlock code is:</p>",
+        `<p style="font-size: 28px; font-weight: 700; letter-spacing: 0.3em;">${escapedUnlockCode}</p>`,
+        "<p>Enter this code on the unlock screen to restore access.</p>",
+        "<p>If this wasn't you, you can ignore this email and consider changing your password.</p>",
       ].join(""),
     });
   }

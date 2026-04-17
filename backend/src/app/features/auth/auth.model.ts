@@ -61,6 +61,15 @@ export const resendVerificationEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
 });
 
+export const unlockLocalLoginRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  code: z.string().trim().regex(/^\d{6}$/, "Unlock code must be 6 digits."),
+});
+
+export const resendUnlockLocalLoginRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+});
+
 export const removeKnownDeviceRequestSchema = z.object({
   deviceId: z.string().trim().min(1, "Device ID is required."),
 });
@@ -77,6 +86,12 @@ export type ResendVerificationEmailRequestBody = z.infer<
   typeof resendVerificationEmailRequestSchema
 >;
 
+export type UnlockLocalLoginRequestBody = z.infer<typeof unlockLocalLoginRequestSchema>;
+
+export type ResendUnlockLocalLoginRequestBody = z.infer<
+  typeof resendUnlockLocalLoginRequestSchema
+>;
+
 export type RemoveKnownDeviceRequestBody = z.infer<typeof removeKnownDeviceRequestSchema>;
 
 export interface LocalAuthenticateInput {
@@ -87,6 +102,7 @@ export interface LocalAuthenticateInput {
 }
 
 export interface LocalSignupInput {
+  client: ClientRequestContext;
   email: string;
   password: string;
   firstName?: string;
@@ -113,6 +129,15 @@ export interface VerifyEmailInput {
 }
 
 export interface ResendVerificationEmailInput {
+  email: string;
+}
+
+export interface UnlockLocalLoginInput {
+  email: string;
+  code: string;
+}
+
+export interface ResendUnlockLocalLoginInput {
   email: string;
 }
 
