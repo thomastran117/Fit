@@ -13,6 +13,7 @@ type AuthUserPersistence = {
   id: string;
   email: string;
   passwordHash: string;
+  tokenVersion: number;
   firstName: string | null;
   lastName: string | null;
   role: string;
@@ -150,6 +151,54 @@ export class AuthRepository extends BaseRepository {
     );
   }
 
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          passwordHash,
+        },
+      }),
+    );
+  }
+
+  async rotateTokenVersion(userId: string): Promise<number> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          tokenVersion: {
+            increment: 1,
+          },
+        },
+        select: {
+          tokenVersion: true,
+        },
+      }),
+    );
+
+    return user.tokenVersion;
+  }
+
+  async findTokenVersionByUserId(userId: string): Promise<number | null> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+        select: {
+          tokenVersion: true,
+        },
+      }),
+    );
+
+    return user?.tokenVersion ?? null;
+  }
+
   private mapUser(user: AuthUserPersistence): AuthUserRecord {
     if (!user.profile) {
       throw new ConflictError("User profile is missing for the authenticated account.");
@@ -159,6 +208,7 @@ export class AuthRepository extends BaseRepository {
       id: user.id,
       email: user.email,
       passwordHash: user.passwordHash,
+      tokenVersion: user.tokenVersion,
       firstName: user.firstName ?? undefined,
       lastName: user.lastName ?? undefined,
       role: user.role,

@@ -10,14 +10,22 @@ import { TokenService } from "@/features/auth/token/token.service";
 import type {
   AuthResponseBody,
   AuthSessionResult,
+  ChangePasswordInput,
+  ChangePasswordRequestBody,
+  ForgotPasswordInput,
+  ForgotPasswordRequestBody,
   LocalAuthenticateInput,
   LocalAuthenticateRequestBody,
   LocalSignupInput,
   LocalSignupRequestBody,
   OAuthAuthenticateInput,
   OAuthAuthenticateRequestBody,
+  ResetPasswordInput,
+  ResetPasswordRequestBody,
   RemoveKnownDeviceInput,
   RemoveKnownDeviceRequestBody,
+  ResendForgotPasswordInput,
+  ResendForgotPasswordRequestBody,
   ResendUnlockLocalLoginInput,
   ResendUnlockLocalLoginRequestBody,
   ResendVerificationEmailInput,
@@ -29,11 +37,15 @@ import type {
   VerifyEmailRequestBody,
 } from "@/features/auth/auth.model";
 import {
+  changePasswordRequestSchema,
+  forgotPasswordRequestSchema,
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
   removeKnownDeviceRequestSchema,
+  resendForgotPasswordRequestSchema,
   resendUnlockLocalLoginRequestSchema,
+  resetPasswordRequestSchema,
   resendVerificationEmailRequestSchema,
   unlockLocalLoginRequestSchema,
   verifyEmailRequestSchema,
@@ -66,6 +78,27 @@ export class AuthController {
     return context.json(result, 202);
   };
 
+  forgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, forgotPasswordRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
+    const result = await this.authService.forgotPassword(this.toForgotPasswordInput(input));
+    return context.json(result, 202);
+  };
+
+  resendForgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resendForgotPasswordRequestSchema);
+    const result = await this.authService.resendForgotPassword(
+      this.toResendForgotPasswordInput(input),
+    );
+    return context.json(result, 202);
+  };
+
+  resetPassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resetPasswordRequestSchema);
+    const result = await this.authService.resetPassword(this.toResetPasswordInput(context, input));
+    return this.json(context, result);
+  };
+
   verifyEmail = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, verifyEmailRequestSchema);
     const result = await this.authService.verifyEmail(this.toVerifyEmailInput(context, input));
@@ -78,6 +111,14 @@ export class AuthController {
       this.toResendVerificationEmailInput(input),
     );
     return context.json(result, 202);
+  };
+
+  changePassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, changePasswordRequestSchema);
+    const result = await this.authService.changePassword(
+      this.toChangePasswordInput(context, input),
+    );
+    return this.json(context, result);
   };
 
   unlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
@@ -249,6 +290,33 @@ export class AuthController {
     };
   }
 
+  private toForgotPasswordInput(input: ForgotPasswordRequestBody): ForgotPasswordInput {
+    return {
+      email: input.email,
+    };
+  }
+
+  private toResendForgotPasswordInput(
+    input: ResendForgotPasswordRequestBody,
+  ): ResendForgotPasswordInput {
+    return {
+      email: input.email,
+    };
+  }
+
+  private toResetPasswordInput(
+    context: Context<AppBindings>,
+    input: ResetPasswordRequestBody,
+  ): ResetPasswordInput {
+    return {
+      client: context.get("client"),
+      email: input.email,
+      code: input.code,
+      newPassword: input.newPassword,
+      deviceId: this.resolveDeviceId(context, input.deviceId),
+    };
+  }
+
   private toRemoveKnownDeviceInput(
     context: Context<AppBindings>,
     input: RemoveKnownDeviceRequestBody,
@@ -271,6 +339,19 @@ export class AuthController {
   ): ResendUnlockLocalLoginInput {
     return {
       email: input.email,
+    };
+  }
+
+  private toChangePasswordInput(
+    context: Context<AppBindings>,
+    input: ChangePasswordRequestBody,
+  ): ChangePasswordInput {
+    return {
+      userId: context.get("auth").sub,
+      client: context.get("client"),
+      currentPassword: input.currentPassword,
+      newPassword: input.newPassword,
+      deviceId: context.get("auth").deviceId ?? context.get("client").device.id,
     };
   }
 

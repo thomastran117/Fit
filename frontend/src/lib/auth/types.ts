@@ -21,6 +21,10 @@ export interface SignupVerificationPendingResult {
   alreadyPending: boolean;
 }
 
+export interface ForgotPasswordAcceptedResult {
+  accepted: true;
+}
+
 export interface ApiErrorResponse {
   error: string;
   code: string;

@@ -23,6 +23,12 @@ export interface SendLoginUnlockEmailInput {
   firstName?: string;
 }
 
+export interface SendPasswordResetEmailInput {
+  to: string;
+  resetCode: string;
+  firstName?: string;
+}
+
 interface EmailServiceOptions {
   transporter?: Transporter;
   gmailUser?: string;
@@ -190,6 +196,35 @@ export class EmailService {
         `<p style="font-size: 28px; font-weight: 700; letter-spacing: 0.3em;">${escapedUnlockCode}</p>`,
         "<p>Enter this code on the unlock screen to restore access.</p>",
         "<p>If this wasn't you, you can ignore this email and consider changing your password.</p>",
+      ].join(""),
+    });
+  }
+
+  async sendPasswordResetEmail(input: SendPasswordResetEmailInput): Promise<void> {
+    const greetingName = this.resolveGreetingName(input.firstName);
+    const escapedGreetingName = escapeHtml(greetingName);
+    const escapedResetCode = escapeHtml(input.resetCode);
+
+    this.dispatch({
+      to: input.to,
+      subject: "Reset your Rent password",
+      text: [
+        `Hi ${greetingName},`,
+        "",
+        "We received a request to reset your password.",
+        "",
+        `Reset code: ${input.resetCode}`,
+        "",
+        "Enter this code to choose a new password.",
+        "If you didn't request this, you can ignore this email.",
+      ].join("\n"),
+      html: [
+        `<p>Hi ${escapedGreetingName},</p>`,
+        "<p>We received a request to reset your password.</p>",
+        "<p>Your reset code is:</p>",
+        `<p style="font-size: 28px; font-weight: 700; letter-spacing: 0.3em;">${escapedResetCode}</p>`,
+        "<p>Enter this code to choose a new password.</p>",
+        "<p>If you didn't request this, you can ignore this email.</p>",
       ].join(""),
     });
   }

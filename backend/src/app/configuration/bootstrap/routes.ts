@@ -36,6 +36,7 @@ function resolveHandler<TController>(
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.use("/auth/local/verify", jwtMiddleware);
+  app.use("/auth/local/password/change", jwtMiddleware);
   app.use("/auth/logout", jwtMiddleware);
   app.use("/auth/device/verify", jwtMiddleware);
   app.use("/auth/devices", jwtMiddleware);
@@ -65,6 +66,18 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<AuthController>(containerTokens.authController, "localSignup"),
   );
   app.post(
+    "/auth/local/password/forgot",
+    resolveHandler<AuthController>(containerTokens.authController, "forgotPassword"),
+  );
+  app.post(
+    "/auth/local/password/forgot/resend",
+    resolveHandler<AuthController>(containerTokens.authController, "resendForgotPassword"),
+  );
+  app.post(
+    "/auth/local/password/reset",
+    resolveHandler<AuthController>(containerTokens.authController, "resetPassword"),
+  );
+  app.post(
     "/auth/local/email/verify",
     resolveHandler<AuthController>(containerTokens.authController, "verifyEmail"),
   );
@@ -83,6 +96,10 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.post(
     "/auth/local/verify",
     resolveHandler<AuthController>(containerTokens.authController, "localVerify"),
+  );
+  app.post(
+    "/auth/local/password/change",
+    resolveHandler<AuthController>(containerTokens.authController, "changePassword"),
   );
   app.post(
     "/auth/oauth/google",

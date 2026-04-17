@@ -1,9 +1,11 @@
 import { publicEnv } from "@/lib/env";
 import { getDeviceId, getDevicePlatform } from "@/lib/auth/device";
+import { readStoredSession } from "@/lib/auth/storage";
 import {
   ApiError,
   type ApiErrorResponse,
   type AuthResponseBody,
+  type ForgotPasswordAcceptedResult,
   type SignupVerificationPendingResult,
 } from "@/lib/auth/types";
 
@@ -33,6 +35,22 @@ interface ResendVerificationEmailInput {
   email: string;
 }
 
+interface ForgotPasswordInput {
+  email: string;
+  captchaToken: string;
+}
+
+interface ResendForgotPasswordInput {
+  email: string;
+}
+
+interface ResetPasswordInput {
+  email: string;
+  code: string;
+  newPassword: string;
+  deviceId?: string;
+}
+
 interface UnlockLocalLoginInput {
   email: string;
   code: string;
@@ -47,6 +65,12 @@ interface OAuthAuthenticateInput {
   code?: string;
   codeVerifier?: string;
   idToken?: string;
+  deviceId?: string;
+}
+
+interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
   deviceId?: string;
 }
 
@@ -71,6 +95,41 @@ async function postJson<TResponse, TBody extends object = object>(
     headers: {
       "content-type": "application/json",
       accept: "application/json",
+      ...(deviceId ? { "x-device-id": deviceId } : {}),
+      ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  const payload = await readJson(response);
+
+  if (!response.ok) {
+    const errorPayload = (payload ?? {}) as Partial<ApiErrorResponse>;
+    throw new ApiError(
+      errorPayload.error ?? "Something went wrong.",
+      errorPayload.code ?? "UNKNOWN_ERROR",
+      response.status,
+      errorPayload.details,
+    );
+  }
+
+  return payload as TResponse;
+}
+
+async function postAuthenticatedJson<TResponse, TBody extends object = object>(
+  path: string,
+  body: TBody,
+): Promise<TResponse> {
+  const deviceId = getDeviceId();
+  const devicePlatform = getDevicePlatform();
+  const session = readStoredSession();
+  const response = await fetch(`${publicEnv.apiBaseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+      ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {}),
       ...(deviceId ? { "x-device-id": deviceId } : {}),
       ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
     },
@@ -132,6 +191,20 @@ export const authApi = {
   ): Promise<{ resent: true; email: string }> {
     return postJson<{ resent: true; email: string }>("/auth/local/email/resend", input);
   },
+  forgotPassword(input: ForgotPasswordInput): Promise<ForgotPasswordAcceptedResult> {
+    return postJson<ForgotPasswordAcceptedResult>("/auth/local/password/forgot", input);
+  },
+  resendForgotPassword(
+    input: ResendForgotPasswordInput,
+  ): Promise<ForgotPasswordAcceptedResult> {
+    return postJson<ForgotPasswordAcceptedResult>("/auth/local/password/forgot/resend", input);
+  },
+  resetPassword(input: ResetPasswordInput): Promise<AuthResponseBody> {
+    return postJson<AuthResponseBody>("/auth/local/password/reset", {
+      ...input,
+      deviceId: input.deviceId ?? getDeviceId(),
+    });
+  },
   unlockLocalLogin(input: UnlockLocalLoginInput): Promise<{ unlocked: true; email: string }> {
     return postJson<{ unlocked: true; email: string }>("/auth/local/unlock", {
       ...input,
@@ -142,5 +215,11 @@ export const authApi = {
     input: ResendUnlockLocalLoginInput,
   ): Promise<{ resent: true; email: string }> {
     return postJson<{ resent: true; email: string }>("/auth/local/unlock/resend", input);
+  },
+  changePassword(input: ChangePasswordInput): Promise<AuthResponseBody> {
+    return postAuthenticatedJson<AuthResponseBody>("/auth/local/password/change", {
+      ...input,
+      deviceId: input.deviceId ?? getDeviceId(),
+    });
   },
 };

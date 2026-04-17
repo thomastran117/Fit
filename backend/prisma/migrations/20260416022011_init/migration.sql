@@ -3,6 +3,7 @@ CREATE TABLE `users` (
     `id` VARCHAR(36) NOT NULL,
     `email` VARCHAR(255) NOT NULL,
     `password_hash` VARCHAR(255) NOT NULL,
+    `token_version` INTEGER NOT NULL DEFAULT 0,
     `first_name` VARCHAR(255) NULL,
     `last_name` VARCHAR(255) NULL,
     `role` VARCHAR(50) NOT NULL,

@@ -14,7 +14,7 @@ export class RentingsController {
   ) {}
 
   convertBookingRequest = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const result = await this.rentingsService.convertApprovedBookingRequest({
       bookingRequestId: this.requireBookingRequestId(context),
       ownerId: auth.sub,
@@ -23,13 +23,13 @@ export class RentingsController {
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const result = await this.rentingsService.getById(this.requireRentingId(context), auth.sub);
     return context.json(result);
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const query = this.parseListQuery(context);
     const result = await this.rentingsService.listMine(this.toListMineInput(auth.sub, query));
     return context.json(result);
@@ -100,7 +100,7 @@ export class RentingsController {
     return id;
   }
 
-  private requireAuth(context: Context<AppBindings>) {
+  private async requireAuth(context: Context<AppBindings>) {
     const authorization = context.req.header("authorization");
 
     if (!authorization) {

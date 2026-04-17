@@ -70,6 +70,27 @@ export const resendUnlockLocalLoginRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
 });
 
+export const forgotPasswordRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  captchaToken: z.string().trim().min(1, "Captcha token is required."),
+});
+
+export const resendForgotPasswordRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+});
+
+export const resetPasswordRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  code: z.string().trim().regex(/^\d{6}$/, "Reset code must be 6 digits."),
+  newPassword: z.string().min(8, "Password must be at least 8 characters long."),
+  deviceId: optionalTrimmedString,
+});
+
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required."),
+  newPassword: z.string().min(8, "Password must be at least 8 characters long."),
+});
+
 export const removeKnownDeviceRequestSchema = z.object({
   deviceId: z.string().trim().min(1, "Device ID is required."),
 });
@@ -93,6 +114,14 @@ export type ResendUnlockLocalLoginRequestBody = z.infer<
 >;
 
 export type RemoveKnownDeviceRequestBody = z.infer<typeof removeKnownDeviceRequestSchema>;
+
+export type ForgotPasswordRequestBody = z.infer<typeof forgotPasswordRequestSchema>;
+
+export type ResendForgotPasswordRequestBody = z.infer<typeof resendForgotPasswordRequestSchema>;
+
+export type ResetPasswordRequestBody = z.infer<typeof resetPasswordRequestSchema>;
+
+export type ChangePasswordRequestBody = z.infer<typeof changePasswordRequestSchema>;
 
 export interface LocalAuthenticateInput {
   client: ClientRequestContext;
@@ -146,6 +175,30 @@ export interface RemoveKnownDeviceInput {
   deviceId: string;
 }
 
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResendForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  client: ClientRequestContext;
+  email: string;
+  code: string;
+  newPassword: string;
+  deviceId?: string;
+}
+
+export interface ChangePasswordInput {
+  userId: string;
+  client: ClientRequestContext;
+  currentPassword: string;
+  newPassword: string;
+  deviceId?: string;
+}
+
 export interface CreateLocalUserInput {
   email: string;
   firstName?: string;
@@ -171,6 +224,7 @@ export interface AuthUserRecord {
   id: string;
   email: string;
   passwordHash: string;
+  tokenVersion: number;
   firstName?: string;
   lastName?: string;
   role: string;

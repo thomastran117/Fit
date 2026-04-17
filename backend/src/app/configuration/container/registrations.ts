@@ -112,10 +112,11 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.tokenService,
     lifetime: "singleton",
-    dependencies: [containerTokens.cacheService],
+    dependencies: [containerTokens.cacheService, containerTokens.authRepository],
     resolve: ({ resolve }) =>
       new TokenService({
         cache: resolve(containerTokens.cacheService),
+        authRepository: resolve(containerTokens.authRepository),
       }),
   });
   container.register({

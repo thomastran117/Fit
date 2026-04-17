@@ -29,7 +29,7 @@ export class BookingsController {
   ) {}
 
   createForPosting = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const body = await parseRequestBody(context, createBookingRequestSchema);
     const result = await this.bookingsService.create(
       this.toCreateInput(this.requirePostingId(context), auth.sub, body),
@@ -38,7 +38,7 @@ export class BookingsController {
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const result = await this.bookingsService.listMine(
       this.toListMineInput(auth.sub, this.parseListQuery(context)),
     );
@@ -46,7 +46,7 @@ export class BookingsController {
   };
 
   listForOwnerPosting = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const result = await this.bookingsService.listForOwnerPosting(
       this.toListOwnerPostingInput(auth.sub, this.requirePostingId(context), this.parseListQuery(context)),
     );
@@ -54,7 +54,7 @@ export class BookingsController {
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const result = await this.bookingsService.getById(
       this.requireBookingRequestId(context),
       auth.sub,
@@ -63,7 +63,7 @@ export class BookingsController {
   };
 
   updateOwn = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const body = await parseRequestBody(context, updateBookingRequestSchema);
     const result = await this.bookingsService.updateOwnPending(
       this.toUpdateInput(this.requireBookingRequestId(context), auth.sub, body),
@@ -72,7 +72,7 @@ export class BookingsController {
   };
 
   approve = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const body = await parseRequestBody(context, decideBookingRequestSchema);
     const result = await this.bookingsService.approve(
       this.toDecisionInput(this.requireBookingRequestId(context), auth.sub, body),
@@ -81,7 +81,7 @@ export class BookingsController {
   };
 
   decline = async (context: Context<AppBindings>): Promise<Response> => {
-    const auth = this.requireAuth(context);
+    const auth = await this.requireAuth(context);
     const body = await parseRequestBody(context, decideBookingRequestSchema);
     const result = await this.bookingsService.decline(
       this.toDecisionInput(this.requireBookingRequestId(context), auth.sub, body),
@@ -213,7 +213,7 @@ export class BookingsController {
     return id;
   }
 
-  private requireAuth(context: Context<AppBindings>) {
+  private async requireAuth(context: Context<AppBindings>) {
     const authorization = context.req.header("authorization");
 
     if (!authorization) {

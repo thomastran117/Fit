@@ -1,4 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import UnauthorizedError from "@/errors/http/unauthorized.error";
+import type { AuthRepository } from "@/features/auth/auth.repository";
 import type { CacheService } from "@/features/cache/cache.service";
 
 type RefreshTokenMode = "stateless" | "stateful";
@@ -37,6 +39,7 @@ interface StatefulRefreshSession extends RefreshTokenClaims {
 
 interface TokenServiceOptions {
   cache: CacheService;
+  authRepository: AuthRepository;
   accessTokenSecret?: string;
   refreshTokenSecret?: string;
   accessTokenTtlSeconds?: number;
@@ -96,6 +99,7 @@ function safeEquals(left: string, right: string): boolean {
 
 export class TokenService {
   private readonly cache: CacheService;
+  private readonly authRepository: AuthRepository;
   private readonly accessTokenSecret?: string;
   private readonly refreshTokenSecret?: string;
   private readonly accessTokenTtlSeconds?: number;
@@ -107,6 +111,7 @@ export class TokenService {
 
   constructor(options: TokenServiceOptions) {
     this.cache = options.cache;
+    this.authRepository = options.authRepository;
     this.accessTokenSecret = options.accessTokenSecret;
     this.refreshTokenSecret = options.refreshTokenSecret;
     this.accessTokenTtlSeconds = options.accessTokenTtlSeconds;
@@ -130,8 +135,10 @@ export class TokenService {
     return this.signJwt(claims);
   }
 
-  verifyAccessToken(token: string): JwtClaims {
-    return this.verifyJwt(token);
+  async verifyAccessToken(token: string): Promise<JwtClaims> {
+    const claims = this.verifyJwt(token);
+    await this.assertTokenVersionIsCurrent(claims.sub, claims.tokenVersion);
+    return claims;
   }
 
   getAccessTokenExpiresInSeconds(): number {
@@ -152,10 +159,14 @@ export class TokenService {
 
   async verifyRefreshToken(token: string): Promise<RefreshTokenClaims> {
     if (this.getRefreshTokenMode() === "stateful") {
-      return this.verifyStatefulRefreshToken(token);
+      const claims = await this.verifyStatefulRefreshToken(token);
+      await this.assertTokenVersionIsCurrent(claims.sub, claims.tokenVersion);
+      return claims;
     }
 
-    return this.verifyStatelessRefreshToken(token);
+    const claims = this.verifyStatelessRefreshToken(token);
+    await this.assertTokenVersionIsCurrent(claims.sub, claims.tokenVersion);
+    return claims;
   }
 
   async revokeRefreshToken(token: string): Promise<boolean> {
@@ -325,6 +336,22 @@ export class TokenService {
 
     if (claims.exp <= now) {
       throw new Error("Refresh token has expired.");
+    }
+  }
+
+  private async assertTokenVersionIsCurrent(
+    userId: string,
+    tokenVersion?: string | number | boolean | null,
+  ): Promise<void> {
+    const currentTokenVersion = await this.authRepository.findTokenVersionByUserId(userId);
+    const normalizedTokenVersion = typeof tokenVersion === "number" ? tokenVersion : 0;
+
+    if (currentTokenVersion === null) {
+      throw new UnauthorizedError("Authenticated user could not be found.");
+    }
+
+    if (normalizedTokenVersion !== currentTokenVersion) {
+      throw new UnauthorizedError("Session is no longer valid.");
     }
   }
 
