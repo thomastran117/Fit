@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { publicEnv } from "@/lib/env";
 import { authApi } from "@/lib/auth/api";
 import type { AuthResponseBody } from "@/lib/auth/types";
@@ -25,8 +25,15 @@ interface MicrosoftTokenResponse {
   error_description?: string;
 }
 
-const MICROSOFT_SCOPE = "openid email profile";
-const GOOGLE_SCOPE = "openid email profile";
+interface ProviderButtonConfig {
+  provider: OAuthProvider;
+  label: string;
+  pendingLabel: string;
+  enabled: boolean;
+  icon: ReactNode;
+}
+
+const OAUTH_SCOPE = "openid email profile";
 
 function createRandomString(): string {
   const bytes = new Uint8Array(16);
@@ -76,6 +83,42 @@ function parsePopupPayload(rawPayload: string): PopupAuthResult {
   };
 }
 
+function getProviderAuthorizeUrl(provider: OAuthProvider): string {
+  if (provider === "google") {
+    return "https://accounts.google.com/o/oauth2/v2/auth";
+  }
+
+  return `https://login.microsoftonline.com/${publicEnv.microsoftOAuthTenant}/oauth2/v2.0/authorize`;
+}
+
+function buildProviderParams(
+  provider: OAuthProvider,
+  state: string,
+  nonce: string,
+  redirectUri: string,
+  codeChallenge: string,
+): URLSearchParams {
+  const params = new URLSearchParams({
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: OAUTH_SCOPE,
+    prompt: "select_account",
+    nonce,
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+  });
+
+  if (provider === "google") {
+    params.set("client_id", publicEnv.googleOAuthClientId);
+    return params;
+  }
+
+  params.set("client_id", publicEnv.microsoftOAuthClientId);
+  params.set("response_mode", "query");
+  return params;
+}
+
 async function buildOAuthUrl(
   provider: OAuthProvider,
   state: string,
@@ -84,37 +127,13 @@ async function buildOAuthUrl(
 ): Promise<string> {
   const redirectUri = `${window.location.origin}/auth/${provider}`;
   const codeChallenge = await createPkceChallenge(codeVerifier);
+  const params = buildProviderParams(provider, state, nonce, redirectUri, codeChallenge);
 
-  if (provider === "google") {
-    const params = new URLSearchParams({
-      client_id: publicEnv.googleOAuthClientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: GOOGLE_SCOPE,
-      prompt: "select_account",
-      nonce,
-      state,
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-    });
+  return `${getProviderAuthorizeUrl(provider)}?${params.toString()}`;
+}
 
-      return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-  }
-
-  const params = new URLSearchParams({
-    client_id: publicEnv.microsoftOAuthClientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    response_mode: "query",
-    scope: MICROSOFT_SCOPE,
-    prompt: "select_account",
-    nonce,
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: "S256",
-  });
-
-  return `https://login.microsoftonline.com/${publicEnv.microsoftOAuthTenant}/oauth2/v2.0/authorize?${params.toString()}`;
+function getProviderDisplayName(provider: OAuthProvider): string {
+  return provider === "google" ? "Google" : "Microsoft";
 }
 
 function readProviderError(provider: OAuthProvider, payload: PopupAuthResult): string {
@@ -123,10 +142,10 @@ function readProviderError(provider: OAuthProvider, payload: PopupAuthResult): s
   }
 
   if (payload.error) {
-    return `${provider === "google" ? "Google" : "Microsoft"} sign-in failed: ${payload.error}.`;
+    return `${getProviderDisplayName(provider)} sign-in failed: ${payload.error}.`;
   }
 
-  return `${provider === "google" ? "Google" : "Microsoft"} sign-in could not be completed.`;
+  return `${getProviderDisplayName(provider)} sign-in could not be completed.`;
 }
 
 async function exchangeMicrosoftCodeForIdToken(
@@ -140,7 +159,7 @@ async function exchangeMicrosoftCodeForIdToken(
     grant_type: "authorization_code",
     code,
     code_verifier: codeVerifier,
-    scope: MICROSOFT_SCOPE,
+    scope: OAUTH_SCOPE,
   });
   const response = await fetch(tokenUrl, {
     method: "POST",
@@ -167,7 +186,7 @@ async function exchangeMicrosoftCodeForIdToken(
   return payload.id_token;
 }
 
-function authenticateWithProvider(
+async function authenticateWithProvider(
   provider: OAuthProvider,
   input: { code?: string; codeVerifier?: string; idToken?: string },
   nonce: string,
@@ -204,7 +223,7 @@ async function openProviderPopup(
     throw new Error("Your browser blocked the sign-in popup. Please allow popups and try again.");
   }
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     let finished = false;
 
     const cleanup = () => {
@@ -262,22 +281,22 @@ async function openProviderPopup(
 
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
       <path
-        fill="#EA4335"
-        d="M12.24 10.285v3.955h5.497c-.222 1.273-1.717 3.734-5.497 3.734-3.309 0-6.004-2.739-6.004-6.119s2.695-6.119 6.004-6.119c1.884 0 3.145.803 3.869 1.495l2.64-2.551C17.064 3.107 14.889 2 12.24 2 6.973 2 2.7 6.273 2.7 11.855s4.273 9.855 9.54 9.855c5.507 0 9.16-3.872 9.16-9.326 0-.627-.067-1.107-.151-1.599H12.24Z"
+        fill="#4285F4"
+        d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.55-5.16 3.55-8.65Z"
       />
       <path
         fill="#34A853"
-        d="M3.802 7.683 7.05 10.06c.879-1.747 2.702-2.956 5.19-2.956 1.884 0 3.145.803 3.869 1.495l2.64-2.551C17.064 3.107 14.889 2 12.24 2c-3.664 0-6.807 2.094-8.438 5.683Z"
+        d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.73-2.46 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.27v3.09A12 12 0 0 0 12 24Z"
       />
       <path
         fill="#FBBC05"
-        d="M2.7 11.855c0 1.544.369 2.998 1.024 4.286l3.49-2.69a6.04 6.04 0 0 1-.214-1.596c0-.554.076-1.095.214-1.596l-3.49-2.69A9.795 9.795 0 0 0 2.7 11.855Z"
+        d="M5.27 14.29A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.55.38-2.29V6.62H1.27A12 12 0 0 0 0 12c0 1.94.46 3.78 1.27 5.38l4-3.09Z"
       />
       <path
-        fill="#4285F4"
-        d="M12.24 21.71c2.649 0 4.874-.87 6.499-2.366l-3.184-2.612c-.853.599-1.995 1.02-3.315 1.02-2.473 0-4.285-1.671-5.185-3.918l-3.463 2.671C5.212 19.643 8.454 21.71 12.24 21.71Z"
+        fill="#EA4335"
+        d="M12 4.75c1.76 0 3.34.61 4.58 1.8l3.43-3.43C17.95 1.19 15.23 0 12 0A12 12 0 0 0 1.27 6.62l4 3.09c.95-2.85 3.6-4.96 6.73-4.96Z"
       />
     </svg>
   );
@@ -285,20 +304,62 @@ function GoogleIcon() {
 
 function MicrosoftIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path fill="#F25022" d="M3 3h8.5v8.5H3z" />
-      <path fill="#7FBA00" d="M12.5 3H21v8.5h-8.5z" />
-      <path fill="#00A4EF" d="M3 12.5h8.5V21H3z" />
-      <path fill="#FFB900" d="M12.5 12.5H21V21h-8.5z" />
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
+      <path fill="#F25022" d="M2 2h9.5v9.5H2z" />
+      <path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z" />
+      <path fill="#00A4EF" d="M2 12.5h9.5V22H2z" />
+      <path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z" />
     </svg>
+  );
+}
+
+interface OAuthProviderButtonProps {
+  config: ProviderButtonConfig;
+  pending: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}
+
+function OAuthProviderButton({
+  config,
+  pending,
+  disabled,
+  onClick,
+}: OAuthProviderButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <span className="flex min-w-0 items-center justify-center gap-3 text-center">
+        {config.icon}
+        <span>{pending ? config.pendingLabel : config.label}</span>
+      </span>
+    </button>
   );
 }
 
 export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) {
   const [pendingProvider, setPendingProvider] = useState<OAuthProvider | null>(null);
 
-  const googleEnabled = Boolean(publicEnv.googleOAuthClientId);
-  const microsoftEnabled = Boolean(publicEnv.microsoftOAuthClientId);
+  const providerConfigs: ProviderButtonConfig[] = [
+    {
+      provider: "google",
+      label: "Continue with Google",
+      pendingLabel: "Connecting to Google...",
+      enabled: Boolean(publicEnv.googleOAuthClientId),
+      icon: <GoogleIcon />,
+    },
+    {
+      provider: "microsoft",
+      label: "Continue with Microsoft",
+      pendingLabel: "Connecting to Microsoft...",
+      enabled: Boolean(publicEnv.microsoftOAuthClientId),
+      icon: <MicrosoftIcon />,
+    },
+  ].filter((provider) => provider.enabled);
 
   async function handleProviderClick(provider: OAuthProvider) {
     setPendingProvider(provider);
@@ -318,11 +379,8 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
               code: result.code,
               codeVerifier: result.codeVerifier,
             };
-      const session = await authenticateWithProvider(
-        provider,
-        providerInput,
-        result.nonce,
-      );
+
+      const session = await authenticateWithProvider(provider, providerInput, result.nonce);
       onSuccess(session);
     } catch (error) {
       onError(error instanceof Error ? error.message : "OAuth sign-in could not be completed.");
@@ -331,64 +389,33 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
     }
   }
 
-  if (!googleEnabled && !microsoftEnabled) {
+  if (!providerConfigs.length) {
     return null;
   }
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        {googleEnabled ? (
-          <button
-            type="button"
-            onClick={() => handleProviderClick("google")}
-            disabled={pendingProvider !== null}
-            className="group inline-flex h-14 w-full cursor-pointer items-center justify-between rounded-[1.35rem] border border-slate-200 bg-white/95 px-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-[0_18px_40px_rgba(234,67,53,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-                <GoogleIcon />
-              </span>
-              <span className="space-y-0.5">
-                <span className="block text-sm font-semibold text-slate-900">
-                  {pendingProvider === "google" ? "Connecting to Google..." : "Google"}
-                </span>
-                <span className="block text-xs text-slate-500">
-                  Continue with your Google account
-                </span>
-              </span>
-            </span>
-            <span className="text-sm font-semibold text-rose-500 transition group-hover:text-rose-600">
-              Go
-            </span>
-          </button>
-        ) : null}
+    <div className="space-y-4">
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200" />
+        </div>
+        <div className="relative flex justify-center">
+          <span className="bg-white px-3 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+            Or continue with
+          </span>
+        </div>
+      </div>
 
-        {microsoftEnabled ? (
-          <button
-            type="button"
-            onClick={() => handleProviderClick("microsoft")}
+      <div className="grid gap-3">
+        {providerConfigs.map((config) => (
+          <OAuthProviderButton
+            key={config.provider}
+            config={config}
+            pending={pendingProvider === config.provider}
             disabled={pendingProvider !== null}
-            className="group inline-flex h-14 w-full cursor-pointer items-center justify-between rounded-[1.35rem] border border-slate-200 bg-white/95 px-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_18px_40px_rgba(14,165,233,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-                <MicrosoftIcon />
-              </span>
-              <span className="space-y-0.5">
-                <span className="block text-sm font-semibold text-slate-900">
-                  {pendingProvider === "microsoft" ? "Connecting to Microsoft..." : "Microsoft"}
-                </span>
-                <span className="block text-xs text-slate-500">
-                  Continue with your Microsoft account
-                </span>
-              </span>
-            </span>
-            <span className="text-sm font-semibold text-sky-500 transition group-hover:text-sky-600">
-              Go
-            </span>
-          </button>
-        ) : null}
+            onClick={() => void handleProviderClick(config.provider)}
+          />
+        ))}
       </div>
     </div>
   );
