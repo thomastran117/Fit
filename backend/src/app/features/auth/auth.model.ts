@@ -70,6 +70,10 @@ export const resendUnlockLocalLoginRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
 });
 
+export const refreshRequestSchema = z.object({
+  refreshToken: optionalTrimmedString,
+});
+
 export const forgotPasswordRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   captchaToken: z.string().trim().min(1, "Captcha token is required."),
@@ -112,6 +116,8 @@ export type UnlockLocalLoginRequestBody = z.infer<typeof unlockLocalLoginRequest
 export type ResendUnlockLocalLoginRequestBody = z.infer<
   typeof resendUnlockLocalLoginRequestSchema
 >;
+
+export type RefreshRequestBody = z.infer<typeof refreshRequestSchema>;
 
 export type RemoveKnownDeviceRequestBody = z.infer<typeof removeKnownDeviceRequestSchema>;
 
@@ -168,6 +174,11 @@ export interface UnlockLocalLoginInput {
 
 export interface ResendUnlockLocalLoginInput {
   email: string;
+}
+
+export interface RefreshInput {
+  client: ClientRequestContext;
+  refreshToken?: string;
 }
 
 export interface RemoveKnownDeviceInput {

@@ -19,6 +19,7 @@ import {
   type LocalAuthenticateInput,
   type LocalSignupInput,
   type OAuthAuthenticateInput,
+  type RefreshInput,
   type ResetPasswordInput,
   type RemoveKnownDeviceInput,
   type ResendForgotPasswordInput,
@@ -364,10 +365,17 @@ export class AuthService {
     return this.authenticateOAuthProfile(profile, input);
   }
 
-  async refresh(): Promise<{ refreshed: true }> {
-    return {
-      refreshed: true,
-    };
+  async refresh(input: RefreshInput): Promise<AuthSessionResult> {
+    if (!input.refreshToken) {
+      throw new UnauthorizedError("Refresh token is required.");
+    }
+
+    const claims = await this.tokenService.verifyRefreshToken(input.refreshToken);
+    const user = await this.requireExistingUser(claims.sub);
+    const deviceId = claims.deviceId ?? input.client.device.id;
+    const deviceStatus = await this.deviceService.registerKnownDevice(user, input.client, deviceId);
+
+    return this.issueTokensForUser(user, deviceStatus, deviceId);
   }
 
   async logout(context: AuthRequestContext): Promise<{

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { setCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { parseRequestBody } from "@/configuration/validation/request";
@@ -20,6 +20,8 @@ import type {
   LocalSignupRequestBody,
   OAuthAuthenticateInput,
   OAuthAuthenticateRequestBody,
+  RefreshInput,
+  RefreshRequestBody,
   ResetPasswordInput,
   ResetPasswordRequestBody,
   RemoveKnownDeviceInput,
@@ -42,6 +44,7 @@ import {
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
+  refreshRequestSchema,
   removeKnownDeviceRequestSchema,
   resendForgotPasswordRequestSchema,
   resendUnlockLocalLoginRequestSchema,
@@ -168,8 +171,9 @@ export class AuthController {
   };
 
   refresh = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.authService.refresh();
-    return context.json(result);
+    const input = await parseRequestBody(context, refreshRequestSchema);
+    const result = await this.authService.refresh(this.toRefreshInput(context, input));
+    return this.json(context, result);
   };
 
   logout = async (context: Context<AppBindings>): Promise<Response> => {
@@ -301,6 +305,16 @@ export class AuthController {
   ): ResendForgotPasswordInput {
     return {
       email: input.email,
+    };
+  }
+
+  private toRefreshInput(
+    context: Context<AppBindings>,
+    input: RefreshRequestBody,
+  ): RefreshInput {
+    return {
+      client: context.get("client"),
+      refreshToken: input.refreshToken ?? getCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME),
     };
   }
 

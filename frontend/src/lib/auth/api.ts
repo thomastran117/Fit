@@ -1,6 +1,6 @@
 import { publicEnv } from "@/lib/env";
 import { getDeviceId, getDevicePlatform } from "@/lib/auth/device";
-import { readStoredSession } from "@/lib/auth/storage";
+import { clearStoredSession, readStoredSession, writeStoredSession } from "@/lib/auth/storage";
 import {
   ApiError,
   type ApiErrorResponse,
@@ -74,6 +74,8 @@ interface ChangePasswordInput {
   deviceId?: string;
 }
 
+let refreshSessionPromise: Promise<AuthResponseBody | null> | null = null;
+
 async function readJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
 
@@ -121,6 +123,14 @@ async function postAuthenticatedJson<TResponse, TBody extends object = object>(
   path: string,
   body: TBody,
 ): Promise<TResponse> {
+  return postAuthenticatedJsonWithRetry(path, body, true);
+}
+
+async function postAuthenticatedJsonWithRetry<TResponse, TBody extends object = object>(
+  path: string,
+  body: TBody,
+  allowRefreshRetry: boolean,
+): Promise<TResponse> {
   const deviceId = getDeviceId();
   const devicePlatform = getDevicePlatform();
   const session = readStoredSession();
@@ -139,6 +149,14 @@ async function postAuthenticatedJson<TResponse, TBody extends object = object>(
 
   const payload = await readJson(response);
 
+  if (response.status === 401 && allowRefreshRetry) {
+    const refreshedSession = await refreshStoredSession();
+
+    if (refreshedSession) {
+      return postAuthenticatedJsonWithRetry(path, body, false);
+    }
+  }
+
   if (!response.ok) {
     const errorPayload = (payload ?? {}) as Partial<ApiErrorResponse>;
     throw new ApiError(
@@ -152,6 +170,48 @@ async function postAuthenticatedJson<TResponse, TBody extends object = object>(
   return payload as TResponse;
 }
 
+async function refreshStoredSession(): Promise<AuthResponseBody | null> {
+  if (refreshSessionPromise) {
+    return refreshSessionPromise;
+  }
+
+  refreshSessionPromise = (async () => {
+    const session = readStoredSession();
+    const deviceId = getDeviceId();
+    const devicePlatform = getDevicePlatform();
+    const response = await fetch(`${publicEnv.apiBaseUrl}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        ...(deviceId ? { "x-device-id": deviceId } : {}),
+        ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        ...(session?.refreshToken ? { refreshToken: session.refreshToken } : {}),
+      }),
+    });
+
+    const payload = await readJson(response);
+
+    if (!response.ok) {
+      clearStoredSession();
+      return null;
+    }
+
+    const nextSession = payload as AuthResponseBody;
+    writeStoredSession(nextSession);
+    return nextSession;
+  })();
+
+  try {
+    return await refreshSessionPromise;
+  } finally {
+    refreshSessionPromise = null;
+  }
+}
+
 export const authApi = {
   login(input: LoginInput): Promise<AuthResponseBody> {
     return postJson<AuthResponseBody>("/auth/local/login", {
@@ -161,6 +221,9 @@ export const authApi = {
   },
   logout(): Promise<{ loggedOut: true }> {
     return postJson<{ loggedOut: true }>("/auth/logout", {});
+  },
+  refresh(): Promise<AuthResponseBody | null> {
+    return refreshStoredSession();
   },
   authenticateWithGoogle(input: OAuthAuthenticateInput): Promise<AuthResponseBody> {
     return postJson<AuthResponseBody>("/auth/oauth/google", {
