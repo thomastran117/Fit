@@ -293,6 +293,7 @@ export interface AuthResponseUser {
   id: string;
   email: string;
   username: string;
+  avatarUrl?: string;
 }
 
 export interface AuthResponseBody {

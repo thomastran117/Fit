@@ -389,6 +389,7 @@ export class AuthController {
         id: result.user.id,
         email: result.user.email,
         username: result.user.username,
+        avatarUrl: result.user.avatarUrl,
       },
     };
 
