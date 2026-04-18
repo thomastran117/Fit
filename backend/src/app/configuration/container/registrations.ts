@@ -85,9 +85,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.appleOAuthService,
     lifetime: "transient",
-    dependencies: [containerTokens.oauthTokenVerifier],
-    resolve: ({ resolve }) =>
-      new AppleOAuthService(resolve(containerTokens.oauthTokenVerifier)),
+    dependencies: [],
+    resolve: () => new AppleOAuthService(),
   });
   container.register({
     token: containerTokens.deviceRepository,
@@ -113,10 +112,11 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.tokenService,
     lifetime: "singleton",
-    dependencies: [containerTokens.cacheService],
+    dependencies: [containerTokens.cacheService, containerTokens.authRepository],
     resolve: ({ resolve }) =>
       new TokenService({
         cache: resolve(containerTokens.cacheService),
+        authRepository: resolve(containerTokens.authRepository),
       }),
   });
   container.register({
@@ -137,6 +137,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.googleOAuthService,
       containerTokens.microsoftOAuthService,
       containerTokens.appleOAuthService,
+      containerTokens.cacheService,
     ],
     resolve: ({ resolve }) =>
       new AuthService(
@@ -148,6 +149,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.googleOAuthService),
         resolve(containerTokens.microsoftOAuthService),
         resolve(containerTokens.appleOAuthService),
+        resolve(containerTokens.cacheService),
       ),
   });
   container.register({

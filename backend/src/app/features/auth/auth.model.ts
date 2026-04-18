@@ -19,12 +19,37 @@ export const localAuthenticateRequestSchema = z.object({
   deviceId: optionalTrimmedString,
 });
 
-export const oauthAuthenticateRequestSchema = z.object({
-  idToken: z.string().trim().min(1, "ID token is required."),
-  deviceId: optionalTrimmedString,
-  firstName: optionalTrimmedString,
-  lastName: optionalTrimmedString,
-});
+export const oauthAuthenticateRequestSchema = z
+  .object({
+    code: optionalTrimmedString,
+    codeVerifier: optionalTrimmedString,
+    idToken: optionalTrimmedString,
+    nonce: z.string().trim().min(1, "Nonce is required."),
+    deviceId: optionalTrimmedString,
+    firstName: optionalTrimmedString,
+    lastName: optionalTrimmedString,
+  })
+  .superRefine((input, context) => {
+    if (input.idToken) {
+      return;
+    }
+
+    if (!input.code) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Authorization code is required.",
+        path: ["code"],
+      });
+    }
+
+    if (!input.codeVerifier) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Code verifier is required.",
+        path: ["codeVerifier"],
+      });
+    }
+  });
 
 export const verifyEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
@@ -34,6 +59,40 @@ export const verifyEmailRequestSchema = z.object({
 
 export const resendVerificationEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
+});
+
+export const unlockLocalLoginRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  code: z.string().trim().regex(/^\d{6}$/, "Unlock code must be 6 digits."),
+});
+
+export const resendUnlockLocalLoginRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+});
+
+export const refreshRequestSchema = z.object({
+  refreshToken: optionalTrimmedString,
+});
+
+export const forgotPasswordRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  captchaToken: z.string().trim().min(1, "Captcha token is required."),
+});
+
+export const resendForgotPasswordRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+});
+
+export const resetPasswordRequestSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  code: z.string().trim().regex(/^\d{6}$/, "Reset code must be 6 digits."),
+  newPassword: z.string().min(8, "Password must be at least 8 characters long."),
+  deviceId: optionalTrimmedString,
+});
+
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required."),
+  newPassword: z.string().min(8, "Password must be at least 8 characters long."),
 });
 
 export const removeKnownDeviceRequestSchema = z.object({
@@ -52,7 +111,23 @@ export type ResendVerificationEmailRequestBody = z.infer<
   typeof resendVerificationEmailRequestSchema
 >;
 
+export type UnlockLocalLoginRequestBody = z.infer<typeof unlockLocalLoginRequestSchema>;
+
+export type ResendUnlockLocalLoginRequestBody = z.infer<
+  typeof resendUnlockLocalLoginRequestSchema
+>;
+
+export type RefreshRequestBody = z.infer<typeof refreshRequestSchema>;
+
 export type RemoveKnownDeviceRequestBody = z.infer<typeof removeKnownDeviceRequestSchema>;
+
+export type ForgotPasswordRequestBody = z.infer<typeof forgotPasswordRequestSchema>;
+
+export type ResendForgotPasswordRequestBody = z.infer<typeof resendForgotPasswordRequestSchema>;
+
+export type ResetPasswordRequestBody = z.infer<typeof resetPasswordRequestSchema>;
+
+export type ChangePasswordRequestBody = z.infer<typeof changePasswordRequestSchema>;
 
 export interface LocalAuthenticateInput {
   client: ClientRequestContext;
@@ -62,6 +137,7 @@ export interface LocalAuthenticateInput {
 }
 
 export interface LocalSignupInput {
+  client: ClientRequestContext;
   email: string;
   password: string;
   firstName?: string;
@@ -71,7 +147,10 @@ export interface LocalSignupInput {
 
 export interface OAuthAuthenticateInput {
   client: ClientRequestContext;
-  idToken: string;
+  code?: string;
+  codeVerifier?: string;
+  idToken?: string;
+  nonce: string;
   deviceId?: string;
   firstName?: string;
   lastName?: string;
@@ -88,9 +167,47 @@ export interface ResendVerificationEmailInput {
   email: string;
 }
 
+export interface UnlockLocalLoginInput {
+  email: string;
+  code: string;
+}
+
+export interface ResendUnlockLocalLoginInput {
+  email: string;
+}
+
+export interface RefreshInput {
+  client: ClientRequestContext;
+  refreshToken?: string;
+}
+
 export interface RemoveKnownDeviceInput {
   userId: string;
   deviceId: string;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResendForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  client: ClientRequestContext;
+  email: string;
+  code: string;
+  newPassword: string;
+  deviceId?: string;
+}
+
+export interface ChangePasswordInput {
+  userId: string;
+  client: ClientRequestContext;
+  currentPassword: string;
+  newPassword: string;
+  deviceId?: string;
 }
 
 export interface CreateLocalUserInput {
@@ -118,6 +235,7 @@ export interface AuthUserRecord {
   id: string;
   email: string;
   passwordHash: string;
+  tokenVersion: number;
   firstName?: string;
   lastName?: string;
   role: string;

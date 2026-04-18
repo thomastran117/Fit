@@ -2,18 +2,20 @@ import { getOptionalEnvironmentVariable } from "@/configuration/environment";
 import BadRequestError from "@/errors/http/bad-request.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { OAuthTokenVerifier } from "@/features/auth/oauth/oauth-token-verifier";
+import { assertTrustedOutboundUrl } from "@/features/security/outbound-request-guard";
 import type {
   OAuthAuthenticateInput,
   VerifiedOAuthProfile,
 } from "@/features/auth/oauth/oauth.types";
 
-const MICROSOFT_JWKS_URL = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
 const MICROSOFT_JWKS_ALLOWED_HOSTS = ["login.microsoftonline.com"];
-const MICROSOFT_ISSUERS = [
-  "https://login.microsoftonline.com/common/v2.0",
-  "https://login.microsoftonline.com/consumers/v2.0",
-  "https://login.microsoftonline.com/organizations/v2.0",
-];
+const MICROSOFT_TOKEN_ALLOWED_HOSTS = ["login.microsoftonline.com"];
+
+interface MicrosoftTokenResponse {
+  id_token?: string;
+  error?: string;
+  error_description?: string;
+}
 
 function readAudiences(): string[] {
   const value =
@@ -28,6 +30,48 @@ function readAudiences(): string[] {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function readPrimaryClientId(): string {
+  const [clientId] = readAudiences();
+
+  if (!clientId) {
+    throw new BadRequestError("Microsoft OAuth is not configured.");
+  }
+
+  return clientId;
+}
+
+function readClientSecret(): string | undefined {
+  return getOptionalEnvironmentVariable("MICROSOFT_OAUTH_CLIENT_SECRET");
+}
+
+function readTenant(): string {
+  return getOptionalEnvironmentVariable("MICROSOFT_OAUTH_TENANT")?.trim() || "consumers";
+}
+
+function buildJwksUrl(tenant: string): string {
+  return `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`;
+}
+
+function buildAllowedIssuers(tenant: string): string[] {
+  if (tenant === "common") {
+    return [
+      "https://login.microsoftonline.com/common/v2.0",
+      "https://login.microsoftonline.com/consumers/v2.0",
+      "https://login.microsoftonline.com/organizations/v2.0",
+    ];
+  }
+
+  return [`https://login.microsoftonline.com/${tenant}/v2.0`];
+}
+
+function readFrontendBaseUrl(): string {
+  return (
+    getOptionalEnvironmentVariable("FRONTEND_URL") ??
+    getOptionalEnvironmentVariable("APP_BASE_URL") ??
+    "http://localhost:3040"
+  ).replace(/\/+$/, "");
 }
 
 function splitName(name?: string): { firstName?: string; lastName?: string } {
@@ -55,11 +99,14 @@ class MicrosoftOAuthService {
   constructor(private readonly tokenVerifier: OAuthTokenVerifier) {}
 
   async verify(input: OAuthAuthenticateInput): Promise<VerifiedOAuthProfile> {
-    const payload = await this.tokenVerifier.verifyIdToken(input.idToken, {
-      issuer: MICROSOFT_ISSUERS,
+    const tenant = readTenant();
+    const idToken = input.idToken ?? (await this.exchangeCodeForIdToken(input));
+    const payload = await this.tokenVerifier.verifyIdToken(idToken, {
+      issuer: buildAllowedIssuers(tenant),
       audience: readAudiences(),
-      jwksUrl: MICROSOFT_JWKS_URL,
+      jwksUrl: buildJwksUrl(tenant),
       allowedHosts: MICROSOFT_JWKS_ALLOWED_HOSTS,
+      nonce: input.nonce,
     });
 
     const emailClaim =
@@ -83,6 +130,58 @@ class MicrosoftOAuthService {
       firstName: input.firstName ?? tokenNames.firstName,
       lastName: input.lastName ?? tokenNames.lastName,
     };
+  }
+
+  private async exchangeCodeForIdToken(input: OAuthAuthenticateInput): Promise<string> {
+    if (!input.code || !input.codeVerifier) {
+      throw new BadRequestError("Microsoft authorization code exchange is missing PKCE inputs.");
+    }
+
+    const tenant = readTenant();
+    const tokenUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
+    const body = new URLSearchParams({
+      code: input.code,
+      client_id: readPrimaryClientId(),
+      redirect_uri: `${readFrontendBaseUrl()}/auth/microsoft`,
+      grant_type: "authorization_code",
+      code_verifier: input.codeVerifier,
+      scope: "openid email profile",
+    });
+    const clientSecret = readClientSecret();
+
+    if (clientSecret) {
+      body.set("client_secret", clientSecret);
+    }
+
+    const response = await fetch(
+      assertTrustedOutboundUrl(tokenUrl, {
+        allowedHosts: MICROSOFT_TOKEN_ALLOWED_HOSTS,
+      }),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "application/json",
+        },
+        body,
+      },
+    );
+
+    const payload = (await response.json()) as MicrosoftTokenResponse;
+
+    if (!response.ok) {
+      throw new UnauthorizedError(
+        payload.error_description ||
+          payload.error ||
+          "Microsoft authorization code exchange failed.",
+      );
+    }
+
+    if (!payload.id_token) {
+      throw new UnauthorizedError("Microsoft token response did not include an ID token.");
+    }
+
+    return payload.id_token;
   }
 }
 

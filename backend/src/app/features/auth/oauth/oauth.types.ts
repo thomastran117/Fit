@@ -1,7 +1,10 @@
 export type OAuthProvider = "google" | "microsoft" | "apple";
 
 export interface OAuthAuthenticateInput {
-  idToken: string;
+  code?: string;
+  codeVerifier?: string;
+  idToken?: string;
+  nonce: string;
   deviceId?: string;
   firstName?: string;
   lastName?: string;

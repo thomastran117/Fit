@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { parseRequestBody } from "@/configuration/validation/request";
@@ -10,26 +10,47 @@ import { TokenService } from "@/features/auth/token/token.service";
 import type {
   AuthResponseBody,
   AuthSessionResult,
+  ChangePasswordInput,
+  ChangePasswordRequestBody,
+  ForgotPasswordInput,
+  ForgotPasswordRequestBody,
   LocalAuthenticateInput,
   LocalAuthenticateRequestBody,
   LocalSignupInput,
   LocalSignupRequestBody,
   OAuthAuthenticateInput,
   OAuthAuthenticateRequestBody,
+  RefreshInput,
+  RefreshRequestBody,
+  ResetPasswordInput,
+  ResetPasswordRequestBody,
   RemoveKnownDeviceInput,
   RemoveKnownDeviceRequestBody,
+  ResendForgotPasswordInput,
+  ResendForgotPasswordRequestBody,
+  ResendUnlockLocalLoginInput,
+  ResendUnlockLocalLoginRequestBody,
   ResendVerificationEmailInput,
   ResendVerificationEmailRequestBody,
   SignupVerificationPendingResult,
+  UnlockLocalLoginInput,
+  UnlockLocalLoginRequestBody,
   VerifyEmailInput,
   VerifyEmailRequestBody,
 } from "@/features/auth/auth.model";
 import {
+  changePasswordRequestSchema,
+  forgotPasswordRequestSchema,
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
+  refreshRequestSchema,
   removeKnownDeviceRequestSchema,
+  resendForgotPasswordRequestSchema,
+  resendUnlockLocalLoginRequestSchema,
+  resetPasswordRequestSchema,
   resendVerificationEmailRequestSchema,
+  unlockLocalLoginRequestSchema,
   verifyEmailRequestSchema,
 } from "@/features/auth/auth.model";
 
@@ -60,6 +81,27 @@ export class AuthController {
     return context.json(result, 202);
   };
 
+  forgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, forgotPasswordRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
+    const result = await this.authService.forgotPassword(this.toForgotPasswordInput(input));
+    return context.json(result, 202);
+  };
+
+  resendForgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resendForgotPasswordRequestSchema);
+    const result = await this.authService.resendForgotPassword(
+      this.toResendForgotPasswordInput(input),
+    );
+    return context.json(result, 202);
+  };
+
+  resetPassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resetPasswordRequestSchema);
+    const result = await this.authService.resetPassword(this.toResetPasswordInput(context, input));
+    return this.json(context, result);
+  };
+
   verifyEmail = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, verifyEmailRequestSchema);
     const result = await this.authService.verifyEmail(this.toVerifyEmailInput(context, input));
@@ -70,6 +112,28 @@ export class AuthController {
     const input = await parseRequestBody(context, resendVerificationEmailRequestSchema);
     const result = await this.authService.resendVerificationEmail(
       this.toResendVerificationEmailInput(input),
+    );
+    return context.json(result, 202);
+  };
+
+  changePassword = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, changePasswordRequestSchema);
+    const result = await this.authService.changePassword(
+      this.toChangePasswordInput(context, input),
+    );
+    return this.json(context, result);
+  };
+
+  unlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, unlockLocalLoginRequestSchema);
+    const result = await this.authService.unlockLocalLogin(this.toUnlockLocalLoginInput(input));
+    return context.json(result);
+  };
+
+  resendUnlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
+    const input = await parseRequestBody(context, resendUnlockLocalLoginRequestSchema);
+    const result = await this.authService.resendUnlockLocalLogin(
+      this.toResendUnlockLocalLoginInput(input),
     );
     return context.json(result, 202);
   };
@@ -107,15 +171,25 @@ export class AuthController {
   };
 
   refresh = async (context: Context<AppBindings>): Promise<Response> => {
-    const result = await this.authService.refresh();
-    return context.json(result);
+    const input = await parseRequestBody(context, refreshRequestSchema);
+    const result = await this.authService.refresh(this.toRefreshInput(context, input));
+    return this.json(context, result);
   };
 
   logout = async (context: Context<AppBindings>): Promise<Response> => {
     const result = await this.authService.logout({
       auth: context.get("auth"),
       client: context.get("client"),
+      refreshToken: getCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME),
     });
+
+    deleteCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME, {
+      path: "/",
+      httpOnly: true,
+      secure: this.isSecureCookieEnabled(),
+      sameSite: "Lax",
+    });
+
     return context.json(result);
   };
 
@@ -180,6 +254,7 @@ export class AuthController {
     input: LocalSignupRequestBody,
   ): LocalSignupInput {
     return {
+      client: context.get("client"),
       email: input.email,
       password: input.password,
       firstName: input.firstName,
@@ -193,7 +268,10 @@ export class AuthController {
     input: OAuthAuthenticateRequestBody,
   ): OAuthAuthenticateInput {
     return {
+      code: input.code,
+      codeVerifier: input.codeVerifier,
       idToken: input.idToken,
+      nonce: input.nonce,
       client: context.get("client"),
       firstName: input.firstName,
       lastName: input.lastName,
@@ -225,6 +303,43 @@ export class AuthController {
     };
   }
 
+  private toForgotPasswordInput(input: ForgotPasswordRequestBody): ForgotPasswordInput {
+    return {
+      email: input.email,
+    };
+  }
+
+  private toResendForgotPasswordInput(
+    input: ResendForgotPasswordRequestBody,
+  ): ResendForgotPasswordInput {
+    return {
+      email: input.email,
+    };
+  }
+
+  private toRefreshInput(
+    context: Context<AppBindings>,
+    input: RefreshRequestBody,
+  ): RefreshInput {
+    return {
+      client: context.get("client"),
+      refreshToken: input.refreshToken ?? getCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME),
+    };
+  }
+
+  private toResetPasswordInput(
+    context: Context<AppBindings>,
+    input: ResetPasswordRequestBody,
+  ): ResetPasswordInput {
+    return {
+      client: context.get("client"),
+      email: input.email,
+      code: input.code,
+      newPassword: input.newPassword,
+      deviceId: this.resolveDeviceId(context, input.deviceId),
+    };
+  }
+
   private toRemoveKnownDeviceInput(
     context: Context<AppBindings>,
     input: RemoveKnownDeviceRequestBody,
@@ -232,6 +347,34 @@ export class AuthController {
     return {
       userId: context.get("auth").sub,
       deviceId: input.deviceId,
+    };
+  }
+
+  private toUnlockLocalLoginInput(input: UnlockLocalLoginRequestBody): UnlockLocalLoginInput {
+    return {
+      email: input.email,
+      code: input.code,
+    };
+  }
+
+  private toResendUnlockLocalLoginInput(
+    input: ResendUnlockLocalLoginRequestBody,
+  ): ResendUnlockLocalLoginInput {
+    return {
+      email: input.email,
+    };
+  }
+
+  private toChangePasswordInput(
+    context: Context<AppBindings>,
+    input: ChangePasswordRequestBody,
+  ): ChangePasswordInput {
+    return {
+      userId: context.get("auth").sub,
+      client: context.get("client"),
+      currentPassword: input.currentPassword,
+      newPassword: input.newPassword,
+      deviceId: context.get("auth").deviceId ?? context.get("client").device.id,
     };
   }
 
@@ -276,7 +419,7 @@ export class AuthController {
       idempotencyKey: context.req.header("x-request-id") ?? randomUUID(),
     });
 
-    if (!result.success) {
+    if (!result.success || result.failOpen) {
       throw new BadRequestError("Captcha verification failed.", {
         errors: result.errors,
         failOpen: result.failOpen,

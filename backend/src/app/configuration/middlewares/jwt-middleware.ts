@@ -19,7 +19,9 @@ function readBearerToken(headerValue?: string): string {
 
 export const jwtMiddleware = createMiddleware<AppBindings>(async (context, next) => {
   const token = readBearerToken(context.req.header("authorization"));
-  const claims = getRequestContainer(context).resolve(containerTokens.tokenService).verifyAccessToken(token);
+  const claims = await getRequestContainer(context)
+    .resolve(containerTokens.tokenService)
+    .verifyAccessToken(token);
 
   context.set("auth", claims);
   await next();

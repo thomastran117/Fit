@@ -1,26 +1,59 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f1e7;
+  --foreground: #172033;
+  --brand-cream: #f7f1e7;
+  --brand-surface: rgba(255, 255, 255, 0.74);
+  --brand-ink: #172033;
+  --brand-muted: #5d6778;
+  --brand-gold: #d4a85f;
+  --brand-forest: #426d56;
+  --brand-accent: #2563eb;
+  --brand-accent-soft: #dbeafe;
+  --brand-line: rgba(255, 255, 255, 0.62);
+  --font-sans-stack:
+    "Avenir Next", "Segoe UI", "Helvetica Neue", "Arial Nova", sans-serif;
+  --font-serif-display-stack:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-forest: var(--brand-forest);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-soft: var(--brand-accent-soft);
+  --color-brand-line: var(--brand-line);
+  --font-sans: var(--font-sans-stack);
+  --font-serif-display: var(--font-serif-display-stack);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans-stack);
+}
+
+a,
+button,
+input {
+  transition-timing-function: ease;
+}
+
+::selection {
+  background: rgba(212, 168, 95, 0.3);
 }

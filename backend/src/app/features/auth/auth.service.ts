@@ -1,10 +1,11 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import bcrypt from "bcrypt";
 import type { ClientRequestContext } from "@/configuration/http/bindings";
 import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
+import LockedError from "@/errors/http/locked.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { DeviceService } from "@/features/auth/device/device.service";
+import type { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import {
@@ -12,12 +13,19 @@ import {
   type SignupVerificationPendingResult,
   type AuthUserProfile,
   type AuthUserRecord,
+  type ChangePasswordInput,
+  type ForgotPasswordInput,
   type LocalAuthenticateInput,
   type LocalSignupInput,
   type OAuthAuthenticateInput,
+  type RefreshInput,
+  type ResetPasswordInput,
   type RemoveKnownDeviceInput,
+  type ResendForgotPasswordInput,
+  type ResendUnlockLocalLoginInput,
   type ResendVerificationEmailInput,
   type VerifyEmailInput,
+  type UnlockLocalLoginInput,
 } from "@/features/auth/auth.model";
 import { OtpService } from "@/features/auth/otp/otp.service";
 import { AppleOAuthService } from "@/features/auth/oauth/apple.service";
@@ -29,10 +37,22 @@ import { TokenService, type JwtClaims } from "@/features/auth/token/token.servic
 interface AuthRequestContext {
   auth: JwtClaims;
   client: ClientRequestContext;
+  refreshToken?: string;
 }
 
-const scrypt = promisify(scryptCallback);
-const PASSWORD_HASH_KEY_LENGTH = 64;
+const BCRYPT_SALT_ROUNDS = 12;
+const DUMMY_PASSWORD_HASH =
+  "$2b$12$1M7NQyWNh5v3NFg4cTQdUeVUI5BvR9f0vAOVeI3E1FQfQ0rFJz0Vy";
+const MAX_FAILED_LOCAL_LOGIN_ATTEMPTS = 5;
+const LOCAL_LOGIN_ATTEMPT_TTL_IN_SECONDS = 15 * 60;
+const LOCAL_LOGIN_LOCK_TTL_IN_SECONDS = 30 * 60;
+const LOCAL_LOGIN_UNLOCK_OTP_PURPOSE = "local-login-unlock";
+const LOCAL_PASSWORD_RESET_OTP_PURPOSE = "local-password-reset";
+
+interface LocalLoginAttemptRecord {
+  failedAttempts: number;
+  lockedAt?: string;
+}
 
 export class AuthService {
   constructor(
@@ -44,20 +64,43 @@ export class AuthService {
     private readonly googleOAuthService: GoogleOAuthService,
     private readonly microsoftOAuthService: MicrosoftOAuthService,
     private readonly appleOAuthService: AppleOAuthService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async localAuthenticate(input: LocalAuthenticateInput): Promise<AuthSessionResult> {
     const user = await this.authRepository.findUserByEmail(input.email);
+    const isPasswordValid = await this.verifyPassword(
+      input.password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
+    const loginAttemptRecord = await this.getLocalLoginAttemptRecord(input.email);
 
-    if (!user) {
-      throw new Error("Invalid email or password.");
+    if (loginAttemptRecord?.lockedAt) {
+      await this.sendLocalLoginUnlockCode(user);
+      throw new LockedError("This sign-in is locked. Use the code we emailed you to unlock it.", {
+        email: input.email,
+        unlockRequired: true,
+      });
     }
 
-    const isPasswordValid = await this.verifyPassword(input.password, user.passwordHash);
+    if (!user || !isPasswordValid) {
+      const updatedAttemptRecord = await this.recordFailedLocalLoginAttempt(input.email);
 
-    if (!isPasswordValid) {
-      throw new Error("Invalid email or password.");
+      if (updatedAttemptRecord.lockedAt) {
+        await this.sendLocalLoginUnlockCode(user);
+        throw new LockedError(
+          "This sign-in is locked. Use the code we emailed you to unlock it.",
+          {
+            email: input.email,
+            unlockRequired: true,
+          },
+        );
+      }
+
+      throw new UnauthorizedError("Invalid email or password.");
     }
+
+    await this.clearLocalLoginAttemptRecord(input.email);
 
     if (!user.emailVerified) {
       throw new UnauthorizedError("Please verify your email address before signing in.");
@@ -91,6 +134,7 @@ export class AuthService {
       passwordHash,
     );
 
+    await this.deviceService.registerKnownDevice(user, input.client, input.deviceId);
     await this.sendVerificationCode(user);
 
     return {
@@ -98,6 +142,67 @@ export class AuthService {
       email: user.email,
       alreadyPending: false,
     };
+  }
+
+  async forgotPassword(input: ForgotPasswordInput): Promise<{
+    accepted: true;
+  }> {
+    const user = await this.authRepository.findUserByEmail(input.email);
+
+    if (user && this.isEligibleForLocalPasswordManagement(user)) {
+      await this.sendPasswordResetCode(user);
+    }
+
+    return {
+      accepted: true,
+    };
+  }
+
+  async resendForgotPassword(input: ResendForgotPasswordInput): Promise<{
+    accepted: true;
+  }> {
+    const user = await this.authRepository.findUserByEmail(input.email);
+
+    if (user && this.isEligibleForLocalPasswordManagement(user)) {
+      await this.sendPasswordResetCode(user);
+    }
+
+    return {
+      accepted: true,
+    };
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<AuthSessionResult> {
+    await this.otpService.verify({
+      purpose: LOCAL_PASSWORD_RESET_OTP_PURPOSE,
+      subject: input.email,
+      code: input.code,
+    });
+
+    const user = await this.authRepository.findUserByEmail(input.email);
+    const eligibleUser = this.requireEligibleLocalPasswordUser(
+      user,
+      "This account cannot reset a password.",
+    );
+    const passwordHash = await this.hashPassword(input.newPassword);
+
+    await this.rejectIfPasswordMatchesCurrent(input.newPassword, eligibleUser.passwordHash);
+    await this.authRepository.updatePasswordHash(eligibleUser.id, passwordHash);
+    const nextTokenVersion = await this.authRepository.rotateTokenVersion(eligibleUser.id);
+    await this.clearLocalLoginAttemptRecord(eligibleUser.email);
+
+    const updatedUser: AuthUserRecord = {
+      ...eligibleUser,
+      passwordHash,
+      tokenVersion: nextTokenVersion,
+    };
+    const deviceStatus = await this.deviceService.registerKnownDevice(
+      updatedUser,
+      input.client,
+      input.deviceId,
+    );
+
+    return this.issueTokensForUser(updatedUser, deviceStatus, input.deviceId);
   }
 
   async verifyEmail(input: VerifyEmailInput): Promise<AuthSessionResult> {
@@ -153,6 +258,78 @@ export class AuthService {
     };
   }
 
+  async changePassword(input: ChangePasswordInput): Promise<AuthSessionResult> {
+    const user = this.requireEligibleLocalPasswordUser(
+      await this.authRepository.findUserById(input.userId),
+      "This account cannot change a password.",
+    );
+    const isPasswordValid = await this.verifyPassword(input.currentPassword, user.passwordHash);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedError("Current password is incorrect.");
+    }
+
+    await this.rejectIfPasswordMatchesCurrent(input.newPassword, user.passwordHash);
+
+    const passwordHash = await this.hashPassword(input.newPassword);
+    await this.authRepository.updatePasswordHash(user.id, passwordHash);
+    const nextTokenVersion = await this.authRepository.rotateTokenVersion(user.id);
+    await this.clearLocalLoginAttemptRecord(user.email);
+
+    const updatedUser: AuthUserRecord = {
+      ...user,
+      passwordHash,
+      tokenVersion: nextTokenVersion,
+    };
+    const deviceStatus = await this.deviceService.registerKnownDevice(
+      updatedUser,
+      input.client,
+      input.deviceId,
+    );
+
+    return this.issueTokensForUser(updatedUser, deviceStatus, input.deviceId);
+  }
+
+  async unlockLocalLogin(input: UnlockLocalLoginInput): Promise<{
+    unlocked: true;
+    email: string;
+  }> {
+    await this.otpService.verify({
+      purpose: LOCAL_LOGIN_UNLOCK_OTP_PURPOSE,
+      subject: input.email,
+      code: input.code,
+    });
+
+    await this.clearLocalLoginAttemptRecord(input.email);
+
+    return {
+      unlocked: true,
+      email: input.email,
+    };
+  }
+
+  async resendUnlockLocalLogin(input: ResendUnlockLocalLoginInput): Promise<{
+    resent: true;
+    email: string;
+  }> {
+    const isLocked = await this.isLocalLoginLocked(input.email);
+
+    if (!isLocked) {
+      return {
+        resent: true,
+        email: input.email,
+      };
+    }
+
+    const user = await this.authRepository.findUserByEmail(input.email);
+    await this.sendLocalLoginUnlockCode(user);
+
+    return {
+      resent: true,
+      email: input.email,
+    };
+  }
+
   async localVerify(context: AuthRequestContext): Promise<{
     verified: true;
     auth: {
@@ -188,10 +365,17 @@ export class AuthService {
     return this.authenticateOAuthProfile(profile, input);
   }
 
-  async refresh(): Promise<{ refreshed: true }> {
-    return {
-      refreshed: true,
-    };
+  async refresh(input: RefreshInput): Promise<AuthSessionResult> {
+    if (!input.refreshToken) {
+      throw new UnauthorizedError("Refresh token is required.");
+    }
+
+    const claims = await this.tokenService.verifyRefreshToken(input.refreshToken);
+    const user = await this.requireExistingUser(claims.sub);
+    const deviceId = claims.deviceId ?? input.client.device.id;
+    const deviceStatus = await this.deviceService.registerKnownDevice(user, input.client, deviceId);
+
+    return this.issueTokensForUser(user, deviceStatus, deviceId);
   }
 
   async logout(context: AuthRequestContext): Promise<{
@@ -202,6 +386,12 @@ export class AuthService {
     };
     client: ClientRequestContext;
   }> {
+    if (context.refreshToken) {
+      await this.tokenService.revokeRefreshToken(context.refreshToken);
+    }
+
+    await this.authRepository.rotateTokenVersion(context.auth.sub);
+
     return {
       loggedOut: true,
       auth: {
@@ -303,11 +493,13 @@ export class AuthService {
       email: user.email,
       role: user.role,
       deviceId,
+      tokenVersion: user.tokenVersion,
     });
 
     const refreshToken = await this.tokenService.createRefreshToken({
       sub: user.id,
       deviceId,
+      tokenVersion: user.tokenVersion,
     });
 
     return {
@@ -334,34 +526,38 @@ export class AuthService {
 
   private async hashPassword(password: string): Promise<string> {
     this.assertValidPassword(password);
-
-    const salt = randomBytes(16).toString("base64url");
-    const derivedKey = (await scrypt(password, salt, PASSWORD_HASH_KEY_LENGTH)) as Buffer;
-
-    return `${salt}:${derivedKey.toString("base64url")}`;
+    return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
   }
 
   private async verifyPassword(password: string, passwordHash: string): Promise<boolean> {
-    const [salt, storedHash] = passwordHash.split(":");
+    return this.isBcryptHash(passwordHash)
+      ? bcrypt.compare(password, passwordHash)
+      : this.verifyPasswordAgainstFakeHash(password);
+  }
 
-    if (!salt || !storedHash) {
-      return false;
+  private async verifyPasswordAgainstFakeHash(password: string): Promise<boolean> {
+    return bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+  }
+
+  private async rejectIfPasswordMatchesCurrent(
+    password: string,
+    passwordHash: string,
+  ): Promise<void> {
+    const matchesCurrentPassword = await this.verifyPassword(password, passwordHash);
+
+    if (matchesCurrentPassword) {
+      throw new ConflictError("New password must be different from the current password.");
     }
-
-    const derivedKey = (await scrypt(password, salt, PASSWORD_HASH_KEY_LENGTH)) as Buffer;
-    const storedHashBuffer = Buffer.from(storedHash, "base64url");
-
-    if (derivedKey.length !== storedHashBuffer.length) {
-      return false;
-    }
-
-    return timingSafeEqual(derivedKey, storedHashBuffer);
   }
 
   private assertValidPassword(password: string): void {
     if (password.length < 8) {
       throw new Error("Password must be at least 8 characters long.");
     }
+  }
+
+  private isBcryptHash(passwordHash: string): boolean {
+    return /^\$2[aby]\$\d{2}\$/.test(passwordHash);
   }
 
   private toUserProfile(user: AuthUserRecord): AuthUserProfile {
@@ -395,6 +591,27 @@ export class AuthService {
     });
   }
 
+  private async sendPasswordResetCode(user: AuthUserRecord): Promise<void> {
+    try {
+      const issuedOtp = await this.otpService.issue({
+        purpose: LOCAL_PASSWORD_RESET_OTP_PURPOSE,
+        subject: user.email,
+      });
+
+      await this.emailService.sendPasswordResetEmail({
+        to: user.email,
+        resetCode: issuedOtp.code,
+        firstName: user.firstName,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TooManyRequestError") {
+        return;
+      }
+
+      throw error;
+    }
+  }
+
   private async authenticateVerifiedUser(
     user: AuthUserRecord,
     input: { deviceId?: string; client: ClientRequestContext },
@@ -406,6 +623,103 @@ export class AuthService {
     );
 
     return this.issueTokensForUser(user, deviceStatus, input.deviceId);
+  }
+
+  private getLocalLoginAttemptKey(email: string): string {
+    return `auth:local-login-attempts:${email.toLowerCase()}`;
+  }
+
+  private async getLocalLoginAttemptRecord(
+    email: string,
+  ): Promise<LocalLoginAttemptRecord | null> {
+    return this.cacheService.getJson<LocalLoginAttemptRecord>(this.getLocalLoginAttemptKey(email));
+  }
+
+  private async recordFailedLocalLoginAttempt(email: string): Promise<LocalLoginAttemptRecord> {
+    const existingRecord = await this.getLocalLoginAttemptRecord(email);
+    const nextFailedAttempts = (existingRecord?.failedAttempts ?? 0) + 1;
+    const nextRecord: LocalLoginAttemptRecord =
+      nextFailedAttempts >= MAX_FAILED_LOCAL_LOGIN_ATTEMPTS
+        ? {
+            failedAttempts: nextFailedAttempts,
+            lockedAt: new Date().toISOString(),
+          }
+        : {
+            failedAttempts: nextFailedAttempts,
+          };
+
+    await this.cacheService.setJson(
+      this.getLocalLoginAttemptKey(email),
+      nextRecord,
+      nextRecord.lockedAt
+        ? LOCAL_LOGIN_LOCK_TTL_IN_SECONDS
+        : LOCAL_LOGIN_ATTEMPT_TTL_IN_SECONDS,
+    );
+
+    return nextRecord;
+  }
+
+  private async clearLocalLoginAttemptRecord(email: string): Promise<void> {
+    await this.cacheService.delete(this.getLocalLoginAttemptKey(email));
+  }
+
+  private async isLocalLoginLocked(email: string): Promise<boolean> {
+    const record = await this.getLocalLoginAttemptRecord(email);
+    return Boolean(record?.lockedAt);
+  }
+
+  private async sendLocalLoginUnlockCode(user: AuthUserRecord | null): Promise<void> {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const issuedOtp = await this.otpService.issue({
+        purpose: LOCAL_LOGIN_UNLOCK_OTP_PURPOSE,
+        subject: user.email,
+      });
+
+      await this.emailService.sendLoginUnlockEmail({
+        to: user.email,
+        unlockCode: issuedOtp.code,
+        firstName: user.firstName,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TooManyRequestError") {
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  private isEligibleForLocalPasswordManagement(user: AuthUserRecord): boolean {
+    return user.emailVerified && this.isLocalPasswordAccount(user);
+  }
+
+  private isLocalPasswordAccount(user: AuthUserRecord): boolean {
+    return !user.passwordHash.startsWith("oauth:");
+  }
+
+  private requireEligibleLocalPasswordUser(
+    user: AuthUserRecord | null,
+    defaultMessage: string,
+  ): AuthUserRecord {
+    if (!user) {
+      throw new BadRequestError(defaultMessage);
+    }
+
+    if (!this.isLocalPasswordAccount(user)) {
+      throw new ConflictError(
+        "This account uses a social sign-in provider. Use that provider to access your account.",
+      );
+    }
+
+    if (!user.emailVerified) {
+      throw new ConflictError("Please verify your email address before managing your password.");
+    }
+
+    return user;
   }
 
   private async requireExistingUser(userId: string): Promise<AuthUserRecord> {

@@ -46,6 +46,7 @@ interface VerifyJwtOptions {
   jwksUrl: string;
   allowedHosts?: string[];
   allowedAlgorithms?: string[];
+  nonce?: string;
 }
 
 interface OAuthTokenVerifierOptions {
@@ -179,12 +180,16 @@ export class OAuthTokenVerifier {
       throw new UnauthorizedError("OAuth token algorithm is invalid.");
     }
 
+    if (!matchesAudience(options.audience, payload.aud)) {
+      throw new UnauthorizedError("OAuth token audience is invalid.");
+    }
+
     if (!matchesIssuer(options.issuer, payload.iss)) {
       throw new UnauthorizedError("OAuth token issuer is invalid.");
     }
 
-    if (!matchesAudience(options.audience, payload.aud)) {
-      throw new UnauthorizedError("OAuth token audience is invalid.");
+    if (options.nonce && payload.nonce !== options.nonce) {
+      throw new UnauthorizedError("OAuth token nonce is invalid.");
     }
 
     this.assertTokenTimes(payload);
