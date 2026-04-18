@@ -3,6 +3,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { parseRequestBody } from "@/configuration/validation/request";
+import { environment } from "@/configuration/environment";
 import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthService } from "@/features/auth/auth.service";
 import { CaptchaService } from "@/features/auth/captcha/captcha.service";
@@ -411,7 +412,7 @@ export class AuthController {
   }
 
   private isSecureCookieEnabled(): boolean {
-    return process.env.NODE_ENV === "production";
+    return environment.isProduction();
   }
   private async verifyCaptcha(context: Context<AppBindings>, captchaToken: string): Promise<void> {
     const result = await this.captchaService.verify({

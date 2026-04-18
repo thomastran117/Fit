@@ -3,34 +3,788 @@ import { fileURLToPath } from "node:url";
 
 const envFilePath = fileURLToPath(new URL("../../../../.env", import.meta.url));
 
-let isEnvironmentLoaded = false;
+type NodeEnvironment = "development" | "test" | "production";
+type RefreshTokenMode = "stateless" | "stateful";
+type RateLimiterStrategy = "sliding-window" | "token-bucket";
 
-export function loadEnvironment(): NodeJS.ProcessEnv {
-  if (isEnvironmentLoaded) {
-    return process.env;
-  }
+type RawEnvironmentValues = {
+  ACCESS_TOKEN_SECRET?: string;
+  ACCESS_TOKEN_TTL_SECONDS?: string;
+  APP_BASE_URL?: string;
+  AZURE_STORAGE_CONNECTION_STRING?: string;
+  AZURE_STORAGE_CONTAINER_NAME?: string;
+  AZURE_STORAGE_UPLOAD_SAS_TTL_SECONDS?: string;
+  BOOKING_REQUEST_EXPIRY_BATCH_SIZE?: string;
+  BOOKING_REQUEST_EXPIRY_POLL_INTERVAL_MS?: string;
+  CAPTCHA_ALLOWED_HOSTS?: string;
+  CLOUDFLARE_TURNSTILE_SECRET_KEY?: string;
+  CORS_ALLOWED_ORIGINS?: string;
+  CSRF_ALLOWED_ORIGINS?: string;
+  DATABASE_URL?: string;
+  ELASTICSEARCH_ENABLED?: string;
+  ELASTICSEARCH_PASSWORD?: string;
+  ELASTICSEARCH_POSTINGS_INDEX?: string;
+  ELASTICSEARCH_TIMEOUT_MS?: string;
+  ELASTICSEARCH_URL?: string;
+  ELASTICSEARCH_USERNAME?: string;
+  EMAIL_FROM?: string;
+  EMAIL_FROM_NAME?: string;
+  FRONTEND_URL?: string;
+  GMAIL_APP_PASSWORD?: string;
+  GMAIL_USER?: string;
+  GOOGLE_OAUTH_CLIENT_ID?: string;
+  GOOGLE_OAUTH_CLIENT_IDS?: string;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string;
+  MICROSOFT_OAUTH_CLIENT_ID?: string;
+  MICROSOFT_OAUTH_CLIENT_IDS?: string;
+  MICROSOFT_OAUTH_CLIENT_SECRET?: string;
+  MICROSOFT_OAUTH_TENANT?: string;
+  NODE_ENV?: string;
+  PORT?: string;
+  POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE?: string;
+  POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
+  POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
+  POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
+  RATE_LIMITER_BUCKET_CAPACITY?: string;
+  RATE_LIMITER_ENABLED?: string;
+  RATE_LIMITER_LIMIT?: string;
+  RATE_LIMITER_REFILL_TOKENS_PER_SECOND?: string;
+  RATE_LIMITER_STRATEGY?: string;
+  RATE_LIMITER_WINDOW_SECONDS?: string;
+  REDIS_CONNECT_TIMEOUT_MS?: string;
+  REDIS_DB?: string;
+  REDIS_HOST?: string;
+  REDIS_PASSWORD?: string;
+  REDIS_PORT?: string;
+  REDIS_URL?: string;
+  REFRESH_TOKEN_CACHE_PREFIX?: string;
+  REFRESH_TOKEN_MODE?: string;
+  REFRESH_TOKEN_SECRET?: string;
+  REFRESH_TOKEN_TTL_SECONDS?: string;
+  TOKEN_AUDIENCE?: string;
+  TOKEN_ISSUER?: string;
+};
 
-  config({
-    path: envFilePath,
-  });
+type EnvironmentVariableName = keyof RawEnvironmentValues;
 
-  isEnvironmentLoaded = true;
-
-  return process.env;
+export interface AppEnvironment {
+  raw: RawEnvironmentValues;
+  server: {
+    nodeEnv: NodeEnvironment;
+    port: number;
+    isProduction: boolean;
+  };
+  database: {
+    url: string;
+  };
+  auth: {
+    accessTokenSecret: string;
+    refreshTokenSecret: string;
+    accessTokenTtlSeconds: number;
+    refreshTokenTtlSeconds: number;
+    issuer?: string;
+    audience?: string;
+    refreshTokenMode: RefreshTokenMode;
+    refreshTokenCachePrefix: string;
+  };
+  email: {
+    gmailUser: string;
+    gmailAppPassword: string;
+    fromEmail: string;
+    fromName: string;
+    appBaseUrl: string;
+  };
+  captcha: {
+    secretKey?: string;
+    allowedHosts: string[];
+  };
+  cors: {
+    allowedOrigins: string[];
+  };
+  csrf: {
+    allowedOrigins: string[];
+  };
+  oauth: {
+    google: {
+      audiences: string[];
+      clientSecret?: string;
+      frontendBaseUrl: string;
+    };
+    microsoft: {
+      audiences: string[];
+      clientSecret?: string;
+      tenant: string;
+      frontendBaseUrl: string;
+    };
+  };
+  redis: {
+    url: string;
+    host: string;
+    port: number;
+    password?: string;
+    db: number;
+    connectTimeoutMs: number;
+  };
+  rateLimiter: {
+    enabled: boolean;
+    strategy: RateLimiterStrategy;
+    limit: number;
+    windowSeconds: number;
+    bucketCapacity: number;
+    refillTokensPerSecond: number;
+  };
+  workers: {
+    search: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
+    analytics: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
+    bookingExpiry: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
+  };
+  blobStorage: {
+    connectionString?: string;
+    containerName?: string;
+    uploadSasTtlSeconds: number;
+  };
+  elasticsearch: {
+    enabled: boolean;
+    url?: string;
+    username?: string;
+    password?: string;
+    postingsIndexName: string;
+    timeoutMs: number;
+  };
 }
 
-export const environment = process.env;
+type EnvironmentState = {
+  raw: RawEnvironmentValues;
+  config: AppEnvironment;
+};
 
-export function getEnvironmentVariable(name: string): string {
-  const value = process.env[name];
+const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
+  "ACCESS_TOKEN_SECRET",
+  "ACCESS_TOKEN_TTL_SECONDS",
+  "APP_BASE_URL",
+  "AZURE_STORAGE_CONNECTION_STRING",
+  "AZURE_STORAGE_CONTAINER_NAME",
+  "AZURE_STORAGE_UPLOAD_SAS_TTL_SECONDS",
+  "BOOKING_REQUEST_EXPIRY_BATCH_SIZE",
+  "BOOKING_REQUEST_EXPIRY_POLL_INTERVAL_MS",
+  "CAPTCHA_ALLOWED_HOSTS",
+  "CLOUDFLARE_TURNSTILE_SECRET_KEY",
+  "CORS_ALLOWED_ORIGINS",
+  "CSRF_ALLOWED_ORIGINS",
+  "DATABASE_URL",
+  "ELASTICSEARCH_ENABLED",
+  "ELASTICSEARCH_PASSWORD",
+  "ELASTICSEARCH_POSTINGS_INDEX",
+  "ELASTICSEARCH_TIMEOUT_MS",
+  "ELASTICSEARCH_URL",
+  "ELASTICSEARCH_USERNAME",
+  "EMAIL_FROM",
+  "EMAIL_FROM_NAME",
+  "FRONTEND_URL",
+  "GMAIL_APP_PASSWORD",
+  "GMAIL_USER",
+  "GOOGLE_OAUTH_CLIENT_ID",
+  "GOOGLE_OAUTH_CLIENT_IDS",
+  "GOOGLE_OAUTH_CLIENT_SECRET",
+  "MICROSOFT_OAUTH_CLIENT_ID",
+  "MICROSOFT_OAUTH_CLIENT_IDS",
+  "MICROSOFT_OAUTH_CLIENT_SECRET",
+  "MICROSOFT_OAUTH_TENANT",
+  "NODE_ENV",
+  "PORT",
+  "POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE",
+  "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
+  "POSTINGS_SEARCH_OUTBOX_BATCH_SIZE",
+  "POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS",
+  "RATE_LIMITER_BUCKET_CAPACITY",
+  "RATE_LIMITER_ENABLED",
+  "RATE_LIMITER_LIMIT",
+  "RATE_LIMITER_REFILL_TOKENS_PER_SECOND",
+  "RATE_LIMITER_STRATEGY",
+  "RATE_LIMITER_WINDOW_SECONDS",
+  "REDIS_CONNECT_TIMEOUT_MS",
+  "REDIS_DB",
+  "REDIS_HOST",
+  "REDIS_PASSWORD",
+  "REDIS_PORT",
+  "REDIS_URL",
+  "REFRESH_TOKEN_CACHE_PREFIX",
+  "REFRESH_TOKEN_MODE",
+  "REFRESH_TOKEN_SECRET",
+  "REFRESH_TOKEN_TTL_SECONDS",
+  "TOKEN_AUDIENCE",
+  "TOKEN_ISSUER",
+];
+
+const DEFAULT_FRONTEND_URL = "http://localhost:3040";
+const DEFAULT_EMAIL_APP_BASE_URL = "http://localhost:3000";
+const DEFAULT_CAPTCHA_ALLOWED_HOST = "challenges.cloudflare.com";
+const DEFAULT_REDIS_HOST = "127.0.0.1";
+const DEFAULT_REFRESH_TOKEN_CACHE_PREFIX = "auth:refresh";
+const DEFAULT_ELASTICSEARCH_POSTINGS_INDEX = "postings";
+
+function normalizeRawEnvironment(source: NodeJS.ProcessEnv): RawEnvironmentValues {
+  const raw: RawEnvironmentValues = {};
+
+  for (const name of RAW_ENVIRONMENT_VARIABLE_NAMES) {
+    const value = normalizeOptionalString(source[name]);
+
+    if (value !== undefined) {
+      raw[name] = value;
+    }
+  }
+
+  return raw;
+}
+
+function normalizeOptionalString(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
+function normalizeDelimitedList(value?: string): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (!value) {
+    return fallback;
+  }
+
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function parseNodeEnvironment(
+  raw: RawEnvironmentValues,
+  errors: string[],
+): NodeEnvironment {
+  const value = raw.NODE_ENV ?? "development";
+
+  if (value === "development" || value === "test" || value === "production") {
+    return value;
+  }
+
+  errors.push("NODE_ENV must be one of: development, test, production.");
+  return "development";
+}
+
+function parseRefreshTokenMode(
+  raw: RawEnvironmentValues,
+  errors: string[],
+): RefreshTokenMode {
+  const value = raw.REFRESH_TOKEN_MODE ?? "stateless";
+
+  if (value === "stateless" || value === "stateful") {
+    return value;
+  }
+
+  errors.push("REFRESH_TOKEN_MODE must be either 'stateless' or 'stateful'.");
+  return "stateless";
+}
+
+function parseRateLimiterStrategy(
+  raw: RawEnvironmentValues,
+  errors: string[],
+): RateLimiterStrategy {
+  const value = raw.RATE_LIMITER_STRATEGY?.toLowerCase() ?? "sliding-window";
+
+  if (value === "sliding-window" || value === "token-bucket") {
+    return value;
+  }
+
+  errors.push("RATE_LIMITER_STRATEGY must be either 'sliding-window' or 'token-bucket'.");
+  return "sliding-window";
+}
+
+type NumberOptions = {
+  integer?: boolean;
+  max?: number;
+  min?: number;
+};
+
+function parseNumber(
+  raw: RawEnvironmentValues,
+  name: EnvironmentVariableName,
+  fallback: number,
+  errors: string[],
+  options: NumberOptions = {},
+): number {
+  const value = raw[name];
+
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsedValue = Number(value);
+
+  if (Number.isNaN(parsedValue)) {
+    errors.push(`${name} must be a valid number.`);
+    return fallback;
+  }
+
+  if (options.integer && !Number.isInteger(parsedValue)) {
+    errors.push(`${name} must be an integer.`);
+    return fallback;
+  }
+
+  if (options.min !== undefined && parsedValue < options.min) {
+    errors.push(`${name} must be greater than or equal to ${options.min}.`);
+    return fallback;
+  }
+
+  if (options.max !== undefined && parsedValue > options.max) {
+    errors.push(`${name} must be less than or equal to ${options.max}.`);
+    return fallback;
+  }
+
+  return parsedValue;
+}
+
+function readRequiredString(
+  raw: RawEnvironmentValues,
+  name: EnvironmentVariableName,
+  errors: string[],
+): string {
+  const value = raw[name];
 
   if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
+    errors.push(`${name} is required.`);
+    return "";
   }
 
   return value;
 }
 
-export function getOptionalEnvironmentVariable(name: string): string | undefined {
-  return process.env[name];
+function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
+  const raw = normalizeRawEnvironment(source);
+  const errors: string[] = [];
+  const nodeEnv = parseNodeEnvironment(raw, errors);
+  const refreshTokenMode = parseRefreshTokenMode(raw, errors);
+  const rateLimiterStrategy = parseRateLimiterStrategy(raw, errors);
+
+  const databaseUrl = readRequiredString(raw, "DATABASE_URL", errors);
+  const accessTokenSecret = readRequiredString(raw, "ACCESS_TOKEN_SECRET", errors);
+  const refreshTokenSecret = readRequiredString(raw, "REFRESH_TOKEN_SECRET", errors);
+  const gmailUser = readRequiredString(raw, "GMAIL_USER", errors);
+  const gmailAppPassword = readRequiredString(raw, "GMAIL_APP_PASSWORD", errors);
+
+  const frontendBaseUrl = normalizeBaseUrl(
+    raw.FRONTEND_URL ?? raw.APP_BASE_URL ?? DEFAULT_FRONTEND_URL,
+  );
+  const emailAppBaseUrl = normalizeBaseUrl(
+    raw.APP_BASE_URL ?? raw.FRONTEND_URL ?? DEFAULT_EMAIL_APP_BASE_URL,
+  );
+  const corsAllowedOrigins =
+    normalizeDelimitedList(raw.CORS_ALLOWED_ORIGINS ?? raw.FRONTEND_URL) || [];
+  const csrfAllowedOrigins =
+    normalizeDelimitedList(
+      raw.CSRF_ALLOWED_ORIGINS ?? raw.CORS_ALLOWED_ORIGINS ?? raw.FRONTEND_URL,
+    ) || [];
+  const googleAudiences = normalizeDelimitedList(
+    raw.GOOGLE_OAUTH_CLIENT_IDS ?? raw.GOOGLE_OAUTH_CLIENT_ID,
+  );
+  const microsoftAudiences = normalizeDelimitedList(
+    raw.MICROSOFT_OAUTH_CLIENT_IDS ?? raw.MICROSOFT_OAUTH_CLIENT_ID,
+  );
+
+  if (raw.GOOGLE_OAUTH_CLIENT_SECRET && googleAudiences.length === 0) {
+    errors.push(
+      "GOOGLE_OAUTH_CLIENT_SECRET requires GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_IDS.",
+    );
+  }
+
+  if (raw.MICROSOFT_OAUTH_CLIENT_SECRET && microsoftAudiences.length === 0) {
+    errors.push(
+      "MICROSOFT_OAUTH_CLIENT_SECRET requires MICROSOFT_OAUTH_CLIENT_ID or MICROSOFT_OAUTH_CLIENT_IDS.",
+    );
+  }
+
+  const elasticsearchEnabled = parseBoolean(raw.ELASTICSEARCH_ENABLED, false);
+  if (elasticsearchEnabled && !raw.ELASTICSEARCH_URL) {
+    errors.push("ELASTICSEARCH_URL is required when ELASTICSEARCH_ENABLED is true.");
+  }
+
+  const hasBlobConnectionString = Boolean(raw.AZURE_STORAGE_CONNECTION_STRING);
+  const hasBlobContainerName = Boolean(raw.AZURE_STORAGE_CONTAINER_NAME);
+
+  if (hasBlobConnectionString !== hasBlobContainerName) {
+    errors.push(
+      "AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_CONTAINER_NAME must be configured together.",
+    );
+  }
+
+  const rateLimiterLimit = parseNumber(raw, "RATE_LIMITER_LIMIT", 60, errors, {
+    integer: true,
+    min: 1,
+  });
+  const rateLimiterWindowSeconds = parseNumber(
+    raw,
+    "RATE_LIMITER_WINDOW_SECONDS",
+    60,
+    errors,
+    {
+      integer: true,
+      min: 1,
+    },
+  );
+  const rateLimiterBucketCapacity = parseNumber(
+    raw,
+    "RATE_LIMITER_BUCKET_CAPACITY",
+    rateLimiterLimit,
+    errors,
+    {
+      integer: true,
+      min: 1,
+    },
+  );
+  const configuredRefillRate =
+    raw.RATE_LIMITER_REFILL_TOKENS_PER_SECOND === undefined
+      ? undefined
+      : parseNumber(raw, "RATE_LIMITER_REFILL_TOKENS_PER_SECOND", 1, errors, {
+          min: 0.000_001,
+        });
+
+  const config: AppEnvironment = {
+    raw,
+    server: {
+      nodeEnv,
+      port: parseNumber(raw, "PORT", 8040, errors, {
+        integer: true,
+        min: 1,
+      }),
+      isProduction: nodeEnv === "production",
+    },
+    database: {
+      url: databaseUrl,
+    },
+    auth: {
+      accessTokenSecret,
+      refreshTokenSecret,
+      accessTokenTtlSeconds: parseNumber(raw, "ACCESS_TOKEN_TTL_SECONDS", 15 * 60, errors, {
+        integer: true,
+        min: 1,
+      }),
+      refreshTokenTtlSeconds: parseNumber(
+        raw,
+        "REFRESH_TOKEN_TTL_SECONDS",
+        30 * 24 * 60 * 60,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      issuer: raw.TOKEN_ISSUER,
+      audience: raw.TOKEN_AUDIENCE,
+      refreshTokenMode,
+      refreshTokenCachePrefix:
+        raw.REFRESH_TOKEN_CACHE_PREFIX ?? DEFAULT_REFRESH_TOKEN_CACHE_PREFIX,
+    },
+    email: {
+      gmailUser,
+      gmailAppPassword,
+      fromEmail: raw.EMAIL_FROM ?? gmailUser,
+      fromName: raw.EMAIL_FROM_NAME ?? "Rent",
+      appBaseUrl: emailAppBaseUrl,
+    },
+    captcha: {
+      secretKey: raw.CLOUDFLARE_TURNSTILE_SECRET_KEY,
+      allowedHosts: normalizeDelimitedList(raw.CAPTCHA_ALLOWED_HOSTS).length
+        ? normalizeDelimitedList(raw.CAPTCHA_ALLOWED_HOSTS)
+        : [DEFAULT_CAPTCHA_ALLOWED_HOST],
+    },
+    cors: {
+      allowedOrigins: corsAllowedOrigins.length ? corsAllowedOrigins : [DEFAULT_FRONTEND_URL],
+    },
+    csrf: {
+      allowedOrigins: csrfAllowedOrigins.length ? csrfAllowedOrigins : [DEFAULT_FRONTEND_URL],
+    },
+    oauth: {
+      google: {
+        audiences: googleAudiences,
+        clientSecret: raw.GOOGLE_OAUTH_CLIENT_SECRET,
+        frontendBaseUrl,
+      },
+      microsoft: {
+        audiences: microsoftAudiences,
+        clientSecret: raw.MICROSOFT_OAUTH_CLIENT_SECRET,
+        tenant: raw.MICROSOFT_OAUTH_TENANT ?? "consumers",
+        frontendBaseUrl,
+      },
+    },
+    redis: {
+      url: raw.REDIS_URL ?? "",
+      host: raw.REDIS_HOST ?? DEFAULT_REDIS_HOST,
+      port: parseNumber(raw, "REDIS_PORT", 6379, errors, {
+        integer: true,
+        min: 1,
+      }),
+      password: raw.REDIS_PASSWORD,
+      db: parseNumber(raw, "REDIS_DB", 0, errors, {
+        integer: true,
+        min: 0,
+      }),
+      connectTimeoutMs: parseNumber(raw, "REDIS_CONNECT_TIMEOUT_MS", 10_000, errors, {
+        integer: true,
+        min: 1,
+      }),
+    },
+    rateLimiter: {
+      enabled: parseBoolean(raw.RATE_LIMITER_ENABLED, true),
+      strategy: rateLimiterStrategy,
+      limit: rateLimiterLimit,
+      windowSeconds: rateLimiterWindowSeconds,
+      bucketCapacity: rateLimiterBucketCapacity,
+      refillTokensPerSecond:
+        configuredRefillRate ?? rateLimiterBucketCapacity / rateLimiterWindowSeconds,
+    },
+    workers: {
+      search: {
+        pollIntervalMs: parseNumber(
+          raw,
+          "POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS",
+          2_000,
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        batchSize: parseNumber(raw, "POSTINGS_SEARCH_OUTBOX_BATCH_SIZE", 25, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      analytics: {
+        pollIntervalMs: parseNumber(
+          raw,
+          "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
+          2_000,
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        batchSize: parseNumber(raw, "POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE", 50, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      bookingExpiry: {
+        pollIntervalMs: parseNumber(
+          raw,
+          "BOOKING_REQUEST_EXPIRY_POLL_INTERVAL_MS",
+          5_000,
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        batchSize: parseNumber(raw, "BOOKING_REQUEST_EXPIRY_BATCH_SIZE", 50, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+    },
+    blobStorage: {
+      connectionString: raw.AZURE_STORAGE_CONNECTION_STRING,
+      containerName: raw.AZURE_STORAGE_CONTAINER_NAME,
+      uploadSasTtlSeconds: parseNumber(
+        raw,
+        "AZURE_STORAGE_UPLOAD_SAS_TTL_SECONDS",
+        15 * 60,
+        errors,
+        {
+          integer: true,
+          min: 60,
+          max: 60 * 60,
+        },
+      ),
+    },
+    elasticsearch: {
+      enabled: elasticsearchEnabled,
+      url: raw.ELASTICSEARCH_URL?.replace(/\/+$/, ""),
+      username: raw.ELASTICSEARCH_USERNAME,
+      password: raw.ELASTICSEARCH_PASSWORD,
+      postingsIndexName: raw.ELASTICSEARCH_POSTINGS_INDEX ?? DEFAULT_ELASTICSEARCH_POSTINGS_INDEX,
+      timeoutMs: parseNumber(raw, "ELASTICSEARCH_TIMEOUT_MS", 2_000, errors, {
+        integer: true,
+        min: 1,
+      }),
+    },
+  };
+
+  if (errors.length > 0) {
+    throw new Error(
+      ["Environment validation failed.", ...errors.map((error) => `- ${error}`)].join("\n"),
+    );
+  }
+
+  return {
+    raw,
+    config,
+  };
+}
+
+export function parseEnvironment(source: NodeJS.ProcessEnv): AppEnvironment {
+  return parseEnvironmentState(source).config;
+}
+
+class EnvironmentManager {
+  private isLoaded = false;
+  private state: EnvironmentState | null = null;
+
+  load(): AppEnvironment {
+    if (this.state) {
+      return this.state.config;
+    }
+
+    if (!this.isLoaded) {
+      config({
+        path: envFilePath,
+      });
+      this.isLoaded = true;
+    }
+
+    this.state = parseEnvironmentState(process.env);
+    return this.state.config;
+  }
+
+  get(): AppEnvironment {
+    if (!this.state) {
+      throw new Error(
+        "Environment has not been loaded. Call loadEnvironment() during application startup first.",
+      );
+    }
+
+    return this.state.config;
+  }
+
+  getNodeEnvironment(): NodeEnvironment {
+    return this.get().server.nodeEnv;
+  }
+
+  isProduction(): boolean {
+    return this.get().server.isProduction;
+  }
+
+  getServerPort(): number {
+    return this.get().server.port;
+  }
+
+  getTokenConfig(): AppEnvironment["auth"] {
+    return this.get().auth;
+  }
+
+  getEmailConfig(): AppEnvironment["email"] {
+    return this.get().email;
+  }
+
+  getCaptchaConfig(): AppEnvironment["captcha"] {
+    return this.get().captcha;
+  }
+
+  getCorsAllowedOrigins(): string[] {
+    return [...this.get().cors.allowedOrigins];
+  }
+
+  getCsrfAllowedOrigins(): string[] {
+    return [...this.get().csrf.allowedOrigins];
+  }
+
+  getGoogleOAuthConfig(): AppEnvironment["oauth"]["google"] {
+    return this.get().oauth.google;
+  }
+
+  getMicrosoftOAuthConfig(): AppEnvironment["oauth"]["microsoft"] {
+    return this.get().oauth.microsoft;
+  }
+
+  getRedisConfig(): AppEnvironment["redis"] {
+    return this.get().redis;
+  }
+
+  getRateLimiterConfig(): AppEnvironment["rateLimiter"] {
+    return this.get().rateLimiter;
+  }
+
+  getSearchWorkerConfig(): AppEnvironment["workers"]["search"] {
+    return this.get().workers.search;
+  }
+
+  getAnalyticsWorkerConfig(): AppEnvironment["workers"]["analytics"] {
+    return this.get().workers.analytics;
+  }
+
+  getBookingExpiryWorkerConfig(): AppEnvironment["workers"]["bookingExpiry"] {
+    return this.get().workers.bookingExpiry;
+  }
+
+  getBlobStorageConfig(): AppEnvironment["blobStorage"] {
+    return this.get().blobStorage;
+  }
+
+  getElasticsearchConfig(): AppEnvironment["elasticsearch"] {
+    return this.get().elasticsearch;
+  }
+
+  getEnvironmentVariable(name: string): string {
+    const value = (this.state?.raw as Record<string, string | undefined> | undefined)?.[name];
+
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${name}`);
+    }
+
+    return value;
+  }
+
+  getOptionalEnvironmentVariable(name: string): string | undefined {
+    return (this.state?.raw as Record<string, string | undefined> | undefined)?.[name];
+  }
+}
+
+export const environment = new EnvironmentManager();
+
+export function loadEnvironment(): AppEnvironment {
+  return environment.load();
+}
+
+export function getEnvironment(): AppEnvironment {
+  return environment.get();
+}
+
+export function getEnvironmentVariable(name: string): string {
+  return environment.getEnvironmentVariable(name);
+}
+
+export function getOptionalEnvironmentVariable(
+  name: string,
+): string | undefined {
+  return environment.getOptionalEnvironmentVariable(name);
 }
