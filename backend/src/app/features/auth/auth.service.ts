@@ -1,5 +1,4 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import bcrypt from "bcrypt";
 import type { ClientRequestContext } from "@/configuration/http/bindings";
 import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
@@ -40,9 +39,9 @@ interface AuthRequestContext {
   client: ClientRequestContext;
 }
 
-const scrypt = promisify(scryptCallback);
-const PASSWORD_HASH_KEY_LENGTH = 64;
-const DUMMY_PASSWORD_HASH = `rent-auth-dummy-salt:${Buffer.alloc(PASSWORD_HASH_KEY_LENGTH).toString("base64url")}`;
+const BCRYPT_SALT_ROUNDS = 12;
+const DUMMY_PASSWORD_HASH =
+  "$2b$12$1M7NQyWNh5v3NFg4cTQdUeVUI5BvR9f0vAOVeI3E1FQfQ0rFJz0Vy";
 const MAX_FAILED_LOCAL_LOGIN_ATTEMPTS = 5;
 const LOCAL_LOGIN_ATTEMPT_TTL_IN_SECONDS = 15 * 60;
 const LOCAL_LOGIN_LOCK_TTL_IN_SECONDS = 30 * 60;
@@ -520,32 +519,17 @@ export class AuthService {
 
   private async hashPassword(password: string): Promise<string> {
     this.assertValidPassword(password);
-
-    const salt = randomBytes(16).toString("base64url");
-    const derivedKey = (await scrypt(password, salt, PASSWORD_HASH_KEY_LENGTH)) as Buffer;
-
-    return `${salt}:${derivedKey.toString("base64url")}`;
+    return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
   }
 
   private async verifyPassword(password: string, passwordHash: string): Promise<boolean> {
-    const [salt, storedHash] = passwordHash.split(":");
-
-    if (!salt || !storedHash) {
-      return this.verifyPasswordAgainstFakeHash(password);
-    }
-
-    const derivedKey = (await scrypt(password, salt, PASSWORD_HASH_KEY_LENGTH)) as Buffer;
-    const storedHashBuffer = Buffer.from(storedHash, "base64url");
-
-    if (derivedKey.length !== storedHashBuffer.length) {
-      return false;
-    }
-
-    return timingSafeEqual(derivedKey, storedHashBuffer);
+    return this.isBcryptHash(passwordHash)
+      ? bcrypt.compare(password, passwordHash)
+      : this.verifyPasswordAgainstFakeHash(password);
   }
 
   private async verifyPasswordAgainstFakeHash(password: string): Promise<boolean> {
-    return this.verifyPassword(password, DUMMY_PASSWORD_HASH);
+    return bcrypt.compare(password, DUMMY_PASSWORD_HASH);
   }
 
   private async rejectIfPasswordMatchesCurrent(
@@ -563,6 +547,10 @@ export class AuthService {
     if (password.length < 8) {
       throw new Error("Password must be at least 8 characters long.");
     }
+  }
+
+  private isBcryptHash(passwordHash: string): boolean {
+    return /^\$2[aby]\$\d{2}\$/.test(passwordHash);
   }
 
   private toUserProfile(user: AuthUserRecord): AuthUserProfile {
