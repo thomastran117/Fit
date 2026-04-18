@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeader } from "@/components/navigation/site-header";
+import { SiteFooter } from "@/components/navigation/site-footer";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -19,6 +20,7 @@ export default function RootLayout({
         <Providers>
           <SiteHeader />
           <div className="flex-1">{children}</div>
+          <SiteFooter />
         </Providers>
       </body>
     </html>
