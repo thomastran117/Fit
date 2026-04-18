@@ -184,6 +184,10 @@ export class OAuthTokenVerifier {
       throw new UnauthorizedError("OAuth token audience is invalid.");
     }
 
+    if (!matchesIssuer(options.issuer, payload.iss)) {
+      throw new UnauthorizedError("OAuth token issuer is invalid.");
+    }
+
     if (options.nonce && payload.nonce !== options.nonce) {
       throw new UnauthorizedError("OAuth token nonce is invalid.");
     }

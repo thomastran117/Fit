@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { parseRequestBody } from "@/configuration/validation/request";
@@ -180,7 +180,16 @@ export class AuthController {
     const result = await this.authService.logout({
       auth: context.get("auth"),
       client: context.get("client"),
+      refreshToken: getCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME),
     });
+
+    deleteCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME, {
+      path: "/",
+      httpOnly: true,
+      secure: this.isSecureCookieEnabled(),
+      sameSite: "Lax",
+    });
+
     return context.json(result);
   };
 
@@ -410,7 +419,7 @@ export class AuthController {
       idempotencyKey: context.req.header("x-request-id") ?? randomUUID(),
     });
 
-    if (!result.success) {
+    if (!result.success || result.failOpen) {
       throw new BadRequestError("Captcha verification failed.", {
         errors: result.errors,
         failOpen: result.failOpen,

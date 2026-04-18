@@ -69,8 +69,14 @@ function readNumber(name: string, fallback: number): number {
   return parsedValue;
 }
 
-function readRequiredSecret(name: string, fallback: string): string {
-  return process.env[name] ?? fallback;
+function readRequiredSecret(name: string): string {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} must be configured.`);
+  }
+
+  return value;
 }
 
 function toBase64Url(value: string | Buffer): string {
@@ -360,11 +366,11 @@ export class TokenService {
   }
 
   private getAccessTokenSecret(): string {
-    return this.accessTokenSecret ?? readRequiredSecret("ACCESS_TOKEN_SECRET", "development-access-secret");
+    return this.accessTokenSecret ?? readRequiredSecret("ACCESS_TOKEN_SECRET");
   }
 
   private getRefreshTokenSecret(): string {
-    return this.refreshTokenSecret ?? readRequiredSecret("REFRESH_TOKEN_SECRET", "development-refresh-secret");
+    return this.refreshTokenSecret ?? readRequiredSecret("REFRESH_TOKEN_SECRET");
   }
 
   private getAccessTokenTtlSeconds(): number {

@@ -37,6 +37,7 @@ import { TokenService, type JwtClaims } from "@/features/auth/token/token.servic
 interface AuthRequestContext {
   auth: JwtClaims;
   client: ClientRequestContext;
+  refreshToken?: string;
 }
 
 const BCRYPT_SALT_ROUNDS = 12;
@@ -385,6 +386,12 @@ export class AuthService {
     };
     client: ClientRequestContext;
   }> {
+    if (context.refreshToken) {
+      await this.tokenService.revokeRefreshToken(context.refreshToken);
+    }
+
+    await this.authRepository.rotateTokenVersion(context.auth.sub);
+
     return {
       loggedOut: true,
       auth: {
