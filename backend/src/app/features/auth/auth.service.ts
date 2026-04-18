@@ -26,6 +26,7 @@ import {
   type ResendVerificationEmailInput,
   type VerifyEmailInput,
   type UnlockLocalLoginInput,
+  isStrongPassword,
 } from "@/features/auth/auth.model";
 import { OtpService } from "@/features/auth/otp/otp.service";
 import { AppleOAuthService } from "@/features/auth/oauth/apple.service";
@@ -551,8 +552,10 @@ export class AuthService {
   }
 
   private assertValidPassword(password: string): void {
-    if (password.length < 8) {
-      throw new Error("Password must be at least 8 characters long.");
+    if (!isStrongPassword(password)) {
+      throw new Error(
+        "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.",
+      );
     }
   }
 

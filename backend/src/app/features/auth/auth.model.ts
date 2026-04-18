@@ -2,10 +2,27 @@ import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { z } from "zod";
 
 const optionalTrimmedString = z.string().trim().min(1).optional();
+const STRONG_PASSWORD_MESSAGE =
+  "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.";
+
+export function isStrongPassword(password: string): boolean {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  );
+}
+
+export const strongPasswordSchema = z
+  .string()
+  .min(8, STRONG_PASSWORD_MESSAGE)
+  .refine(isStrongPassword, STRONG_PASSWORD_MESSAGE);
 
 export const localSignupRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
-  password: z.string().min(8, "Password must be at least 8 characters long."),
+  password: strongPasswordSchema,
   captchaToken: z.string().trim().min(1, "Captcha token is required."),
   firstName: optionalTrimmedString,
   lastName: optionalTrimmedString,
@@ -86,13 +103,13 @@ export const resendForgotPasswordRequestSchema = z.object({
 export const resetPasswordRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   code: z.string().trim().regex(/^\d{6}$/, "Reset code must be 6 digits."),
-  newPassword: z.string().min(8, "Password must be at least 8 characters long."),
+  newPassword: strongPasswordSchema,
   deviceId: optionalTrimmedString,
 });
 
 export const changePasswordRequestSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required."),
-  newPassword: z.string().min(8, "Password must be at least 8 characters long."),
+  newPassword: strongPasswordSchema,
 });
 
 export const removeKnownDeviceRequestSchema = z.object({
