@@ -93,6 +93,36 @@ Run them from:
 cd backend
 ```
 
+## Docker
+
+The repository now includes Docker support for:
+
+- `MySQL`
+- `Redis`
+- `Elasticsearch`
+- the `backend` service
+- the `frontend` service
+
+From the repo root, start everything with:
+
+```bash
+docker compose up --build
+```
+
+Exposed ports:
+
+- frontend: `http://localhost:3040`
+- backend: `http://localhost:8040`
+- MySQL: `localhost:3306`
+- Redis: `localhost:6379`
+- Elasticsearch: `http://localhost:9200`
+
+Notes:
+
+- The backend container runs `prisma migrate deploy` before starting the server.
+- The current `docker-compose.yml` includes placeholder values for `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
+- Replace those placeholders before using the stack for anything beyond local bootstrapping.
+
 ## Documentation
 
 - Application plan: [docs/rentify-plan.md](C:/Users/thoma/Documents/Rent/docs/rentify-plan.md)
