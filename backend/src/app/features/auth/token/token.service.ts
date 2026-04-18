@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { environment } from "@/configuration/environment";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type { AuthRepository } from "@/features/auth/auth.repository";
 import type { CacheService } from "@/features/cache/cache.service";
@@ -52,32 +53,6 @@ interface TokenServiceOptions {
 
 const ACCESS_TOKEN_ALGORITHM = "HS256";
 const REFRESH_TOKEN_VERSION = "v1";
-
-function readNumber(name: string, fallback: number): number {
-  const value = process.env[name];
-
-  if (!value) {
-    return fallback;
-  }
-
-  const parsedValue = Number(value);
-
-  if (Number.isNaN(parsedValue)) {
-    throw new Error(`${name} must be a valid number.`);
-  }
-
-  return parsedValue;
-}
-
-function readRequiredSecret(name: string): string {
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`${name} must be configured.`);
-  }
-
-  return value;
-}
 
 function toBase64Url(value: string | Buffer): string {
   const buffer = typeof value === "string" ? Buffer.from(value, "utf8") : value;
@@ -366,34 +341,34 @@ export class TokenService {
   }
 
   private getAccessTokenSecret(): string {
-    return this.accessTokenSecret ?? readRequiredSecret("ACCESS_TOKEN_SECRET");
+    return this.accessTokenSecret ?? environment.getTokenConfig().accessTokenSecret;
   }
 
   private getRefreshTokenSecret(): string {
-    return this.refreshTokenSecret ?? readRequiredSecret("REFRESH_TOKEN_SECRET");
+    return this.refreshTokenSecret ?? environment.getTokenConfig().refreshTokenSecret;
   }
 
   private getAccessTokenTtlSeconds(): number {
-    return this.accessTokenTtlSeconds ?? readNumber("ACCESS_TOKEN_TTL_SECONDS", 15 * 60);
+    return this.accessTokenTtlSeconds ?? environment.getTokenConfig().accessTokenTtlSeconds;
   }
 
   private getRefreshTokenTtlSeconds(): number {
-    return this.refreshTokenTtlSeconds ?? readNumber("REFRESH_TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60);
+    return this.refreshTokenTtlSeconds ?? environment.getTokenConfig().refreshTokenTtlSeconds;
   }
 
   private getIssuer(): string | undefined {
-    return this.issuer ?? process.env.TOKEN_ISSUER;
+    return this.issuer ?? environment.getTokenConfig().issuer;
   }
 
   private getAudience(): string | undefined {
-    return this.audience ?? process.env.TOKEN_AUDIENCE;
+    return this.audience ?? environment.getTokenConfig().audience;
   }
 
   private getRefreshTokenMode(): RefreshTokenMode {
-    return this.refreshTokenMode ?? ((process.env.REFRESH_TOKEN_MODE as RefreshTokenMode | undefined) ?? "stateless");
+    return this.refreshTokenMode ?? environment.getTokenConfig().refreshTokenMode;
   }
 
   private getRefreshTokenCachePrefix(): string {
-    return this.refreshTokenCachePrefix ?? process.env.REFRESH_TOKEN_CACHE_PREFIX ?? "auth:refresh";
+    return this.refreshTokenCachePrefix ?? environment.getTokenConfig().refreshTokenCachePrefix;
   }
 }

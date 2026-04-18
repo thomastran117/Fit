@@ -1,31 +1,16 @@
 import { createClient } from "redis";
+import { environment } from "@/configuration/environment";
 
 type RedisClient = ReturnType<typeof createClient>;
 
-function readNumber(name: string, fallback: number): number {
-  const value = process.env[name];
-
-  if (!value) {
-    return fallback;
-  }
-
-  const parsedValue = Number(value);
-
-  if (Number.isNaN(parsedValue)) {
-    throw new Error(`${name} must be a valid number.`);
-  }
-
-  return parsedValue;
-}
-
 function buildRedisUrl(): string {
-  if (process.env.REDIS_URL) {
-    return process.env.REDIS_URL;
+  const config = environment.getRedisConfig();
+
+  if (config.url) {
+    return config.url;
   }
 
-  const host = process.env.REDIS_HOST ?? "127.0.0.1";
-  const port = readNumber("REDIS_PORT", 6379);
-  const password = process.env.REDIS_PASSWORD;
+  const { host, port, password } = config;
 
   if (password) {
     return `redis://:${password}@${host}:${port}`;
@@ -37,11 +22,13 @@ function buildRedisUrl(): string {
 let redis: RedisClient | null = null;
 
 function createRedisClient(): RedisClient {
+  const config = environment.getRedisConfig();
+
   const client = createClient({
     url: buildRedisUrl(),
-    database: readNumber("REDIS_DB", 0),
+    database: config.db,
     socket: {
-      connectTimeout: readNumber("REDIS_CONNECT_TIMEOUT_MS", 10_000),
+      connectTimeout: config.connectTimeoutMs,
     },
   });
 

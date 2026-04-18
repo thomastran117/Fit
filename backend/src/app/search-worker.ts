@@ -1,5 +1,5 @@
 import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
-import { loadEnvironment } from "@/configuration/environment/index";
+import { environment, loadEnvironment } from "@/configuration/environment/index";
 import {
   connectElasticsearch,
   disconnectElasticsearch,
@@ -8,29 +8,13 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-function readNumber(name: string, fallback: number): number {
-  const rawValue = process.env[name];
-
-  if (!rawValue) {
-    return fallback;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  if (Number.isNaN(parsedValue)) {
-    throw new Error(`${name} must be a valid number.`);
-  }
-
-  return parsedValue;
-}
 
 async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
   await connectElasticsearch();
   const container = initializeContainer();
-  const pollIntervalMs = readNumber("POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS", 2_000);
-  const batchSize = readNumber("POSTINGS_SEARCH_OUTBOX_BATCH_SIZE", 25);
+  const { pollIntervalMs, batchSize } = environment.getSearchWorkerConfig();
 
   console.log("Postings search worker started.");
 

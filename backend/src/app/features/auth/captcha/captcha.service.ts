@@ -1,4 +1,4 @@
-import { getOptionalEnvironmentVariable } from "@/configuration/environment";
+import { environment, getOptionalEnvironmentVariable } from "@/configuration/environment";
 import { assertTrustedOutboundUrl } from "@/features/security/outbound-request-guard";
 
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -80,7 +80,7 @@ export class CaptchaService {
   private readonly requestTimeoutMs: number;
 
   constructor(options: CaptchaServiceOptions = {}) {
-    this.secretKey = options.secretKey ?? process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+    this.secretKey = options.secretKey ?? environment.getCaptchaConfig().secretKey;
     this.verificationUrl = options.verificationUrl ?? TURNSTILE_SITEVERIFY_URL;
     this.allowedHosts = options.allowedHosts ?? this.readAllowedHosts();
     this.maxRetries = options.maxRetries ?? DEFAULTS.maxRetries;
@@ -323,13 +323,13 @@ export class CaptchaService {
   }
 
   private readAllowedHosts(): string[] {
-    const configuredHosts =
-      getOptionalEnvironmentVariable("CAPTCHA_ALLOWED_HOSTS") ?? "challenges.cloudflare.com";
+    const configuredHosts = getOptionalEnvironmentVariable("CAPTCHA_ALLOWED_HOSTS");
 
-    return configuredHosts
-      .split(",")
-      .map((host) => host.trim().toLowerCase())
-      .filter(Boolean);
+    if (!configuredHosts) {
+      return environment.getCaptchaConfig().allowedHosts;
+    }
+
+    return configuredHosts.split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);
   }
 }
 

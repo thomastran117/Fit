@@ -1,33 +1,16 @@
 import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
-import { loadEnvironment } from "@/configuration/environment/index";
+import { environment, loadEnvironment } from "@/configuration/environment/index";
 import {
   connectDatabase,
   disconnectDatabase,
 } from "@/configuration/resources/database";
-
-function readNumber(name: string, fallback: number): number {
-  const rawValue = process.env[name];
-
-  if (!rawValue) {
-    return fallback;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  if (Number.isNaN(parsedValue)) {
-    throw new Error(`${name} must be a valid number.`);
-  }
-
-  return parsedValue;
-}
 
 async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
   const container = initializeContainer();
 
-  const pollIntervalMs = readNumber("BOOKING_REQUEST_EXPIRY_POLL_INTERVAL_MS", 5_000);
-  const batchSize = readNumber("BOOKING_REQUEST_EXPIRY_BATCH_SIZE", 50);
+  const { pollIntervalMs, batchSize } = environment.getBookingExpiryWorkerConfig();
 
   console.log("Booking request expiry worker started.");
 

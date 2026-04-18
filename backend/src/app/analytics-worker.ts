@@ -1,5 +1,5 @@
 import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
-import { loadEnvironment } from "@/configuration/environment/index";
+import { environment, loadEnvironment } from "@/configuration/environment/index";
 import {
   connectDatabase,
   disconnectDatabase,
@@ -10,29 +10,12 @@ import type {
   ProcessPostingViewedEventInput,
 } from "@/features/postings/postings.analytics.model";
 
-function readNumber(name: string, fallback: number): number {
-  const rawValue = process.env[name];
-
-  if (!rawValue) {
-    return fallback;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  if (Number.isNaN(parsedValue)) {
-    throw new Error(`${name} must be a valid number.`);
-  }
-
-  return parsedValue;
-}
-
 async function bootstrap(): Promise<void> {
   loadEnvironment();
   await connectDatabase();
   const container = initializeContainer();
 
-  const pollIntervalMs = readNumber("POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS", 2_000);
-  const batchSize = readNumber("POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE", 50);
+  const { pollIntervalMs, batchSize } = environment.getAnalyticsWorkerConfig();
 
   console.log("Postings analytics worker started.");
 

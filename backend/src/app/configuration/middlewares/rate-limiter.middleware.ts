@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
+import { environment } from "@/configuration/environment";
 import TooManyRequestError from "@/errors/http/too-many-request.error";
 
 type RateLimiterStrategy = "sliding-window" | "token-bucket";
@@ -82,59 +83,28 @@ redis.call('PEXPIRE', key, ttl_ms)
 return {1, math.floor(tokens), 0}
 `;
 
-function readNumber(name: string, fallback: number): number {
-  const rawValue = process.env[name];
-
-  if (!rawValue) {
-    return fallback;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  if (Number.isNaN(parsedValue) || parsedValue <= 0) {
-    throw new Error(`${name} must be a positive number.`);
-  }
-
-  return parsedValue;
-}
-
 function readStrategy(): RateLimiterStrategy {
-  const strategy = (process.env.RATE_LIMITER_STRATEGY ?? "sliding-window").trim().toLowerCase();
-
-  if (strategy === "sliding-window" || strategy === "token-bucket") {
-    return strategy;
-  }
-
-  throw new Error(
-    "RATE_LIMITER_STRATEGY must be either 'sliding-window' or 'token-bucket'.",
-  );
+  return environment.getRateLimiterConfig().strategy;
 }
 
 function isEnabled(): boolean {
-  const value = (process.env.RATE_LIMITER_ENABLED ?? "true").trim().toLowerCase();
-  return value !== "false" && value !== "0" && value !== "off";
+  return environment.getRateLimiterConfig().enabled;
 }
 
 function getLimit(): number {
-  return readNumber("RATE_LIMITER_LIMIT", 60);
+  return environment.getRateLimiterConfig().limit;
 }
 
 function getWindowSeconds(): number {
-  return readNumber("RATE_LIMITER_WINDOW_SECONDS", 60);
+  return environment.getRateLimiterConfig().windowSeconds;
 }
 
 function getTokenBucketCapacity(): number {
-  return readNumber("RATE_LIMITER_BUCKET_CAPACITY", getLimit());
+  return environment.getRateLimiterConfig().bucketCapacity;
 }
 
 function getTokenBucketRefillRate(): number {
-  const configured = process.env.RATE_LIMITER_REFILL_TOKENS_PER_SECOND;
-
-  if (configured) {
-    return readNumber("RATE_LIMITER_REFILL_TOKENS_PER_SECOND", 1);
-  }
-
-  return getTokenBucketCapacity() / getWindowSeconds();
+  return environment.getRateLimiterConfig().refillTokensPerSecond;
 }
 
 function buildRateLimitKey(request: Request, ipAddress: string): string {

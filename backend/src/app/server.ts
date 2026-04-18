@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { createApplication } from "@/configuration/bootstrap/application";
 import { initializeContainer } from "@/configuration/bootstrap/container";
-import { loadEnvironment } from "@/configuration/environment/index";
+import { environment, loadEnvironment } from "@/configuration/environment/index";
 import {
   connectElasticsearch,
   disconnectElasticsearch,
@@ -18,7 +18,7 @@ import {
 async function bootstrap(): Promise<void> {
   loadEnvironment();
 
-  const port = Number(process.env.PORT ?? 8040);
+  const port = environment.getServerPort();
 
   await connectDatabase();
   await connectRedis();
