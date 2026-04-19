@@ -86,6 +86,8 @@ class FakeRequestContainer implements ServiceContainer {
 function createApp(overrides?: {
   localAuthenticate?: (input: unknown) => Promise<AuthSessionResult>;
   localSignup?: (input: unknown) => Promise<unknown>;
+  googleAuthenticate?: (input: unknown) => Promise<AuthSessionResult>;
+  microsoftAuthenticate?: (input: unknown) => Promise<AuthSessionResult>;
   localVerify?: (input: unknown) => Promise<unknown>;
   logout?: (input: unknown) => Promise<unknown>;
   captchaVerify?: (input: unknown) => Promise<{ success: boolean; failOpen: boolean; errors: string[] }>;
@@ -102,6 +104,24 @@ function createApp(overrides?: {
             email: "user@example.com",
             alreadyPending: false,
           })),
+      ),
+    googleAuthenticate:
+      jest.fn(
+        overrides?.googleAuthenticate ??
+          (async () =>
+            createSessionResult({
+              accessToken: "google-access-token",
+              refreshToken: "google-refresh-token",
+            })),
+      ),
+    microsoftAuthenticate:
+      jest.fn(
+        overrides?.microsoftAuthenticate ??
+          (async () =>
+            createSessionResult({
+              accessToken: "microsoft-access-token",
+              refreshToken: "microsoft-refresh-token",
+            })),
       ),
     localVerify:
       jest.fn(
@@ -328,6 +348,125 @@ describe("Auth integration", () => {
           userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
           platform: "iOS",
         },
+      },
+    });
+  });
+
+  it("POST /auth/oauth/google maps the oauth request body and returns a desktop auth session", async () => {
+    const { app, authService } = createApp();
+
+    const response = await app.request("http://rent.test/auth/oauth/google", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.88",
+        "x-device-id": "oauth-device-1",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+        "sec-ch-ua-platform": "\"macOS\"",
+      },
+      body: JSON.stringify({
+        code: "google-code",
+        codeVerifier: "google-verifier",
+        nonce: "google-nonce",
+        rememberMe: true,
+        firstName: "Gina",
+        lastName: "Google",
+      }),
+    });
+
+    expect(authService.googleAuthenticate).toHaveBeenCalledWith({
+      code: "google-code",
+      codeVerifier: "google-verifier",
+      idToken: undefined,
+      nonce: "google-nonce",
+      rememberMe: true,
+      client: {
+        ip: "203.0.113.88",
+        device: {
+          id: "oauth-device-1",
+          type: "desktop",
+          isMobile: false,
+          userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+          platform: "macOS",
+        },
+      },
+      firstName: "Gina",
+      lastName: "Google",
+      deviceId: "oauth-device-1",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("refresh_token=google-refresh-token");
+    await expect(response.json()).resolves.toEqual({
+      accessToken: "google-access-token",
+      device: {
+        deviceId: "device-1",
+        known: true,
+        knownByIp: true,
+      },
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: "test-user",
+        role: "user",
+      },
+    });
+  });
+
+  it("POST /auth/oauth/microsoft accepts id_token auth on mobile and returns the refresh token in the body", async () => {
+    const { app, authService } = createApp();
+
+    const response = await app.request("http://rent.test/auth/oauth/microsoft", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "198.51.100.44",
+        "x-device-id": "mobile-oauth-device",
+        "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+        "sec-ch-ua-mobile": "?1",
+        "sec-ch-ua-platform": "\"iOS\"",
+      },
+      body: JSON.stringify({
+        idToken: "microsoft-id-token",
+        nonce: "microsoft-nonce",
+        rememberMe: true,
+      }),
+    });
+
+    expect(authService.microsoftAuthenticate).toHaveBeenCalledWith({
+      code: undefined,
+      codeVerifier: undefined,
+      idToken: "microsoft-id-token",
+      nonce: "microsoft-nonce",
+      rememberMe: true,
+      client: {
+        ip: "198.51.100.44",
+        device: {
+          id: "mobile-oauth-device",
+          type: "mobile",
+          isMobile: true,
+          userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+          platform: "iOS",
+        },
+      },
+      firstName: undefined,
+      lastName: undefined,
+      deviceId: "mobile-oauth-device",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    await expect(response.json()).resolves.toEqual({
+      accessToken: "microsoft-access-token",
+      refreshToken: "microsoft-refresh-token",
+      device: {
+        deviceId: "device-1",
+        known: true,
+        knownByIp: true,
+      },
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: "test-user",
+        role: "user",
       },
     });
   });
