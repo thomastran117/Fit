@@ -82,6 +82,11 @@ function createService(overrides?: {
     verifiedAt: string;
   }>>;
   removeKnownDevice?: (userId: string, deviceId: string) => Promise<void>;
+  registerKnownDevice?: (
+    user: AuthUserRecord,
+    client: ReturnType<typeof createClient>,
+    deviceId: string,
+  ) => Promise<{ deviceId?: string; known: boolean; knownByIp: boolean }>;
   issueOtp?: (input: { purpose: string; subject: string }) => Promise<{ code: string }>;
   verifyOtp?: (input: { purpose: string; subject: string; code: string }) => Promise<void>;
   sendVerificationEmail?: (input: {
