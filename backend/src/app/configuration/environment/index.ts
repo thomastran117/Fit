@@ -66,6 +66,7 @@ type RawEnvironmentValues = {
   REFRESH_TOKEN_CACHE_PREFIX?: string;
   REFRESH_TOKEN_MODE?: string;
   REFRESH_TOKEN_SECRET?: string;
+  REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS?: string;
   REFRESH_TOKEN_TTL_SECONDS?: string;
   SQUARE_ACCESS_TOKEN?: string;
   SQUARE_ENVIRONMENT?: string;
@@ -93,6 +94,7 @@ export interface AppEnvironment {
     refreshTokenSecret: string;
     accessTokenTtlSeconds: number;
     refreshTokenTtlSeconds: number;
+    rememberMeRefreshTokenTtlSeconds: number;
     issuer?: string;
     audience?: string;
     refreshTokenMode: RefreshTokenMode;
@@ -257,6 +259,7 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "REFRESH_TOKEN_CACHE_PREFIX",
   "REFRESH_TOKEN_MODE",
   "REFRESH_TOKEN_SECRET",
+  "REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS",
   "REFRESH_TOKEN_TTL_SECONDS",
   "SQUARE_ACCESS_TOKEN",
   "SQUARE_ENVIRONMENT",
@@ -547,6 +550,16 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
         raw,
         "REFRESH_TOKEN_TTL_SECONDS",
         30 * 24 * 60 * 60,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      rememberMeRefreshTokenTtlSeconds: parseNumber(
+        raw,
+        "REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS",
+        90 * 24 * 60 * 60,
         errors,
         {
           integer: true,

@@ -263,12 +263,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.bookingsController,
     lifetime: "scoped",
-    dependencies: [containerTokens.bookingsService, containerTokens.tokenService],
-    resolve: ({ resolve }) =>
-      new BookingsController(
-        resolve(containerTokens.bookingsService),
-        resolve(containerTokens.tokenService),
-      ),
+    dependencies: [containerTokens.bookingsService],
+    resolve: ({ resolve }) => new BookingsController(resolve(containerTokens.bookingsService)),
   });
   container.register({
     token: containerTokens.paymentsRepository,
@@ -300,12 +296,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.paymentsController,
     lifetime: "scoped",
-    dependencies: [containerTokens.paymentsService, containerTokens.tokenService],
-    resolve: ({ resolve }) =>
-      new PaymentsController(
-        resolve(containerTokens.paymentsService),
-        resolve(containerTokens.tokenService),
-      ),
+    dependencies: [containerTokens.paymentsService],
+    resolve: ({ resolve }) => new PaymentsController(resolve(containerTokens.paymentsService)),
   });
   container.register({
     token: containerTokens.rentingsService,
@@ -325,12 +317,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
   container.register({
     token: containerTokens.rentingsController,
     lifetime: "scoped",
-    dependencies: [containerTokens.rentingsService, containerTokens.tokenService],
-    resolve: ({ resolve }) =>
-      new RentingsController(
-        resolve(containerTokens.rentingsService),
-        resolve(containerTokens.tokenService),
-      ),
+    dependencies: [containerTokens.rentingsService],
+    resolve: ({ resolve }) => new RentingsController(resolve(containerTokens.rentingsService)),
   });
   container.register({
     token: containerTokens.postingsReviewsRepository,
@@ -388,14 +376,12 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsService,
       containerTokens.postingsAnalyticsService,
       containerTokens.postingsReviewsService,
-      containerTokens.tokenService,
     ],
     resolve: ({ resolve }) =>
       new PostingsController(
         resolve(containerTokens.postingsService),
         resolve(containerTokens.postingsAnalyticsService),
         resolve(containerTokens.postingsReviewsService),
-        resolve(containerTokens.tokenService),
       ),
   });
 }

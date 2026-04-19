@@ -12,7 +12,6 @@ import type { PaymentsController } from "@/features/payments/payments.controller
 import type { ProfileController } from "@/features/profile/profile.controller";
 import type { PostingsController } from "@/features/postings/postings.controller";
 import type { RentingsController } from "@/features/rentings/rentings.controller";
-import { jwtMiddleware } from "../middlewares/jwt-middleware";
 
 type ControllerHandlerName<TController> = {
   [TKey in keyof TController]: TController[TKey] extends (
@@ -36,15 +35,6 @@ function resolveHandler<TController>(
 }
 
 export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
-  app.use("/auth/local/verify", jwtMiddleware);
-  app.use("/auth/local/password/change", jwtMiddleware);
-  app.use("/auth/logout", jwtMiddleware);
-  app.use("/auth/device/verify", jwtMiddleware);
-  app.use("/auth/devices", jwtMiddleware);
-  app.use("/auth/devices/remove", jwtMiddleware);
-  app.use("/blob/upload-url", jwtMiddleware);
-  app.use("/profile/me", jwtMiddleware);
-
   app.get("/", (context) => {
     return context.json({
       message: "TypeScript Hono server is running",

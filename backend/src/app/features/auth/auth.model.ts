@@ -2,8 +2,21 @@ import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { z } from "zod";
 
 const optionalTrimmedString = z.string().trim().min(1).optional();
+export const appRoleSchema = z.enum(["user", "owner", "admin"]);
+export type AppRole = z.infer<typeof appRoleSchema>;
+export const DEFAULT_APP_ROLE: AppRole = "user";
 const STRONG_PASSWORD_MESSAGE =
   "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.";
+
+export function normalizeAppRole(role: string | null | undefined): AppRole {
+  const parsedRole = appRoleSchema.safeParse(role ?? DEFAULT_APP_ROLE);
+
+  if (parsedRole.success) {
+    return parsedRole.data;
+  }
+
+  throw new Error(`Unsupported application role: ${role ?? "undefined"}.`);
+}
 
 export function isStrongPassword(password: string): boolean {
   return (
@@ -33,6 +46,7 @@ export const localAuthenticateRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(1, "Password is required."),
   captchaToken: z.string().trim().min(1, "Captcha token is required."),
+  rememberMe: z.boolean().optional(),
   deviceId: optionalTrimmedString,
 });
 
@@ -42,6 +56,7 @@ export const oauthAuthenticateRequestSchema = z
     codeVerifier: optionalTrimmedString,
     idToken: optionalTrimmedString,
     nonce: z.string().trim().min(1, "Nonce is required."),
+    rememberMe: z.boolean().optional(),
     deviceId: optionalTrimmedString,
     firstName: optionalTrimmedString,
     lastName: optionalTrimmedString,
@@ -150,6 +165,7 @@ export interface LocalAuthenticateInput {
   client: ClientRequestContext;
   email: string;
   password: string;
+  rememberMe?: boolean;
   deviceId?: string;
 }
 
@@ -168,6 +184,7 @@ export interface OAuthAuthenticateInput {
   codeVerifier?: string;
   idToken?: string;
   nonce: string;
+  rememberMe?: boolean;
   deviceId?: string;
   firstName?: string;
   lastName?: string;
@@ -255,7 +272,7 @@ export interface AuthUserRecord {
   tokenVersion: number;
   firstName?: string;
   lastName?: string;
-  role: string;
+  role: AppRole;
   emailVerified: boolean;
   profile: UserProfileRecord;
   createdAt: string;
@@ -274,13 +291,14 @@ export interface AuthUserProfile {
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
-  role: string;
+  role: AppRole;
   emailVerified: boolean;
 }
 
 export interface AuthSessionResult {
   accessToken: string;
   refreshToken: string;
+  refreshTokenExpiresInSeconds: number;
   device: {
     deviceId?: string;
     known: boolean;
@@ -294,6 +312,7 @@ export interface AuthResponseUser {
   email: string;
   username: string;
   avatarUrl?: string;
+  role: AppRole;
 }
 
 export interface AuthResponseBody {

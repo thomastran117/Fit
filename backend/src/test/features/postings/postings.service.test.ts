@@ -1,19 +1,13 @@
-import assert from "node:assert/strict";
+import BadRequestError from "@/errors/http/bad-request.error";
 import type {
   PostingRecord,
   UpsertPostingInput,
 } from "@/features/postings/postings.model";
-import { PostingsService } from "@/features/postings/postings.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
+import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
-import BadRequestError from "@/errors/http/bad-request.error";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
-
-type TestCase = {
-  name: string;
-  run: () => void | Promise<void>;
-};
 
 class FakePostingsRepository {
   createCalls = 0;
@@ -141,103 +135,73 @@ function buildPostingRecord(input: UpsertPostingInput): PostingRecord {
 }
 
 function getValidationDetails(error: unknown): Array<{ path: string; message: string }> {
-  assert.ok(error instanceof BadRequestError);
-  assert.ok(Array.isArray(error.details));
-  return error.details as Array<{ path: string; message: string }>;
+  expect(error).toBeInstanceOf(BadRequestError);
+  expect(Array.isArray((error as BadRequestError).details)).toBe(true);
+  return (error as BadRequestError).details as Array<{ path: string; message: string }>;
 }
 
-const tests: TestCase[] = [
-  {
-    name: "postings service rejects unsafe content before create persists",
-    run: async () => {
-      const repository = new FakePostingsRepository();
-      const service = createService(repository);
-      const input = createValidInput();
-      input.description = "<script>alert('boom')</script>";
+describe("PostingsService", () => {
+  it("rejects unsafe content before create persists", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.description = "<script>alert('boom')</script>";
 
-      await assert.rejects(
-        service.createDraft(input),
-        (error: unknown) => {
-          const details = getValidationDetails(error);
-          assert.equal(details[0]?.path, "description");
-          return true;
-        },
-      );
+    const error = await service.createDraft(input).catch((caughtError: unknown) => caughtError);
 
-      assert.equal(repository.createCalls, 0);
-    },
-  },
-  {
-    name: "postings service rejects unsafe attribute and block note paths on create",
-    run: async () => {
-      const repository = new FakePostingsRepository();
-      const service = createService(repository);
-      const input = createValidInput();
-      input.attributes.petPolicy = "No shitty behavior";
-      input.availabilityBlocks[0]!.note = "javascript:alert('x')";
+    expect(error).toBeInstanceOf(BadRequestError);
+    const details = getValidationDetails(error);
+    expect(details[0]?.path).toBe("description");
 
-      await assert.rejects(
-        service.createDraft(input),
-        (error: unknown) => {
-          const details = getValidationDetails(error);
-          assert.deepEqual(
-            details.map((detail) => detail.path).sort(),
-            ["attributes.petPolicy", "availabilityBlocks.0.note"],
-          );
-          return true;
-        },
-      );
+    expect(repository.createCalls).toBe(0);
+  });
 
-      assert.equal(repository.createCalls, 0);
-    },
-  },
-  {
-    name: "postings service rejects unsafe content before update persists",
-    run: async () => {
-      const repository = new FakePostingsRepository();
-      const service = createService(repository);
-      const input = createValidInput();
-      input.tags = ["safe", "' OR 1=1 --"];
+  it("rejects unsafe attribute and block note paths on create", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.attributes.petPolicy = "No shitty behavior";
+    input.availabilityBlocks[0]!.note = "javascript:alert('x')";
 
-      await assert.rejects(
-        service.update("posting-123", input),
-        (error: unknown) => {
-          const details = getValidationDetails(error);
-          assert.equal(details[0]?.path, "tags.1");
-          return true;
-        },
-      );
+    const error = await service.createDraft(input).catch((caughtError: unknown) => caughtError);
 
-      assert.equal(repository.findByIdCalls, 1);
-      assert.equal(repository.updateCalls, 0);
-    },
-  },
-  {
-    name: "postings service accepts clean content and persists normalized data",
-    run: async () => {
-      const repository = new FakePostingsRepository();
-      const service = createService(repository);
-      const input = createValidInput();
-      input.tags = ["  Loft  ", "loft", "Transit"];
+    expect(error).toBeInstanceOf(BadRequestError);
+    const details = getValidationDetails(error);
+    expect(details.map((detail) => detail.path).sort()).toEqual([
+      "attributes.petPolicy",
+      "availabilityBlocks.0.note",
+    ]);
 
-      const created = await service.createDraft(input);
+    expect(repository.createCalls).toBe(0);
+  });
 
-      assert.equal(repository.createCalls, 1);
-      assert.deepEqual(created.tags, ["loft", "transit"]);
-    },
-  },
-];
+  it("rejects unsafe content before update persists", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.tags = ["safe", "' OR 1=1 --"];
 
-export async function runPostingsServiceTests(): Promise<void> {
-  for (const test of tests) {
-    await test.run();
-    console.log(`PASS ${test.name}`);
-  }
+    const error = await service
+      .update("posting-123", input)
+      .catch((caughtError: unknown) => caughtError);
 
-  console.log(`Completed ${tests.length} postings service tests.`);
-}
+    expect(error).toBeInstanceOf(BadRequestError);
+    const details = getValidationDetails(error);
+    expect(details[0]?.path).toBe("tags.1");
 
-void runPostingsServiceTests().catch((error: unknown) => {
-  console.error("Postings service tests failed.", error);
-  process.exit(1);
+    expect(repository.findByIdCalls).toBe(1);
+    expect(repository.updateCalls).toBe(0);
+  });
+
+  it("accepts clean content and persists normalized data", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.tags = ["  Loft  ", "loft", "Transit"];
+
+    const created = await service.createDraft(input);
+
+    expect(repository.createCalls).toBe(1);
+    expect(created.tags).toEqual(["loft", "transit"]);
+  });
 });

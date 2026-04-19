@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { parseRequestBody } from "@/configuration/validation/request";
 import {
   createBlobUploadUrlRequestSchema,
@@ -12,6 +13,7 @@ export class BlobController {
   constructor(private readonly blobService: BlobService) {}
 
   createUploadUrl = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const input = await parseRequestBody(context, createBlobUploadUrlRequestSchema);
     const result = this.blobService.createUploadUrl(this.toCreateBlobUploadUrlInput(context, input));
 
