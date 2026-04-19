@@ -17,6 +17,10 @@ import { BookingsRepository } from "@/features/bookings/bookings.repository";
 import { BookingsService } from "@/features/bookings/bookings.service";
 import { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
+import type { PaymentProviderAdapter } from "@/features/payments/payment-provider";
+import { PaymentsController } from "@/features/payments/payments.controller";
+import { PaymentsRepository } from "@/features/payments/payments.repository";
+import { PaymentsService } from "@/features/payments/payments.service";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
@@ -53,6 +57,10 @@ export const containerTokens = {
   bookingsRepository: createServiceToken<BookingsRepository>("BookingsRepository"),
   bookingsService: createServiceToken<BookingsService>("BookingsService"),
   bookingsController: createServiceToken<BookingsController>("BookingsController"),
+  paymentsRepository: createServiceToken<PaymentsRepository>("PaymentsRepository"),
+  paymentProvider: createServiceToken<PaymentProviderAdapter>("PaymentProvider"),
+  paymentsService: createServiceToken<PaymentsService>("PaymentsService"),
+  paymentsController: createServiceToken<PaymentsController>("PaymentsController"),
   profileRepository: createServiceToken<ProfileRepository>("ProfileRepository"),
   profileService: createServiceToken<ProfileService>("ProfileService"),
   profileController: createServiceToken<ProfileController>("ProfileController"),

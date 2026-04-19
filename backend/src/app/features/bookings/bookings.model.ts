@@ -24,8 +24,14 @@ const nullableTrimmedStringSchema = z
 export const bookingRequestStatusSchema = z.enum([
   "pending",
   "approved",
+  "awaiting_payment",
+  "payment_processing",
+  "paid",
+  "payment_failed",
   "declined",
   "expired",
+  "cancelled",
+  "refunded",
 ]);
 
 export const createBookingRequestSchema = z.object({
@@ -85,6 +91,10 @@ export interface BookingRequestRecord {
   estimatedTotal: number;
   decisionNote?: string;
   approvedAt?: string;
+  paymentRequiredAt?: string;
+  paymentFailedAt?: string;
+  cancelledAt?: string;
+  refundedAt?: string;
   declinedAt?: string;
   expiredAt?: string;
   convertedAt?: string;
@@ -92,6 +102,7 @@ export interface BookingRequestRecord {
   conversionReservationExpiresAt?: string;
   holdExpiresAt: string;
   holdBlockId?: string;
+  paymentReconciliationRequired?: boolean;
   rentingId?: string;
   createdAt: string;
   updatedAt: string;

@@ -59,8 +59,8 @@ export class RentingsRepository extends BaseRepository {
 
         const now = new Date();
 
-        if (bookingRequest.status !== "approved") {
-          throw new BadRequestError("Only approved booking requests can be converted into rentings.");
+        if (bookingRequest.status !== "paid") {
+          throw new BadRequestError("Only paid booking requests can be converted into rentings.");
         }
 
         if (bookingRequest.convertedAt || bookingRequest.renting) {

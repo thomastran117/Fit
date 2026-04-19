@@ -8,6 +8,7 @@ import {
 import type { AuthController } from "@/features/auth/auth.controller";
 import type { BlobController } from "@/features/blob/blob.controller";
 import type { BookingsController } from "@/features/bookings/bookings.controller";
+import type { PaymentsController } from "@/features/payments/payments.controller";
 import type { ProfileController } from "@/features/profile/profile.controller";
 import type { PostingsController } from "@/features/postings/postings.controller";
 import type { RentingsController } from "@/features/rentings/rentings.controller";
@@ -227,6 +228,10 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<BookingsController>(containerTokens.bookingsController, "updateOwn"),
   );
   app.post(
+    "/booking-requests/:id/payment-session",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "createSessionForBooking"),
+  );
+  app.post(
     "/booking-requests/:id/approve",
     resolveHandler<BookingsController>(containerTokens.bookingsController, "approve"),
   );
@@ -235,8 +240,32 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<BookingsController>(containerTokens.bookingsController, "decline"),
   );
   app.post(
-    "/booking-requests/:id/convert",
-    resolveHandler<RentingsController>(containerTokens.rentingsController, "convertBookingRequest"),
+    "/payments/webhooks/square",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "webhook"),
+  );
+  app.get(
+    "/payments/:id",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "getById"),
+  );
+  app.post(
+    "/payments/:id/retry",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "retry"),
+  );
+  app.post(
+    "/payments/:id/refunds",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "createRefund"),
+  );
+  app.post(
+    "/payments/:id/reconcile",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "reconcile"),
+  );
+  app.post(
+    "/payments/:id/repair",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "repair"),
+  );
+  app.get(
+    "/payouts/me",
+    resolveHandler<PaymentsController>(containerTokens.paymentsController, "listPayouts"),
   );
   app.get(
     "/rentings/me",

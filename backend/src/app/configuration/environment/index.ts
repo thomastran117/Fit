@@ -45,6 +45,12 @@ type RawEnvironmentValues = {
   POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
+  PAYMENTS_RETRY_BATCH_SIZE?: string;
+  PAYMENTS_RETRY_POLL_INTERVAL_MS?: string;
+  PAYMENTS_REPAIR_BATCH_SIZE?: string;
+  PAYMENTS_REPAIR_POLL_INTERVAL_MS?: string;
+  PAYOUT_RELEASE_BATCH_SIZE?: string;
+  PAYOUT_RELEASE_POLL_INTERVAL_MS?: string;
   RATE_LIMITER_BUCKET_CAPACITY?: string;
   RATE_LIMITER_ENABLED?: string;
   RATE_LIMITER_LIMIT?: string;
@@ -61,6 +67,11 @@ type RawEnvironmentValues = {
   REFRESH_TOKEN_MODE?: string;
   REFRESH_TOKEN_SECRET?: string;
   REFRESH_TOKEN_TTL_SECONDS?: string;
+  SQUARE_ACCESS_TOKEN?: string;
+  SQUARE_ENVIRONMENT?: string;
+  SQUARE_LOCATION_ID?: string;
+  SQUARE_WEBHOOK_NOTIFICATION_URL?: string;
+  SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
   TOKEN_AUDIENCE?: string;
   TOKEN_ISSUER?: string;
 };
@@ -146,6 +157,18 @@ export interface AppEnvironment {
       pollIntervalMs: number;
       batchSize: number;
     };
+    paymentsRetry: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
+    paymentsRepair: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
+    payoutRelease: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
   };
   blobStorage: {
     connectionString?: string;
@@ -159,6 +182,14 @@ export interface AppEnvironment {
     password?: string;
     postingsIndexName: string;
     timeoutMs: number;
+  };
+  square: {
+    accessToken: string;
+    environment: "sandbox" | "production";
+    locationId: string;
+    webhookSignatureKey: string;
+    webhookNotificationUrl: string;
+    apiBaseUrl: string;
   };
 }
 
@@ -205,6 +236,12 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_OUTBOX_BATCH_SIZE",
   "POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS",
+  "PAYMENTS_REPAIR_BATCH_SIZE",
+  "PAYMENTS_REPAIR_POLL_INTERVAL_MS",
+  "PAYMENTS_RETRY_BATCH_SIZE",
+  "PAYMENTS_RETRY_POLL_INTERVAL_MS",
+  "PAYOUT_RELEASE_BATCH_SIZE",
+  "PAYOUT_RELEASE_POLL_INTERVAL_MS",
   "RATE_LIMITER_BUCKET_CAPACITY",
   "RATE_LIMITER_ENABLED",
   "RATE_LIMITER_LIMIT",
@@ -221,6 +258,11 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "REFRESH_TOKEN_MODE",
   "REFRESH_TOKEN_SECRET",
   "REFRESH_TOKEN_TTL_SECONDS",
+  "SQUARE_ACCESS_TOKEN",
+  "SQUARE_ENVIRONMENT",
+  "SQUARE_LOCATION_ID",
+  "SQUARE_WEBHOOK_NOTIFICATION_URL",
+  "SQUARE_WEBHOOK_SIGNATURE_KEY",
   "TOKEN_AUDIENCE",
   "TOKEN_ISSUER",
 ];
@@ -391,6 +433,19 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
   const refreshTokenSecret = readRequiredString(raw, "REFRESH_TOKEN_SECRET", errors);
   const gmailUser = readRequiredString(raw, "GMAIL_USER", errors);
   const gmailAppPassword = readRequiredString(raw, "GMAIL_APP_PASSWORD", errors);
+  const squareAccessToken = readRequiredString(raw, "SQUARE_ACCESS_TOKEN", errors);
+  const squareLocationId = readRequiredString(raw, "SQUARE_LOCATION_ID", errors);
+  const squareWebhookSignatureKey = readRequiredString(raw, "SQUARE_WEBHOOK_SIGNATURE_KEY", errors);
+  const squareWebhookNotificationUrl = readRequiredString(
+    raw,
+    "SQUARE_WEBHOOK_NOTIFICATION_URL",
+    errors,
+  );
+  const squareEnvironment = raw.SQUARE_ENVIRONMENT?.toLowerCase() ?? "sandbox";
+
+  if (squareEnvironment !== "sandbox" && squareEnvironment !== "production") {
+    errors.push("SQUARE_ENVIRONMENT must be either sandbox or production.");
+  }
 
   const frontendBaseUrl = normalizeBaseUrl(
     raw.FRONTEND_URL ?? raw.APP_BASE_URL ?? DEFAULT_FRONTEND_URL,
@@ -611,6 +666,36 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           min: 1,
         }),
       },
+      paymentsRetry: {
+        pollIntervalMs: parseNumber(raw, "PAYMENTS_RETRY_POLL_INTERVAL_MS", 5_000, errors, {
+          integer: true,
+          min: 1,
+        }),
+        batchSize: parseNumber(raw, "PAYMENTS_RETRY_BATCH_SIZE", 25, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      paymentsRepair: {
+        pollIntervalMs: parseNumber(raw, "PAYMENTS_REPAIR_POLL_INTERVAL_MS", 10_000, errors, {
+          integer: true,
+          min: 1,
+        }),
+        batchSize: parseNumber(raw, "PAYMENTS_REPAIR_BATCH_SIZE", 25, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      payoutRelease: {
+        pollIntervalMs: parseNumber(raw, "PAYOUT_RELEASE_POLL_INTERVAL_MS", 15_000, errors, {
+          integer: true,
+          min: 1,
+        }),
+        batchSize: parseNumber(raw, "PAYOUT_RELEASE_BATCH_SIZE", 50, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
     },
     blobStorage: {
       connectionString: raw.AZURE_STORAGE_CONNECTION_STRING,
@@ -637,6 +722,17 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
         integer: true,
         min: 1,
       }),
+    },
+    square: {
+      accessToken: squareAccessToken,
+      environment: squareEnvironment === "production" ? "production" : "sandbox",
+      locationId: squareLocationId,
+      webhookSignatureKey: squareWebhookSignatureKey,
+      webhookNotificationUrl: squareWebhookNotificationUrl,
+      apiBaseUrl:
+        squareEnvironment === "production"
+          ? "https://connect.squareup.com"
+          : "https://connect.squareupsandbox.com",
     },
   };
 
@@ -746,12 +842,28 @@ class EnvironmentManager {
     return this.get().workers.bookingExpiry;
   }
 
+  getPaymentsRetryWorkerConfig(): AppEnvironment["workers"]["paymentsRetry"] {
+    return this.get().workers.paymentsRetry;
+  }
+
+  getPaymentsRepairWorkerConfig(): AppEnvironment["workers"]["paymentsRepair"] {
+    return this.get().workers.paymentsRepair;
+  }
+
+  getPayoutReleaseWorkerConfig(): AppEnvironment["workers"]["payoutRelease"] {
+    return this.get().workers.payoutRelease;
+  }
+
   getBlobStorageConfig(): AppEnvironment["blobStorage"] {
     return this.get().blobStorage;
   }
 
   getElasticsearchConfig(): AppEnvironment["elasticsearch"] {
     return this.get().elasticsearch;
+  }
+
+  getSquareConfig(): AppEnvironment["square"] {
+    return this.get().square;
   }
 
   getEnvironmentVariable(name: string): string {

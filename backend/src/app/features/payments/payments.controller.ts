@@ -1,0 +1,175 @@
+import type { Context } from "hono";
+import type { AppBindings } from "@/configuration/http/bindings";
+import { RequestValidationError, parseRequestBody } from "@/configuration/validation/request";
+import UnauthorizedError from "@/errors/http/unauthorized.error";
+import type {
+  CreatePaymentSessionBody,
+  CreateRefundBody,
+  ListPayoutsInput,
+  ListPayoutsQuery,
+  RetryPaymentBody,
+} from "@/features/payments/payments.model";
+import {
+  createPaymentSessionSchema,
+  createRefundSchema,
+  listPayoutsQuerySchema,
+  retryPaymentSchema,
+} from "@/features/payments/payments.model";
+import type { PaymentsService } from "@/features/payments/payments.service";
+import type { TokenService } from "@/features/auth/token/token.service";
+
+export class PaymentsController {
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly tokenService: TokenService,
+  ) {}
+
+  createSessionForBooking = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const body = await parseRequestBody(context, createPaymentSessionSchema);
+    const result = await this.paymentsService.createPaymentSession({
+      bookingRequestId: this.requireBookingRequestId(context),
+      renterId: auth.sub,
+      idempotencyKey: body.idempotencyKey,
+    });
+    return context.json(result, 201);
+  };
+
+  getById = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const result = await this.paymentsService.getPaymentById(this.requirePaymentId(context), auth.sub);
+    return context.json(result);
+  };
+
+  retry = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const body = await parseRequestBody(context, retryPaymentSchema);
+    const result = await this.paymentsService.retryPayment({
+      paymentId: this.requirePaymentId(context),
+      renterId: auth.sub,
+      idempotencyKey: body.idempotencyKey,
+    });
+    return context.json(result);
+  };
+
+  createRefund = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const body = await parseRequestBody(context, createRefundSchema);
+    const result = await this.paymentsService.createRefund({
+      paymentId: this.requirePaymentId(context),
+      actorUserId: auth.sub,
+      amount: body.amount,
+      reason: body.reason ?? null,
+      idempotencyKey: body.idempotencyKey,
+    });
+    return context.json(result, 201);
+  };
+
+  listPayouts = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const result = await this.paymentsService.listPayouts(
+      this.toListPayoutsInput(auth.sub, this.parseListPayoutsQuery(context)),
+    );
+    return context.json(result);
+  };
+
+  webhook = async (context: Context<AppBindings>): Promise<Response> => {
+    const rawBody = await context.req.text();
+    const signatureHeader = context.req.header("x-square-hmacsha256-signature");
+    await this.paymentsService.processSquareWebhook(rawBody, signatureHeader);
+    return context.json({ ok: true });
+  };
+
+  reconcile = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const result = await this.paymentsService.reconcilePayment(this.requirePaymentId(context), auth.sub);
+    return context.json(result);
+  };
+
+  repair = async (context: Context<AppBindings>): Promise<Response> => {
+    await this.requireAuth(context);
+    await this.paymentsService.repairPayment(this.requirePaymentId(context));
+    return context.json({ ok: true });
+  };
+
+  private parseListPayoutsQuery(context: Context<AppBindings>): ListPayoutsQuery {
+    const url = new URL(context.req.url);
+
+    try {
+      return listPayoutsQuerySchema.parse({
+        page: url.searchParams.get("page") ?? undefined,
+        pageSize: url.searchParams.get("pageSize") ?? undefined,
+        status: url.searchParams.get("status") ?? undefined,
+      });
+    } catch (error) {
+      if ("issues" in (error as object)) {
+        const issues = (error as { issues?: Array<{ path: PropertyKey[]; message: string }> }).issues;
+
+        throw new RequestValidationError(
+          "Request query validation failed.",
+          (issues ?? []).map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  private toListPayoutsInput(userId: string, query: ListPayoutsQuery): ListPayoutsInput {
+    return {
+      ownerId: userId,
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+    };
+  }
+
+  private requireBookingRequestId(context: Context<AppBindings>): string {
+    const id = context.req.param("id");
+
+    if (!id) {
+      throw new RequestValidationError("Route parameter validation failed.", [
+        {
+          path: "id",
+          message: "Route parameter id is required.",
+        },
+      ]);
+    }
+
+    return id;
+  }
+
+  private requirePaymentId(context: Context<AppBindings>): string {
+    const id = context.req.param("id");
+
+    if (!id) {
+      throw new RequestValidationError("Route parameter validation failed.", [
+        {
+          path: "id",
+          message: "Route parameter id is required.",
+        },
+      ]);
+    }
+
+    return id;
+  }
+
+  private async requireAuth(context: Context<AppBindings>) {
+    const authorization = context.req.header("authorization");
+
+    if (!authorization) {
+      throw new UnauthorizedError("Authorization header is required.");
+    }
+
+    const [scheme, token] = authorization.split(" ");
+
+    if (scheme !== "Bearer" || !token) {
+      throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
+    }
+
+    return this.tokenService.verifyAccessToken(token);
+  }
+}
