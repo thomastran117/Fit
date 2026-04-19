@@ -35,6 +35,7 @@ import { PostingsService } from "@/features/postings/postings.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import type { RootServiceContainer } from "@/configuration/container/core";
 import { containerTokens } from "@/configuration/container/tokens";
 
@@ -358,18 +359,26 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       new PostingsSearchService(resolve(containerTokens.postingsRepository)),
   });
   container.register({
+    token: containerTokens.contentSanitizationService,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new ContentSanitizationService(),
+  });
+  container.register({
     token: containerTokens.postingsService,
     lifetime: "scoped",
     dependencies: [
       containerTokens.postingsRepository,
       containerTokens.postingsSearchService,
       containerTokens.blobService,
+      containerTokens.contentSanitizationService,
     ],
     resolve: ({ resolve }) =>
       new PostingsService(
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.postingsSearchService),
         resolve(containerTokens.blobService),
+        resolve(containerTokens.contentSanitizationService),
       ),
   });
   container.register({

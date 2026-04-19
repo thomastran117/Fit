@@ -21,16 +21,19 @@ import {
 } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 export class PostingsService {
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsSearchService: PostingsSearchService,
     private readonly blobService: BlobService,
+    private readonly contentSanitizationService: ContentSanitizationService,
   ) {}
 
   async createDraft(input: UpsertPostingInput): Promise<PostingRecord> {
     const normalizedInput = this.normalizeUpsertInput(input);
+    this.assertSafeTextContent(normalizedInput);
     this.assertPublishableDraftShape(normalizedInput);
 
     return this.postingsRepository.create(normalizedInput);
@@ -39,6 +42,7 @@ export class PostingsService {
   async update(id: string, input: UpsertPostingInput): Promise<PostingRecord> {
     const existing = await this.requireOwnerPosting(id, input.ownerId);
     const normalizedInput = this.normalizeUpsertInput(input);
+    this.assertSafeTextContent(normalizedInput);
     this.assertPublishableDraftShape(normalizedInput);
 
     const updated = await this.postingsRepository.update(existing.id, normalizedInput);
@@ -241,6 +245,95 @@ export class PostingsService {
         Array.isArray(value) ? value.map((entry) => entry.trim()) : value,
       ]),
     );
+  }
+
+  private assertSafeTextContent(input: UpsertPostingInput): void {
+    const violations = this.contentSanitizationService
+      .inspect(this.collectTextInputs(input))
+      .map((violation) => ({
+        path: violation.path,
+        message: violation.message,
+      }));
+
+    if (violations.length > 0) {
+      throw new BadRequestError("Request body validation failed.", violations);
+    }
+  }
+
+  private collectTextInputs(input: UpsertPostingInput): Array<{ path: string; value: string }> {
+    const textInputs: Array<{ path: string; value: string }> = [
+      {
+        path: "name",
+        value: input.name,
+      },
+      {
+        path: "description",
+        value: input.description,
+      },
+      {
+        path: "location.city",
+        value: input.location.city,
+      },
+      {
+        path: "location.region",
+        value: input.location.region,
+      },
+      {
+        path: "location.country",
+        value: input.location.country,
+      },
+    ];
+
+    if (input.availabilityNotes) {
+      textInputs.push({
+        path: "availabilityNotes",
+        value: input.availabilityNotes,
+      });
+    }
+
+    if (input.location.postalCode) {
+      textInputs.push({
+        path: "location.postalCode",
+        value: input.location.postalCode,
+      });
+    }
+
+    input.tags.forEach((tag, index) => {
+      textInputs.push({
+        path: `tags.${index}`,
+        value: tag,
+      });
+    });
+
+    input.availabilityBlocks.forEach((block, index) => {
+      if (block.note) {
+        textInputs.push({
+          path: `availabilityBlocks.${index}.note`,
+          value: block.note,
+        });
+      }
+    });
+
+    Object.entries(input.attributes).forEach(([key, value]) => {
+      if (typeof value === "string") {
+        textInputs.push({
+          path: `attributes.${key}`,
+          value,
+        });
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => {
+          textInputs.push({
+            path: `attributes.${key}.${index}`,
+            value: entry,
+          });
+        });
+      }
+    });
+
+    return textInputs;
   }
 
   private assertCanPublish(posting: PostingRecord): void {
