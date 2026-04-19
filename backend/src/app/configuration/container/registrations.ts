@@ -17,6 +17,10 @@ import { BookingsRepository } from "@/features/bookings/bookings.repository";
 import { BookingsService } from "@/features/bookings/bookings.service";
 import { CacheService } from "@/features/cache/cache.service";
 import { EmailService } from "@/features/email/email.service";
+import { PaymentsController } from "@/features/payments/payments.controller";
+import { PaymentsRepository } from "@/features/payments/payments.repository";
+import { PaymentsService } from "@/features/payments/payments.service";
+import { SquarePaymentAdapter } from "@/features/payments/square.adapter";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
@@ -262,6 +266,43 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     resolve: ({ resolve }) =>
       new BookingsController(
         resolve(containerTokens.bookingsService),
+        resolve(containerTokens.tokenService),
+      ),
+  });
+  container.register({
+    token: containerTokens.paymentsRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new PaymentsRepository(),
+  });
+  container.register({
+    token: containerTokens.paymentProvider,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new SquarePaymentAdapter(),
+  });
+  container.register({
+    token: containerTokens.paymentsService,
+    lifetime: "scoped",
+    dependencies: [
+      containerTokens.paymentsRepository,
+      containerTokens.paymentProvider,
+      containerTokens.postingsAnalyticsRepository,
+    ],
+    resolve: ({ resolve }) =>
+      new PaymentsService(
+        resolve(containerTokens.paymentsRepository),
+        resolve(containerTokens.paymentProvider),
+        resolve(containerTokens.postingsAnalyticsRepository),
+      ),
+  });
+  container.register({
+    token: containerTokens.paymentsController,
+    lifetime: "scoped",
+    dependencies: [containerTokens.paymentsService, containerTokens.tokenService],
+    resolve: ({ resolve }) =>
+      new PaymentsController(
+        resolve(containerTokens.paymentsService),
         resolve(containerTokens.tokenService),
       ),
   });

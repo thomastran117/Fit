@@ -26,6 +26,10 @@ model User {
   bookingRequestsAsOwner  BookingRequest[] @relation("BookingRequestOwner")
   rentingsAsRenter Renting[] @relation("RentingRenter")
   rentingsAsOwner  Renting[] @relation("RentingOwner")
+  paymentsAsRenter Payment[] @relation("PaymentRenter")
+  paymentsAsOwner  Payment[] @relation("PaymentOwner")
+  payouts          Payout[]
+  refundsIssued    Refund[]  @relation("RefundIssuer")
 
   @@map("users")
 }
@@ -103,6 +107,7 @@ model Posting {
   reviews           PostingReview[]
   bookingRequests   BookingRequest[]
   rentings          Renting[]
+  payments          Payment[]
 
   @@index([ownerId, status])
   @@index([status, publishedAt])
@@ -157,6 +162,10 @@ model BookingRequest {
   estimatedTotal  Decimal              @map("estimated_total") @db.Decimal(18, 2)
   decisionNote    String?              @map("decision_note") @db.VarChar(1000)
   approvedAt      DateTime?            @map("approved_at") @db.DateTime(6)
+  paymentRequiredAt DateTime?          @map("payment_required_at") @db.DateTime(6)
+  paymentFailedAt DateTime?            @map("payment_failed_at") @db.DateTime(6)
+  cancelledAt     DateTime?            @map("cancelled_at") @db.DateTime(6)
+  refundedAt      DateTime?            @map("refunded_at") @db.DateTime(6)
   declinedAt      DateTime?            @map("declined_at") @db.DateTime(6)
   expiredAt       DateTime?            @map("expired_at") @db.DateTime(6)
   convertedAt     DateTime?            @map("converted_at") @db.DateTime(6)
@@ -164,6 +173,7 @@ model BookingRequest {
   conversionReservationExpiresAt DateTime? @map("conversion_reservation_expires_at") @db.DateTime(6)
   holdExpiresAt   DateTime             @map("hold_expires_at") @db.DateTime(6)
   holdBlockId     String?              @unique @map("hold_block_id") @db.VarChar(36)
+  paymentReconciliationRequired Boolean @default(false) @map("payment_reconciliation_required")
   createdAt       DateTime             @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt       DateTime             @updatedAt @map("updated_at") @db.DateTime(6)
   posting         Posting              @relation(fields: [postingId], references: [id], onDelete: Cascade)
@@ -171,6 +181,7 @@ model BookingRequest {
   owner           User                 @relation("BookingRequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   holdBlock       PostingAvailabilityBlock? @relation("BookingRequestHold", fields: [holdBlockId], references: [id], onDelete: SetNull)
   renting         Renting?
+  payment         Payment?
 
   @@index([postingId, status, startAt])
   @@index([postingId, holdExpiresAt])
@@ -208,6 +219,138 @@ model Renting {
   @@index([renterId, status, createdAt])
   @@index([ownerId, status, createdAt])
   @@map("rentings")
+}
+
+model Payment {
+  id                   String         @id @db.VarChar(36)
+  bookingRequestId     String         @unique @map("booking_request_id") @db.VarChar(36)
+  postingId            String         @map("posting_id") @db.VarChar(36)
+  renterId             String         @map("renter_id") @db.VarChar(36)
+  ownerId              String         @map("owner_id") @db.VarChar(36)
+  provider             PaymentProvider
+  status               PaymentStatus
+  pricingCurrency      String         @map("pricing_currency") @db.VarChar(3)
+  rentalSubtotalAmount Decimal        @map("rental_subtotal_amount") @db.Decimal(18, 2)
+  platformFeeAmount    Decimal        @map("platform_fee_amount") @db.Decimal(18, 2)
+  totalAmount          Decimal        @map("total_amount") @db.Decimal(18, 2)
+  squarePaymentId      String?        @unique @map("square_payment_id") @db.VarChar(128)
+  squareOrderId        String?        @unique @map("square_order_id") @db.VarChar(128)
+  squareLocationId     String?        @map("square_location_id") @db.VarChar(128)
+  checkoutUrl          String?        @map("checkout_url") @db.VarChar(2048)
+  lastAttemptedAt      DateTime?      @map("last_attempted_at") @db.DateTime(6)
+  succeededAt          DateTime?      @map("succeeded_at") @db.DateTime(6)
+  failedAt             DateTime?      @map("failed_at") @db.DateTime(6)
+  cancelledAt          DateTime?      @map("cancelled_at") @db.DateTime(6)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.DateTime(6)
+  bookingRequest       BookingRequest @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+  posting              Posting        @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  renter               User           @relation("PaymentRenter", fields: [renterId], references: [id], onDelete: Cascade)
+  owner                User           @relation("PaymentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  attempts             PaymentAttempt[]
+  refunds              Refund[]
+  payout               Payout?
+  webhookEvents        PaymentWebhookEvent[]
+  ledgerEntries        PaymentLedgerEntry[]
+
+  @@index([renterId, status, createdAt])
+  @@index([ownerId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model PaymentAttempt {
+  id                String                  @id @db.VarChar(36)
+  paymentId         String                  @map("payment_id") @db.VarChar(36)
+  idempotencyKey    String                  @unique @map("idempotency_key") @db.VarChar(255)
+  status            PaymentAttemptStatus
+  retryCount        Int                     @default(0) @map("retry_count")
+  failureCategory   PaymentFailureCategory? @map("failure_category")
+  failureCode       String?                 @map("failure_code") @db.VarChar(255)
+  failureMessage    String?                 @map("failure_message") @db.VarChar(2048)
+  providerRequestId String?                 @map("provider_request_id") @db.VarChar(255)
+  squarePaymentId   String?                 @map("square_payment_id") @db.VarChar(128)
+  requestPayload    Json?                   @map("request_payload")
+  responsePayload   Json?                   @map("response_payload")
+  nextRetryAt       DateTime?               @map("next_retry_at") @db.DateTime(6)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.DateTime(6)
+  payment           Payment                 @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, createdAt])
+  @@index([status, nextRetryAt])
+  @@map("payment_attempts")
+}
+
+model Refund {
+  id             String       @id @db.VarChar(36)
+  paymentId      String       @map("payment_id") @db.VarChar(36)
+  issuedByUserId String?      @map("issued_by_user_id") @db.VarChar(36)
+  status         RefundStatus
+  amount         Decimal      @db.Decimal(18, 2)
+  reason         String?      @db.VarChar(1000)
+  idempotencyKey String       @unique @map("idempotency_key") @db.VarChar(255)
+  squareRefundId String?      @unique @map("square_refund_id") @db.VarChar(128)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(6)
+  completedAt    DateTime?    @map("completed_at") @db.DateTime(6)
+  payment        Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  issuedBy       User?        @relation("RefundIssuer", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([paymentId, createdAt])
+  @@map("refunds")
+}
+
+model Payout {
+  id             String       @id @db.VarChar(36)
+  paymentId      String       @unique @map("payment_id") @db.VarChar(36)
+  ownerId        String       @map("owner_id") @db.VarChar(36)
+  status         PayoutStatus
+  amount         Decimal      @db.Decimal(18, 2)
+  dueAt          DateTime     @map("due_at") @db.DateTime(6)
+  releasedAt     DateTime?    @map("released_at") @db.DateTime(6)
+  failedAt       DateTime?    @map("failed_at") @db.DateTime(6)
+  squarePayoutId String?      @unique @map("square_payout_id") @db.VarChar(128)
+  failureMessage String?      @map("failure_message") @db.VarChar(2048)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.DateTime(6)
+  payment        Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  owner          User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, status, dueAt])
+  @@index([status, dueAt])
+  @@map("payouts")
+}
+
+model PaymentWebhookEvent {
+  id              String          @id @db.VarChar(36)
+  paymentId       String?         @map("payment_id") @db.VarChar(36)
+  provider        PaymentProvider
+  providerEventId String          @unique @map("provider_event_id") @db.VarChar(255)
+  eventType       String          @map("event_type") @db.VarChar(255)
+  signatureValid  Boolean         @map("signature_valid")
+  rawPayload      Json            @map("raw_payload")
+  processedAt     DateTime?       @map("processed_at") @db.DateTime(6)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.DateTime(6)
+  payment         Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([provider, eventType, createdAt])
+  @@map("payment_webhook_events")
+}
+
+model PaymentLedgerEntry {
+  id        String                 @id @db.VarChar(36)
+  paymentId String                 @map("payment_id") @db.VarChar(36)
+  type      PaymentLedgerEntryType
+  amount    Decimal                @db.Decimal(18, 2)
+  currency  String                 @db.VarChar(3)
+  metadata  Json?
+  createdAt DateTime               @default(now()) @map("created_at") @db.DateTime(6)
+  payment   Payment                @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, createdAt])
+  @@index([type, createdAt])
+  @@map("payment_ledger_entries")
 }
 
 model PostingSearchOutbox {
@@ -366,11 +509,66 @@ enum PostingAnalyticsEventType {
 enum BookingRequestStatus {
   pending
   approved
+  awaiting_payment
+  payment_processing
+  paid
+  payment_failed
   declined
   expired
+  cancelled
+  refunded
 }
 
 enum RentingStatus {
   confirmed
+}
+
+enum PaymentProvider {
+  square
+}
+
+enum PaymentStatus {
+  awaiting_method
+  processing
+  succeeded
+  failed_retryable
+  failed_final
+  cancelled
+  refunded
+  partially_refunded
+}
+
+enum PaymentAttemptStatus {
+  pending
+  processing
+  succeeded
+  failed_retryable
+  failed_final
+}
+
+enum PaymentFailureCategory {
+  transient
+  permanent
+  unknown
+}
+
+enum RefundStatus {
+  pending
+  succeeded
+  failed
+}
+
+enum PayoutStatus {
+  scheduled
+  released
+  failed
+}
+
+enum PaymentLedgerEntryType {
+  charge_created
+  charge_succeeded
+  refund_issued
+  payout_scheduled
+  payout_released
 }
 

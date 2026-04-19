@@ -492,7 +492,7 @@ export class PostingsRepository extends BaseRepository {
             AND (
               br.id IS NULL
               OR (
-                br.status = 'approved'
+                br.status IN ('awaiting_payment', 'payment_processing', 'paid')
                 AND br.converted_at IS NULL
                 AND br.hold_expires_at > ${now}
               )
@@ -505,7 +505,7 @@ export class PostingsRepository extends BaseRepository {
           SELECT 1
           FROM booking_requests br
           WHERE br.posting_id = postings.id
-            AND br.status IN ('pending', 'approved')
+            AND br.status IN ('pending', 'awaiting_payment', 'payment_processing', 'paid')
             AND br.converted_at IS NULL
             AND (
               br.conversion_reservation_expires_at IS NULL
@@ -889,7 +889,9 @@ export class PostingsRepository extends BaseRepository {
         }
 
         return (
-          block.bookingRequestHold.status === "approved" &&
+          ["awaiting_payment", "payment_processing", "paid"].includes(
+            block.bookingRequestHold.status,
+          ) &&
           !block.bookingRequestHold.convertedAt &&
           block.bookingRequestHold.holdExpiresAt.getTime() > now
         );

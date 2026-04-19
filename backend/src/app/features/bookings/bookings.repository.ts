@@ -277,7 +277,7 @@ export class BookingsRepository extends BaseRepository {
         where: {
           postingId: input.postingId,
           status: {
-            in: ["pending", "approved"],
+            in: ["pending", "awaiting_payment", "payment_processing", "paid"],
           },
           convertedAt: null,
           holdExpiresAt: {
@@ -366,8 +366,10 @@ export class BookingsRepository extends BaseRepository {
                   bookingRequestHold: null,
                 },
                 {
-              bookingRequestHold: {
-                    status: "approved",
+                  bookingRequestHold: {
+                    status: {
+                      in: ["awaiting_payment", "payment_processing", "paid"],
+                    },
                     convertedAt: null,
                     holdExpiresAt: {
                       gt: now,
@@ -392,7 +394,7 @@ export class BookingsRepository extends BaseRepository {
             where: {
               postingId: existing.postingId,
               status: {
-                in: ["pending", "approved"],
+                in: ["pending", "awaiting_payment", "payment_processing", "paid"],
               },
               convertedAt: null,
               holdExpiresAt: {
@@ -432,7 +434,9 @@ export class BookingsRepository extends BaseRepository {
               id: existing.id,
             },
             data: {
-              status: "approved",
+              status: "awaiting_payment",
+              paymentRequiredAt: now,
+              paymentFailedAt: null,
               approvedAt: now,
               decisionNote: note ?? null,
               holdExpiresAt,
@@ -529,7 +533,7 @@ export class BookingsRepository extends BaseRepository {
       this.prisma.bookingRequest.findMany({
         where: {
           status: {
-            in: ["pending", "approved"],
+            in: ["pending", "awaiting_payment", "payment_processing", "payment_failed"],
           },
           convertedAt: null,
           OR: [
@@ -586,7 +590,9 @@ export class BookingsRepository extends BaseRepository {
             },
             {
               bookingRequestHold: {
-                status: "approved",
+                status: {
+                  in: ["awaiting_payment", "payment_processing", "paid"],
+                },
                 convertedAt: null,
                 holdExpiresAt: {
                   gt: now,
@@ -632,7 +638,7 @@ export class BookingsRepository extends BaseRepository {
           return false;
         }
 
-        if (!["pending", "approved"].includes(existing.status)) {
+        if (!["pending", "awaiting_payment", "payment_processing", "payment_failed"].includes(existing.status)) {
           return false;
         }
 
@@ -682,7 +688,12 @@ export class BookingsRepository extends BaseRepository {
           return false;
         }
 
-        if (existing.status === "approved" && existing.holdBlockId) {
+        if (
+          ["awaiting_payment", "payment_processing", "payment_failed", "approved"].includes(
+            existing.status,
+          ) &&
+          existing.holdBlockId
+        ) {
           await transaction.postingAvailabilityBlock.deleteMany({
             where: {
               id: existing.holdBlockId,
@@ -706,7 +717,7 @@ export class BookingsRepository extends BaseRepository {
         where: {
           id: bookingRequestId,
           ownerId,
-          status: "approved",
+          status: "paid",
           convertedAt: null,
           holdExpiresAt: {
             gt: now,
@@ -767,6 +778,10 @@ export class BookingsRepository extends BaseRepository {
       estimatedTotal: Number(bookingRequest.estimatedTotal),
       decisionNote: bookingRequest.decisionNote ?? undefined,
       approvedAt: bookingRequest.approvedAt?.toISOString(),
+      paymentRequiredAt: bookingRequest.paymentRequiredAt?.toISOString(),
+      paymentFailedAt: bookingRequest.paymentFailedAt?.toISOString(),
+      cancelledAt: bookingRequest.cancelledAt?.toISOString(),
+      refundedAt: bookingRequest.refundedAt?.toISOString(),
       declinedAt: bookingRequest.declinedAt?.toISOString(),
       expiredAt: bookingRequest.expiredAt?.toISOString(),
       convertedAt: bookingRequest.convertedAt?.toISOString(),
@@ -775,6 +790,7 @@ export class BookingsRepository extends BaseRepository {
         bookingRequest.conversionReservationExpiresAt?.toISOString(),
       holdExpiresAt: bookingRequest.holdExpiresAt.toISOString(),
       holdBlockId: bookingRequest.holdBlockId ?? undefined,
+      paymentReconciliationRequired: bookingRequest.paymentReconciliationRequired,
       rentingId: bookingRequest.renting?.id ?? undefined,
       createdAt: bookingRequest.createdAt.toISOString(),
       updatedAt: bookingRequest.updatedAt.toISOString(),
