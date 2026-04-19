@@ -21,7 +21,7 @@
     "prisma:push": "prisma db push",
     "start": "node dist/server.js",
     "check": "tsc --noEmit --project tsconfig.json",
-    "test": "tsx src/app/configuration/bootstrap/container.test.ts && tsx src/app/features/security/content-sanitization.service.test.ts && tsx src/app/features/postings/postings.service.test.ts"
+    "test": "tsx src/app/configuration/bootstrap/container.test.ts && tsx src/app/configuration/middlewares/jwt-middleware.test.ts && tsx src/app/features/auth/authorization.test.ts && tsx src/app/features/auth/auth.service.test.ts && tsx src/app/features/security/content-sanitization.service.test.ts && tsx src/app/features/postings/postings.service.test.ts"
   },
   "engines": {
     "node": ">=22"

@@ -1,5 +1,10 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { requireMinimumRole } from "@/features/auth/authorization";
+import {
+  getOptionalJwtAuth,
+  requireJwtAuth,
+} from "@/configuration/middlewares/jwt-middleware";
 import {
   RequestValidationError,
   parseRequestBody,
@@ -35,7 +40,6 @@ import {
   upsertPostingRequestSchema,
 } from "@/features/postings/postings.model";
 import { PostingsService } from "@/features/postings/postings.service";
-import type { TokenService } from "@/features/auth/token/token.service";
 import type { JwtClaims } from "@/features/auth/token/token.service";
 
 export class PostingsController {
@@ -43,11 +47,11 @@ export class PostingsController {
     private readonly postingsService: PostingsService,
     private readonly postingsAnalyticsService: PostingsAnalyticsService,
     private readonly postingsReviewsService: PostingsReviewsService,
-    private readonly tokenService: TokenService,
   ) {}
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const body = await parseRequestBody(context, upsertPostingRequestSchema);
     const result = await this.postingsService.createDraft(this.toUpsertInput(auth.sub, body));
     return context.json(result, 201);
@@ -55,6 +59,7 @@ export class PostingsController {
 
   update = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const body = await parseRequestBody(context, upsertPostingRequestSchema);
     const result = await this.postingsService.update(
       this.requireRouteId(context),
@@ -65,12 +70,14 @@ export class PostingsController {
 
   publish = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.postingsService.publish(this.requireRouteId(context), auth.sub);
     return context.json(result);
   };
 
   archive = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.postingsService.archive(this.requireRouteId(context), auth.sub);
     return context.json(result);
   };
@@ -92,6 +99,7 @@ export class PostingsController {
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.postingsService.listByOwner(
       this.parseListOwnerPostingsInput(context, auth.sub),
     );
@@ -100,6 +108,7 @@ export class PostingsController {
 
   batchMine = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.postingsService.batchByOwner(
       auth.sub,
       this.parseBatchIds(context),
@@ -121,6 +130,7 @@ export class PostingsController {
 
   analyticsSummary = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const query = this.parseAnalyticsSummaryQuery(context);
     const result = await this.postingsAnalyticsService.getOwnerSummary(auth.sub, query.window);
     return context.json(result);
@@ -128,6 +138,7 @@ export class PostingsController {
 
   analyticsPostings = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const input = this.parseListPostingAnalyticsInput(context, auth.sub);
     const result = await this.postingsAnalyticsService.listOwnerPostingsAnalytics(input);
     return context.json(result);
@@ -135,6 +146,7 @@ export class PostingsController {
 
   analyticsById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const input = this.parsePostingAnalyticsDetailInput(
       context,
       auth.sub,
@@ -424,29 +436,11 @@ export class PostingsController {
   }
 
   private async requireAuth(context: Context<AppBindings>): Promise<JwtClaims> {
-    const auth = await this.getOptionalAuth(context);
-
-    if (!auth) {
-      throw new UnauthorizedError("Authorization header is required.");
-    }
-
-    return auth;
+    return requireJwtAuth(context);
   }
 
   private async getOptionalAuth(context: Context<AppBindings>): Promise<JwtClaims | null> {
-    const authorization = context.req.header("authorization");
-
-    if (!authorization) {
-      return null;
-    }
-
-    const [scheme, token] = authorization.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
-    }
-
-    return this.tokenService.verifyAccessToken(token);
+    return getOptionalJwtAuth(context);
   }
 
   private toValidationError(error: unknown, message: string): RequestValidationError {

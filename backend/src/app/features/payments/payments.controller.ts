@@ -1,7 +1,8 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { requireMinimumRole } from "@/features/auth/authorization";
+import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError, parseRequestBody } from "@/configuration/validation/request";
-import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type {
   CreatePaymentSessionBody,
   CreateRefundBody,
@@ -16,13 +17,9 @@ import {
   retryPaymentSchema,
 } from "@/features/payments/payments.model";
 import type { PaymentsService } from "@/features/payments/payments.service";
-import type { TokenService } from "@/features/auth/token/token.service";
 
 export class PaymentsController {
-  constructor(
-    private readonly paymentsService: PaymentsService,
-    private readonly tokenService: TokenService,
-  ) {}
+  constructor(private readonly paymentsService: PaymentsService) {}
 
   createSessionForBooking = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
@@ -67,6 +64,7 @@ export class PaymentsController {
 
   listPayouts = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.paymentsService.listPayouts(
       this.toListPayoutsInput(auth.sub, this.parseListPayoutsQuery(context)),
     );
@@ -87,7 +85,8 @@ export class PaymentsController {
   };
 
   repair = async (context: Context<AppBindings>): Promise<Response> => {
-    await this.requireAuth(context);
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "admin");
     await this.paymentsService.repairPayment(this.requirePaymentId(context));
     return context.json({ ok: true });
   };
@@ -158,18 +157,6 @@ export class PaymentsController {
   }
 
   private async requireAuth(context: Context<AppBindings>) {
-    const authorization = context.req.header("authorization");
-
-    if (!authorization) {
-      throw new UnauthorizedError("Authorization header is required.");
-    }
-
-    const [scheme, token] = authorization.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
-    }
-
-    return this.tokenService.verifyAccessToken(token);
+    return requireJwtAuth(context);
   }
 }

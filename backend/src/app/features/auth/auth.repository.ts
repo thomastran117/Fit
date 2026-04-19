@@ -5,6 +5,7 @@ import {
   type CreateLocalUserInput,
   type AuthUserRecord,
   type UserProfileRecord,
+  normalizeAppRole,
 } from "@/features/auth/auth.model";
 import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 import ConflictError from "@/errors/http/conflict.error";
@@ -211,7 +212,7 @@ export class AuthRepository extends BaseRepository {
       tokenVersion: user.tokenVersion,
       firstName: user.firstName ?? undefined,
       lastName: user.lastName ?? undefined,
-      role: user.role,
+      role: normalizeAppRole(user.role),
       emailVerified: user.emailVerified,
       profile: this.mapProfile(user.profile),
       createdAt: user.createdAt.toISOString(),

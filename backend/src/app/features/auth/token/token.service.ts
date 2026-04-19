@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { environment } from "@/configuration/environment";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
+import type { AppRole } from "@/features/auth/auth.model";
 import type { AuthRepository } from "@/features/auth/auth.repository";
 import type { CacheService } from "@/features/cache/cache.service";
 
@@ -9,7 +10,7 @@ type RefreshTokenMode = "stateless" | "stateful";
 export interface AccessTokenPayload {
   sub: string;
   email?: string;
-  role?: string;
+  role?: AppRole;
   deviceId?: string;
   [key: string]: string | number | boolean | null | undefined;
 }
@@ -17,6 +18,7 @@ export interface AccessTokenPayload {
 export interface RefreshTokenPayload {
   sub: string;
   deviceId?: string;
+  rememberMe?: boolean;
   tokenVersion?: number;
   [key: string]: string | number | boolean | null | undefined;
 }
@@ -49,6 +51,10 @@ interface TokenServiceOptions {
   audience?: string;
   refreshTokenMode?: RefreshTokenMode;
   refreshTokenCachePrefix?: string;
+}
+
+interface CreateRefreshTokenOptions {
+  expiresInSeconds?: number;
 }
 
 const ACCESS_TOKEN_ALGORITHM = "HS256";
@@ -126,16 +132,21 @@ export class TokenService {
     return this.getAccessTokenTtlSeconds();
   }
 
-  getRefreshTokenExpiresInSeconds(): number {
-    return this.getRefreshTokenTtlSeconds();
+  getRefreshTokenExpiresInSeconds(rememberMe = false): number {
+    return rememberMe
+      ? this.getRememberMeRefreshTokenTtlSeconds()
+      : this.getRefreshTokenTtlSeconds();
   }
 
-  async createRefreshToken(payload: RefreshTokenPayload): Promise<string> {
+  async createRefreshToken(
+    payload: RefreshTokenPayload,
+    options: CreateRefreshTokenOptions = {},
+  ): Promise<string> {
     if (this.getRefreshTokenMode() === "stateful") {
-      return this.createStatefulRefreshToken(payload);
+      return this.createStatefulRefreshToken(payload, options.expiresInSeconds);
     }
 
-    return this.createStatelessRefreshToken(payload);
+    return this.createStatelessRefreshToken(payload, options.expiresInSeconds);
   }
 
   async verifyRefreshToken(token: string): Promise<RefreshTokenClaims> {
@@ -158,8 +169,11 @@ export class TokenService {
     return false;
   }
 
-  createStatelessRefreshToken(payload: RefreshTokenPayload): string {
-    const claims = this.buildRefreshClaims(payload);
+  createStatelessRefreshToken(
+    payload: RefreshTokenPayload,
+    expiresInSeconds = this.getRefreshTokenTtlSeconds(),
+  ): string {
+    const claims = this.buildRefreshClaims(payload, expiresInSeconds);
     const body = toBase64Url(JSON.stringify(claims));
     const signature = signValue(body, this.getRefreshTokenSecret());
 
@@ -185,8 +199,11 @@ export class TokenService {
     return claims;
   }
 
-  async createStatefulRefreshToken(payload: RefreshTokenPayload): Promise<string> {
-    const claims = this.buildRefreshClaims(payload);
+  async createStatefulRefreshToken(
+    payload: RefreshTokenPayload,
+    expiresInSeconds = this.getRefreshTokenTtlSeconds(),
+  ): Promise<string> {
+    const claims = this.buildRefreshClaims(payload, expiresInSeconds);
     const body = toBase64Url(JSON.stringify(claims));
     const signature = signValue(body, this.getRefreshTokenSecret());
     const token = `${REFRESH_TOKEN_VERSION}.${body}.${signature}`;
@@ -196,7 +213,7 @@ export class TokenService {
       signature,
     };
 
-    await this.cache.setJson(cacheKey, session, this.getRefreshTokenTtlSeconds());
+    await this.cache.setJson(cacheKey, session, expiresInSeconds);
 
     return token;
   }
@@ -291,13 +308,16 @@ export class TokenService {
     return claims;
   }
 
-  private buildRefreshClaims(payload: RefreshTokenPayload): RefreshTokenClaims {
+  private buildRefreshClaims(
+    payload: RefreshTokenPayload,
+    expiresInSeconds = this.getRefreshTokenTtlSeconds(),
+  ): RefreshTokenClaims {
     const now = Math.floor(Date.now() / 1000);
 
     return {
       ...payload,
       iat: now,
-      exp: now + this.getRefreshTokenTtlSeconds(),
+      exp: now + expiresInSeconds,
       jti: randomBytes(32).toString("base64url"),
     };
   }
@@ -354,6 +374,10 @@ export class TokenService {
 
   private getRefreshTokenTtlSeconds(): number {
     return this.refreshTokenTtlSeconds ?? environment.getTokenConfig().refreshTokenTtlSeconds;
+  }
+
+  private getRememberMeRefreshTokenTtlSeconds(): number {
+    return environment.getTokenConfig().rememberMeRefreshTokenTtlSeconds;
   }
 
   private getIssuer(): string | undefined {

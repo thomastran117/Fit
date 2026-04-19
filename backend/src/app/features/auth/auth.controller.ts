@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { parseRequestBody } from "@/configuration/validation/request";
 import { environment } from "@/configuration/environment";
 import BadRequestError from "@/errors/http/bad-request.error";
@@ -118,6 +119,7 @@ export class AuthController {
   };
 
   changePassword = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const input = await parseRequestBody(context, changePasswordRequestSchema);
     const result = await this.authService.changePassword(
       this.toChangePasswordInput(context, input),
@@ -140,6 +142,7 @@ export class AuthController {
   };
 
   localVerify = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const result = await this.authService.localVerify({
       auth: context.get("auth"),
       client: context.get("client"),
@@ -178,6 +181,7 @@ export class AuthController {
   };
 
   logout = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const result = await this.authService.logout({
       auth: context.get("auth"),
       client: context.get("client"),
@@ -195,6 +199,7 @@ export class AuthController {
   };
 
   deviceVerify = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const result = await this.authService.deviceVerify({
       auth: context.get("auth"),
       client: context.get("client"),
@@ -203,6 +208,7 @@ export class AuthController {
   };
 
   devices = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const result = await this.authService.devices({
       auth: context.get("auth"),
       client: context.get("client"),
@@ -211,6 +217,7 @@ export class AuthController {
   };
 
   removeKnownDevice = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
     const input = await parseRequestBody(context, removeKnownDeviceRequestSchema);
     const result = await this.authService.removeKnownDevice(
       this.toRemoveKnownDeviceInput(context, input),
@@ -231,7 +238,7 @@ export class AuthController {
         httpOnly: true,
         secure: this.isSecureCookieEnabled(),
         sameSite: "Lax",
-        maxAge: this.tokenService.getRefreshTokenExpiresInSeconds(),
+        maxAge: body.refreshTokenExpiresInSeconds,
       });
     }
 
@@ -245,6 +252,7 @@ export class AuthController {
     return {
       email: input.email,
       password: input.password,
+      rememberMe: input.rememberMe,
       client: context.get("client"),
       deviceId: this.resolveDeviceId(context, input.deviceId),
     };
@@ -273,6 +281,7 @@ export class AuthController {
       codeVerifier: input.codeVerifier,
       idToken: input.idToken,
       nonce: input.nonce,
+      rememberMe: input.rememberMe,
       client: context.get("client"),
       firstName: input.firstName,
       lastName: input.lastName,
@@ -391,6 +400,7 @@ export class AuthController {
         email: result.user.email,
         username: result.user.username,
         avatarUrl: result.user.avatarUrl,
+        role: result.user.role,
       },
     };
 
