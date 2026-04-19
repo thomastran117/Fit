@@ -10,6 +10,11 @@ const tokenConfig = {
   refreshTokenCachePrefix: "auth:refresh",
 };
 
+const captchaConfig = {
+  secretKey: "test-turnstile-secret",
+  allowedHosts: ["challenges.cloudflare.com"],
+};
+
 export const environment = {
   isProduction(): boolean {
     return false;
@@ -17,9 +22,13 @@ export const environment = {
   getTokenConfig() {
     return tokenConfig;
   },
+  getCaptchaConfig() {
+    return captchaConfig;
+  },
   load() {
     return {
       auth: tokenConfig,
+      captcha: captchaConfig,
       server: {
         isProduction: false,
       },
@@ -36,4 +45,8 @@ export function loadEnvironment() {
 
 export function getEnvironment() {
   return environment.get();
+}
+
+export function getOptionalEnvironmentVariable(_name: string) {
+  return undefined;
 }
