@@ -35,6 +35,7 @@ import { PostingsService } from "@/features/postings/postings.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import { createServiceToken } from "@/configuration/container/core";
 
 export const containerTokens = {
@@ -79,6 +80,9 @@ export const containerTokens = {
   ),
   postingsReviewsService: createServiceToken<PostingsReviewsService>("PostingsReviewsService"),
   postingsSearchService: createServiceToken<PostingsSearchService>("PostingsSearchService"),
+  contentSanitizationService: createServiceToken<ContentSanitizationService>(
+    "ContentSanitizationService",
+  ),
   postingsService: createServiceToken<PostingsService>("PostingsService"),
   postingsController: createServiceToken<PostingsController>("PostingsController"),
 } as const;
