@@ -38,6 +38,14 @@ type BookingRequestPersistence = Prisma.BookingRequestGetPayload<{
 }>;
 
 export class BookingsRepository extends BaseRepository {
+  private readonly activeBookingStatuses: BookingRequestStatus[] = [
+    "pending",
+    "awaiting_payment",
+    "payment_processing",
+    "payment_failed",
+    "paid",
+  ];
+
   async create(input: CreateBookingRequestPersistenceInput): Promise<BookingRequestRecord> {
     const created = await this.executeAsync(() =>
       this.prisma.bookingRequest.create({
@@ -270,19 +278,13 @@ export class BookingsRepository extends BaseRepository {
     };
   }
 
-  async hasActiveOverlap(input: ActiveBookingOverlapInput): Promise<boolean> {
-    const now = new Date();
+  async hasOfficialReservationOverlap(input: ActiveBookingOverlapInput): Promise<boolean> {
     const match = await this.executeAsync(() =>
       this.prisma.bookingRequest.findFirst({
         where: {
           postingId: input.postingId,
-          status: {
-            in: ["pending", "awaiting_payment", "payment_processing", "paid"],
-          },
+          status: "paid",
           convertedAt: null,
-          holdExpiresAt: {
-            gt: now,
-          },
           ...(input.excludeBookingRequestId
             ? {
                 id: {
@@ -309,6 +311,32 @@ export class BookingsRepository extends BaseRepository {
     );
 
     return Boolean(match);
+  }
+
+  async countActiveRequestsForRenterPosting(input: {
+    postingId: string;
+    renterId: string;
+    excludeBookingRequestId?: string;
+  }): Promise<number> {
+    return this.executeAsync(() =>
+      this.prisma.bookingRequest.count({
+        where: {
+          postingId: input.postingId,
+          renterId: input.renterId,
+          status: {
+            in: this.activeBookingStatuses,
+          },
+          convertedAt: null,
+          ...(input.excludeBookingRequestId
+            ? {
+                id: {
+                  not: input.excludeBookingRequestId,
+                },
+              }
+            : {}),
+        },
+      }),
+    );
   }
 
   async approve(
@@ -346,9 +374,7 @@ export class BookingsRepository extends BaseRepository {
             return null;
           }
 
-          const now = new Date();
-
-          if (existing.status !== "pending" || existing.holdExpiresAt <= now) {
+          if (existing.status !== "pending" || existing.holdExpiresAt <= new Date()) {
             return null;
           }
 
@@ -367,13 +393,8 @@ export class BookingsRepository extends BaseRepository {
                 },
                 {
                   bookingRequestHold: {
-                    status: {
-                      in: ["awaiting_payment", "payment_processing", "paid"],
-                    },
+                    status: "paid",
                     convertedAt: null,
-                    holdExpiresAt: {
-                      gt: now,
-                    },
                     id: {
                       not: existing.id,
                     },
@@ -390,57 +411,18 @@ export class BookingsRepository extends BaseRepository {
             throw new BadRequestError("The requested dates are no longer available.");
           }
 
-          const overlap = await transaction.bookingRequest.findFirst({
-            where: {
-              postingId: existing.postingId,
-              status: {
-                in: ["pending", "awaiting_payment", "payment_processing", "paid"],
-              },
-              convertedAt: null,
-              holdExpiresAt: {
-                gt: now,
-              },
-              id: {
-                not: existing.id,
-              },
-              startAt: {
-                lt: existing.endAt,
-              },
-              endAt: {
-                gt: existing.startAt,
-              },
-            },
-            select: {
-              id: true,
-            },
-          });
-
-          if (overlap) {
-            throw new BadRequestError("The requested dates are no longer available.");
-          }
-
-          const holdBlock = await transaction.postingAvailabilityBlock.create({
-            data: {
-              id: randomUUID(),
-              postingId: existing.postingId,
-              startAt: existing.startAt,
-              endAt: existing.endAt,
-              note: `Booking request hold: ${existing.id}`,
-            },
-          });
-
           const updated = await transaction.bookingRequest.update({
             where: {
               id: existing.id,
             },
             data: {
               status: "awaiting_payment",
-              paymentRequiredAt: now,
+              paymentRequiredAt: new Date(),
               paymentFailedAt: null,
-              approvedAt: now,
+              approvedAt: new Date(),
               decisionNote: note ?? null,
               holdExpiresAt,
-              holdBlockId: holdBlock.id,
+              holdBlockId: null,
             },
             include: {
               renting: {
@@ -573,7 +555,6 @@ export class BookingsRepository extends BaseRepository {
     endAt: Date;
     excludeBookingRequestId?: string;
   }): Promise<boolean> {
-    const now = new Date();
     const block = await this.executeAsync(() =>
       this.prisma.postingAvailabilityBlock.findFirst({
         where: {
@@ -590,13 +571,8 @@ export class BookingsRepository extends BaseRepository {
             },
             {
               bookingRequestHold: {
-                status: {
-                  in: ["awaiting_payment", "payment_processing", "paid"],
-                },
+                status: "paid",
                 convertedAt: null,
-                holdExpiresAt: {
-                  gt: now,
-                },
                 ...(input.excludeBookingRequestId
                   ? {
                       id: {
@@ -719,9 +695,6 @@ export class BookingsRepository extends BaseRepository {
           ownerId,
           status: "paid",
           convertedAt: null,
-          holdExpiresAt: {
-            gt: now,
-          },
           OR: [
             {
               conversionReservationExpiresAt: null,

@@ -19,6 +19,7 @@ import type {
   ProviderRefundResult,
 } from "@/features/payments/payments.model";
 import {
+  DEFAULT_BOOKING_DEPOSIT_BPS,
   DEFAULT_PLATFORM_FEE_BPS,
   MAX_RETRY_ATTEMPTS,
   PAYMENT_PROVIDER,
@@ -51,6 +52,7 @@ export class PaymentsRepository extends BaseRepository {
     renterId: string;
     idempotencyKey: string;
     platformFeeBps?: number;
+    depositBps?: number;
   }): Promise<{
     paymentId: string;
     attemptId: string;
@@ -59,6 +61,7 @@ export class PaymentsRepository extends BaseRepository {
     currency: string;
   }> {
     const platformFeeBps = input.platformFeeBps ?? DEFAULT_PLATFORM_FEE_BPS;
+    const depositBps = input.depositBps ?? DEFAULT_BOOKING_DEPOSIT_BPS;
 
     const result = await this.executeAsync(() =>
       this.prisma.$transaction(async (transaction) => {
@@ -127,7 +130,7 @@ export class PaymentsRepository extends BaseRepository {
           }
         }
 
-        const rentalSubtotal = Number(booking.estimatedTotal);
+        const rentalSubtotal = Math.round(Number(booking.estimatedTotal) * (depositBps / 10_000) * 100) / 100;
         const platformFeeAmount = calculatePlatformFeeAmount(rentalSubtotal, platformFeeBps);
         const totalAmount = Math.round((rentalSubtotal + platformFeeAmount) * 100) / 100;
 
@@ -545,8 +548,23 @@ export class PaymentsRepository extends BaseRepository {
           where: {
             id: paymentRow.bookingRequestId,
           },
-          data: succeededTotal >= paymentTotal ? { status: "refunded", refundedAt: new Date() } : {},
+          data:
+            succeededTotal >= paymentTotal
+              ? {
+                  status: "refunded",
+                  refundedAt: new Date(),
+                  holdBlockId: null,
+                }
+              : {},
         });
+
+        if (succeededTotal >= paymentTotal && paymentRow.bookingRequest.holdBlockId) {
+          await transaction.postingAvailabilityBlock.deleteMany({
+            where: {
+              id: paymentRow.bookingRequest.holdBlockId,
+            },
+          });
+        }
 
         await transaction.paymentLedgerEntry.create({
           data: {
@@ -673,10 +691,7 @@ export class PaymentsRepository extends BaseRepository {
     return payment ? this.mapPayment(payment) : null;
   }
 
-  async markPaymentSucceeded(input: ProviderPaymentStatus): Promise<{
-    payment: PaymentRecord;
-    createdRenting: boolean;
-  } | null> {
+  async markPaymentSucceeded(input: ProviderPaymentStatus): Promise<PaymentRecord | null> {
     if (!input.providerPaymentId && !input.providerOrderId) {
       return null;
     }
@@ -709,8 +724,6 @@ export class PaymentsRepository extends BaseRepository {
         if (!payment) {
           return null;
         }
-
-        let createdRenting = false;
 
         await transaction.payment.update({
           where: {
@@ -756,45 +769,19 @@ export class PaymentsRepository extends BaseRepository {
           },
         });
 
-        if (!booking.renting) {
-          if (booking.holdBlockId) {
-            await transaction.postingAvailabilityBlock.deleteMany({
-              where: {
-                id: booking.holdBlockId,
-              },
-            });
-          }
+        let holdBlockId = booking.holdBlockId;
 
-          await transaction.postingAvailabilityBlock.create({
+        if (!booking.renting && !holdBlockId) {
+          const holdBlock = await transaction.postingAvailabilityBlock.create({
             data: {
               id: randomUUID(),
               postingId: booking.postingId,
               startAt: booking.startAt,
               endAt: booking.endAt,
-              note: `Renting confirmed from payment: ${payment.id}`,
+              note: `Booking paid reservation: ${booking.id}`,
             },
           });
-
-          await transaction.renting.create({
-            data: {
-              id: randomUUID(),
-              postingId: booking.postingId,
-              bookingRequestId: booking.id,
-              renterId: booking.renterId,
-              ownerId: booking.ownerId,
-              status: "confirmed",
-              startAt: booking.startAt,
-              endAt: booking.endAt,
-              durationDays: booking.durationDays,
-              guestCount: booking.guestCount,
-              pricingCurrency: booking.pricingCurrency,
-              pricingSnapshot: booking.pricingSnapshot as Prisma.InputJsonValue,
-              dailyPriceAmount: booking.dailyPriceAmount,
-              estimatedTotal: booking.estimatedTotal,
-              confirmedAt: new Date(),
-            },
-          });
-          createdRenting = true;
+          holdBlockId = holdBlock.id;
         }
 
         await transaction.bookingRequest.update({
@@ -803,8 +790,8 @@ export class PaymentsRepository extends BaseRepository {
           },
           data: {
             status: "paid",
-            convertedAt: new Date(),
-            holdBlockId: null,
+            convertedAt: null,
+            holdBlockId: holdBlockId ?? null,
             conversionReservedAt: null,
             conversionReservationExpiresAt: null,
             paymentReconciliationRequired: false,
@@ -868,10 +855,7 @@ export class PaymentsRepository extends BaseRepository {
           },
         });
 
-        return {
-          payment: this.mapPayment(refreshed),
-          createdRenting,
-        };
+        return this.mapPayment(refreshed);
       }),
     );
   }

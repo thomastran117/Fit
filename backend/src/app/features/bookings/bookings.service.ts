@@ -13,6 +13,7 @@ import type {
 import {
   APPROVED_BOOKING_HOLD_HOURS,
   BOOKING_DEFAULTS,
+  MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING,
   MAX_BOOKING_GUEST_COUNT,
   MAX_BOOKING_NOTE_LENGTH,
   PENDING_BOOKING_HOLD_HOURS,
@@ -43,29 +44,7 @@ export class BookingsService {
     const normalized = this.normalizeCreateInput(input, posting);
     await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
     await this.assertNoBlockingAvailabilityOverlap(posting.id, normalized.startAt, normalized.endAt);
-
-    const hasActiveOverlap = await this.bookingsRepository.hasActiveOverlap({
-      postingId: posting.id,
-      startAt: normalized.startAt,
-      endAt: normalized.endAt,
-    });
-
-    if (hasActiveOverlap) {
-      throw new BadRequestError("The requested dates are already held by another booking request.");
-    }
-
-    const hasRenterOverlap = await this.bookingsRepository.hasActiveOverlap({
-      postingId: posting.id,
-      renterId: input.renterId,
-      startAt: normalized.startAt,
-      endAt: normalized.endAt,
-    });
-
-    if (hasRenterOverlap) {
-      throw new BadRequestError(
-        "You already have an active booking request for this posting that overlaps these dates.",
-      );
-    }
+    await this.assertWithinPostingRequestCap(posting.id, input.renterId);
 
     const created = await this.bookingsRepository.create({
       postingId: posting.id,
@@ -151,31 +130,6 @@ export class BookingsService {
     );
     await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
 
-    const hasActiveOverlap = await this.bookingsRepository.hasActiveOverlap({
-      postingId: posting.id,
-      startAt: normalized.startAt,
-      endAt: normalized.endAt,
-      excludeBookingRequestId: existing.id,
-    });
-
-    if (hasActiveOverlap) {
-      throw new BadRequestError("The requested dates are already held by another booking request.");
-    }
-
-    const hasRenterOverlap = await this.bookingsRepository.hasActiveOverlap({
-      postingId: posting.id,
-      renterId: input.renterId,
-      startAt: normalized.startAt,
-      endAt: normalized.endAt,
-      excludeBookingRequestId: existing.id,
-    });
-
-    if (hasRenterOverlap) {
-      throw new BadRequestError(
-        "You already have an active booking request for this posting that overlaps these dates.",
-      );
-    }
-
     const updated = await this.bookingsRepository.updatePending(existing.id, input.renterId, {
       startAt: normalized.startAt,
       endAt: normalized.endAt,
@@ -227,17 +181,6 @@ export class BookingsService {
       new Date(bookingRequest.endAt),
       bookingRequest.id,
     );
-
-    const hasActiveOverlap = await this.bookingsRepository.hasActiveOverlap({
-      postingId: bookingRequest.postingId,
-      startAt: new Date(bookingRequest.startAt),
-      endAt: new Date(bookingRequest.endAt),
-      excludeBookingRequestId: bookingRequest.id,
-    });
-
-    if (hasActiveOverlap) {
-      throw new BadRequestError("The requested dates are no longer available.");
-    }
 
     const approved = await this.bookingsRepository.approve(
       bookingRequest.id,
@@ -382,6 +325,24 @@ export class BookingsService {
 
     if (overlap) {
       throw new BadRequestError("The requested dates overlap with existing availability blocks.");
+    }
+  }
+
+  private async assertWithinPostingRequestCap(
+    postingId: string,
+    renterId: string,
+    excludeBookingRequestId?: string,
+  ): Promise<void> {
+    const activeRequestCount = await this.bookingsRepository.countActiveRequestsForRenterPosting({
+      postingId,
+      renterId,
+      excludeBookingRequestId,
+    });
+
+    if (activeRequestCount >= MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING) {
+      throw new BadRequestError(
+        `You can only keep ${MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING} active booking requests for this posting at a time. Please update or complete an existing request before creating another.`,
+      );
     }
   }
 
