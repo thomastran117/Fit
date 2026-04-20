@@ -3,6 +3,7 @@ import { AuthController } from "@/features/auth/auth.controller";
 import type { AuthSessionResult, AuthUserProfile } from "@/features/auth/auth.model";
 import type { JwtClaims } from "@/features/auth/token/token.service";
 import type { AppBindings, ClientRequestContext } from "@/configuration/http/bindings";
+import { RequestValidationError } from "@/configuration/validation/request";
 import type { Context } from "hono";
 
 const mockRequireJwtAuth = jest.fn();
@@ -327,6 +328,57 @@ describe("AuthController", () => {
         failOpen: true,
       },
     });
+  });
+
+  it("localSignup rejects html in profile fields before calling the auth service", async () => {
+    const { controller, authService, captchaService } = createController();
+    const context = createContext({
+      body: {
+        email: "user@example.com",
+        password: "StrongPassword1!",
+        captchaToken: "captcha-token",
+        firstName: "<script>alert('xss')</script>",
+      },
+    });
+
+    await expect(controller.localSignup(context)).rejects.toMatchObject<
+      Partial<RequestValidationError>
+    >({
+      message: "Request body validation failed.",
+      details: [
+        {
+          path: "firstName",
+          message: "Input contains unsupported HTML or script content.",
+        },
+      ],
+    });
+    expect(captchaService.verify).not.toHaveBeenCalled();
+    expect(authService.localSignup).not.toHaveBeenCalled();
+  });
+
+  it("localAuthenticate rejects script-like passwords before verifying captcha", async () => {
+    const { controller, authService, captchaService } = createController();
+    const context = createContext({
+      body: {
+        email: "user@example.com",
+        password: "<script>Password1!</script>",
+        captchaToken: "captcha-token",
+      },
+    });
+
+    await expect(controller.localAuthenticate(context)).rejects.toMatchObject<
+      Partial<RequestValidationError>
+    >({
+      message: "Request body validation failed.",
+      details: [
+        {
+          path: "password",
+          message: "Input contains unsupported HTML or script content.",
+        },
+      ],
+    });
+    expect(captchaService.verify).not.toHaveBeenCalled();
+    expect(authService.localAuthenticate).not.toHaveBeenCalled();
   });
 
   it("changePassword authenticates first and prefers the auth device id when building service input", async () => {
