@@ -135,6 +135,10 @@ describe("authorization", () => {
       authorization: "Bearer user-token",
       tokenService: new FakeTokenService(() => createClaims({ role: "user" })),
       body: {
+        variant: {
+          family: "place",
+          subtype: "entire_place",
+        },
         name: "Test posting",
         description: "Nice place",
         pricing: { currency: "cad", daily: { amount: 100 } },

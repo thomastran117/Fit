@@ -12,13 +12,20 @@ import {
   type ListOwnerPostingsResult,
   type PublicPostingRecord,
   type PostingAvailabilityBlockInput,
+  type PostingAttributeValue,
+  type PostingFamily,
   type PostingPhotoInput,
   type PostingPricing,
   type PostingRecord,
+  type PostingSubtype,
   type SearchPostingsInput,
   type SearchPostingsResult,
   type UpsertPostingInput,
 } from "@/features/postings/postings.model";
+import {
+  getPostingSearchableAttributeDefinitions,
+  getPostingVariantDefinition,
+} from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
@@ -141,15 +148,24 @@ export class PostingsService {
       ),
     );
     const normalizedPricing = this.normalizePricing(input.pricing);
+    this.assertValidVariantSelection(input.variant.family, input.variant.subtype);
 
     return {
       ...input,
+      variant: {
+        family: input.variant.family,
+        subtype: input.variant.subtype,
+      },
       name: input.name.trim(),
       description: input.description.trim(),
       pricing: normalizedPricing,
       photos: normalizedPhotos,
       tags: normalizedTags,
-      attributes: this.normalizeAttributes(input.attributes),
+      attributes: this.normalizeAttributes(
+        input.attributes,
+        input.variant.family,
+        input.variant.subtype,
+      ),
       availabilityStatus: input.availabilityStatus,
       availabilityNotes: input.availabilityNotes?.trim() || null,
       maxBookingDurationDays: input.maxBookingDurationDays ?? null,
@@ -237,13 +253,37 @@ export class PostingsService {
   }
 
   private normalizeAttributes(
-    attributes: Record<string, string | number | boolean | string[]>,
-  ): Record<string, string | number | boolean | string[]> {
+    attributes: Record<string, PostingAttributeValue>,
+    family: PostingFamily,
+    subtype: PostingSubtype,
+  ): Record<string, PostingAttributeValue> {
+    const searchableAttributes = getPostingSearchableAttributeDefinitions(family, subtype);
+
+    if (!searchableAttributes) {
+      throw new BadRequestError("Posting variant is invalid.");
+    }
+
     return Object.fromEntries(
-      Object.entries(attributes).map(([key, value]) => [
-        key.trim(),
-        Array.isArray(value) ? value.map((entry) => entry.trim()) : value,
-      ]),
+      Object.entries(attributes).map(([key, value]) => {
+        const normalizedKey = key.trim();
+        const definition = searchableAttributes[normalizedKey];
+
+        if (!definition) {
+          return [
+            normalizedKey,
+            Array.isArray(value)
+              ? value.map((entry) => entry.trim())
+              : typeof value === "string"
+                ? value.trim()
+                : value,
+          ];
+        }
+
+        return [
+          normalizedKey,
+          this.normalizeSearchableAttributeValue(normalizedKey, value, definition),
+        ];
+      }),
     );
   }
 
@@ -403,6 +443,10 @@ export class PostingsService {
   }
 
   private assertValidSearchInput(input: SearchPostingsInput): void {
+    if (input.family && input.subtype) {
+      this.assertValidVariantSelection(input.family, input.subtype);
+    }
+
     if (
       input.minDailyPrice !== undefined &&
       input.maxDailyPrice !== undefined &&
@@ -471,6 +515,113 @@ export class PostingsService {
 
   private isValidCoordinate(value: number, min: number, max: number): boolean {
     return Number.isFinite(value) && value >= min && value <= max;
+  }
+
+  private assertValidVariantSelection(family: PostingFamily, subtype: PostingSubtype): void {
+    if (!getPostingVariantDefinition(family, subtype)) {
+      throw new BadRequestError("Posting subtype does not belong to the selected family.", [
+        {
+          path: "variant.subtype",
+          message: "Posting subtype does not belong to the selected family.",
+        },
+      ]);
+    }
+  }
+
+  private normalizeSearchableAttributeValue(
+    key: string,
+    value: PostingAttributeValue,
+    definition: {
+      kind: "string" | "number" | "integer" | "boolean" | "stringArray";
+      min?: number;
+      max?: number;
+    },
+  ): PostingAttributeValue {
+    const path = `attributes.${key}`;
+
+    switch (definition.kind) {
+      case "string": {
+        if (typeof value !== "string") {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message: "Attribute must be a string.",
+            },
+          ]);
+        }
+
+        return value.trim();
+      }
+      case "stringArray": {
+        if (!Array.isArray(value)) {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message: "Attribute must be an array of strings.",
+            },
+          ]);
+        }
+
+        return Array.from(new Set(value.map((entry) => entry.trim()).filter(Boolean)));
+      }
+      case "boolean": {
+        if (typeof value !== "boolean") {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message: "Attribute must be a boolean.",
+            },
+          ]);
+        }
+
+        return value;
+      }
+      case "integer":
+      case "number": {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message:
+                definition.kind === "integer"
+                  ? "Attribute must be an integer."
+                  : "Attribute must be a number.",
+            },
+          ]);
+        }
+
+        if (definition.kind === "integer" && !Number.isInteger(value)) {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message: "Attribute must be an integer.",
+            },
+          ]);
+        }
+
+        if (definition.min !== undefined && value < definition.min) {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message: `Attribute must be at least ${definition.min}.`,
+            },
+          ]);
+        }
+
+        if (definition.max !== undefined && value > definition.max) {
+          throw new BadRequestError("Request body validation failed.", [
+            {
+              path,
+              message: `Attribute must be at most ${definition.max}.`,
+            },
+          ]);
+        }
+
+        return value;
+      }
+      default:
+        return value;
+    }
   }
 }
 

@@ -143,6 +143,22 @@ export class PostingsSearchService {
       });
     }
 
+    if (input.family) {
+      filter.push({
+        term: {
+          family: input.family,
+        },
+      });
+    }
+
+    if (input.subtype) {
+      filter.push({
+        term: {
+          subtype: input.subtype,
+        },
+      });
+    }
+
     if (input.tags && input.tags.length > 0) {
       filter.push({
         terms: {
@@ -279,11 +295,13 @@ export class PostingsSearchService {
       id: document.id,
       ownerId: document.ownerId,
       status: document.status,
+      family: document.variant.family,
+      subtype: document.variant.subtype,
       name: document.name,
       description: document.description,
       tags: document.tags,
-      attributes: document.attributes,
       availabilityStatus: document.availabilityStatus,
+      searchableAttributes: document.searchableAttributes,
       pricing: document.pricing,
       pricingCurrency: document.pricingCurrency,
       dailyPriceAmount: document.pricing.daily.amount,

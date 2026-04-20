@@ -12,6 +12,10 @@ function createPostingRecord(): PostingRecord {
     id: "posting-1",
     ownerId: "owner-1",
     status: "published",
+    variant: {
+      family: "place",
+      subtype: "entire_place",
+    },
     name: "City loft",
     description: "A bright loft.",
     pricing: {

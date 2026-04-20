@@ -77,6 +77,8 @@ model Posting {
   id                String                     @id @db.VarChar(36)
   ownerId           String                     @map("owner_id") @db.VarChar(36)
   status            PostingStatus
+  family            PostingFamily
+  subtype           String                     @db.VarChar(50)
   name              String                     @db.VarChar(150)
   description       String                     @db.Text
   pricingCurrency   String                     @map("pricing_currency") @db.VarChar(3)
@@ -111,6 +113,7 @@ model Posting {
 
   @@index([ownerId, status])
   @@index([status, publishedAt])
+  @@index([status, family, subtype, publishedAt])
   @@index([country, region, city])
   @@map("postings")
 }
@@ -495,6 +498,12 @@ enum PostingAvailabilityStatus {
   available
   limited
   unavailable
+}
+
+enum PostingFamily {
+  place
+  equipment
+  vehicle
 }
 
 enum PostingSearchOutboxOperation {

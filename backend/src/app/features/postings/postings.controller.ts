@@ -191,6 +191,7 @@ export class PostingsController {
   private toUpsertInput(userId: string, body: UpsertPostingRequestBody): UpsertPostingInput {
     return {
       ownerId: userId,
+      variant: body.variant,
       name: body.name,
       description: body.description,
       pricing: body.pricing,
@@ -239,6 +240,8 @@ export class PostingsController {
         page: url.searchParams.get("page") ?? undefined,
         pageSize: url.searchParams.get("pageSize") ?? undefined,
         q: url.searchParams.get("q") ?? undefined,
+        family: url.searchParams.get("family") ?? undefined,
+        subtype: url.searchParams.get("subtype") ?? undefined,
         tags: this.readArrayQuery(url.searchParams, "tags"),
         availabilityStatus: url.searchParams.get("availabilityStatus") ?? undefined,
         minDailyPrice: url.searchParams.get("minDailyPrice") ?? undefined,
@@ -348,6 +351,8 @@ export class PostingsController {
       page: query.page,
       pageSize: query.pageSize,
       query: query.q,
+      family: query.family,
+      subtype: query.subtype,
       tags: query.tags,
       availabilityStatus: query.availabilityStatus,
       minDailyPrice: query.minDailyPrice,

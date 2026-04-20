@@ -11,6 +11,7 @@ import type {
   ListOwnerPostingsInput,
   ListOwnerPostingsResult,
   PublicPostingRecord,
+  PostingAttributeValue,
   PostingAvailabilityBlockRecord,
   PostingAvailabilityStatus,
   PostingPhotoRecord,
@@ -20,9 +21,11 @@ import type {
   PostingSearchOutboxRecord,
   PostingSort,
   PostingStatus,
+  PostingSubtype,
   SearchPostingsInput,
   UpsertPostingInput,
 } from "@/features/postings/postings.model";
+import { getPostingSearchableAttributeDefinitions } from "@/features/postings/postings.variants";
 
 type PostingPersistence = Prisma.PostingGetPayload<{
   include: {
@@ -455,6 +458,14 @@ export class PostingsRepository extends BaseRepository {
       );
     }
 
+    if (input.family) {
+      whereClauses.push(Prisma.sql`family = ${input.family}`);
+    }
+
+    if (input.subtype) {
+      whereClauses.push(Prisma.sql`subtype = ${input.subtype}`);
+    }
+
     for (const tag of input.tags ?? []) {
       whereClauses.push(Prisma.sql`JSON_SEARCH(tags, 'one', ${tag}) IS NOT NULL`);
     }
@@ -802,6 +813,8 @@ export class PostingsRepository extends BaseRepository {
         },
       },
       status: "draft",
+      family: input.variant.family,
+      subtype: input.variant.subtype,
       name: input.name,
       description: input.description,
       pricingCurrency: input.pricing.currency,
@@ -838,6 +851,8 @@ export class PostingsRepository extends BaseRepository {
 
   private toUpdateData(input: UpsertPostingInput): Prisma.PostingUpdateInput {
     return {
+      family: input.variant.family,
+      subtype: input.variant.subtype,
       name: input.name,
       description: input.description,
       pricingCurrency: input.pricing.currency,
@@ -877,10 +892,7 @@ export class PostingsRepository extends BaseRepository {
   private mapPosting(posting: PostingPersistence): PostingRecord {
     const pricing = posting.pricing as PostingPricing;
     const tags = Array.isArray(posting.tags) ? (posting.tags as string[]) : [];
-    const attributes = (posting.attributes ?? {}) as Record<
-      string,
-      string | number | boolean | string[]
-    >;
+    const attributes = (posting.attributes ?? {}) as Record<string, PostingAttributeValue>;
     const now = Date.now();
     const availabilityBlocks = posting.availabilityBlocks
       .filter((block) => {
@@ -911,6 +923,10 @@ export class PostingsRepository extends BaseRepository {
       id: posting.id,
       ownerId: posting.ownerId,
       status: posting.status as PostingStatus,
+      variant: {
+        family: posting.family,
+        subtype: posting.subtype as PostingSubtype,
+      },
       name: posting.name,
       description: posting.description,
       pricing,
@@ -963,18 +979,25 @@ export class PostingsRepository extends BaseRepository {
   }
 
   private mapSearchDocument(posting: PostingPersistence): PostingSearchDocument {
+    const attributes = (posting.attributes ?? {}) as Record<string, PostingAttributeValue>;
+
     return {
       id: posting.id,
       ownerId: posting.ownerId,
       status: posting.status as PostingStatus,
+      variant: {
+        family: posting.family,
+        subtype: posting.subtype as PostingSubtype,
+      },
       name: posting.name,
       description: posting.description,
       tags: Array.isArray(posting.tags) ? (posting.tags as string[]) : [],
-      attributes: (posting.attributes ?? {}) as Record<
-        string,
-        string | number | boolean | string[]
-      >,
       availabilityStatus: posting.availabilityStatus as PostingAvailabilityStatus,
+      searchableAttributes: this.extractSearchableAttributes(
+        posting.family,
+        posting.subtype as PostingSubtype,
+        attributes,
+      ),
       pricing: posting.pricing as PostingPricing,
       pricingCurrency: posting.pricingCurrency,
       location: {
@@ -993,6 +1016,22 @@ export class PostingsRepository extends BaseRepository {
       updatedAt: posting.updatedAt.toISOString(),
       publishedAt: posting.publishedAt?.toISOString(),
     };
+  }
+
+  private extractSearchableAttributes(
+    family: PostingRecord["variant"]["family"],
+    subtype: PostingRecord["variant"]["subtype"],
+    attributes: Record<string, PostingAttributeValue>,
+  ): Record<string, PostingAttributeValue> {
+    const definitions = getPostingSearchableAttributeDefinitions(family, subtype);
+
+    if (!definitions) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(attributes).filter(([key]) => definitions[key] !== undefined),
+    );
   }
 
   private mapOutbox(
