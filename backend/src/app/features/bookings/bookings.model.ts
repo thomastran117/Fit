@@ -9,6 +9,10 @@ import {
 export const MAX_BOOKING_NOTE_LENGTH = 1000;
 export const MAX_BOOKING_DECISION_NOTE_LENGTH = 1000;
 export const MAX_BOOKING_GUEST_COUNT = 20;
+export const MAX_BOOKING_CONTACT_NAME_LENGTH = 255;
+export const MAX_BOOKING_CONTACT_EMAIL_LENGTH = 255;
+export const MAX_BOOKING_CONTACT_PHONE_LENGTH = 32;
+export const MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING = 2;
 export const PENDING_BOOKING_HOLD_HOURS = 24;
 export const APPROVED_BOOKING_HOLD_HOURS = 72;
 export const CONVERSION_RESERVATION_MINUTES = 5;
@@ -44,6 +48,32 @@ export const createBookingRequestSchema = z.object({
     .max(MAX_BOOKING_GUEST_COUNT, `Guest count must be at most ${MAX_BOOKING_GUEST_COUNT}.`),
   note: nullableTrimmedStringSchema.pipe(
     z.string().trim().max(MAX_BOOKING_NOTE_LENGTH).nullable().optional(),
+  ),
+  contactName: trimmedStringSchema.max(
+    MAX_BOOKING_CONTACT_NAME_LENGTH,
+    `Contact name must be at most ${MAX_BOOKING_CONTACT_NAME_LENGTH} characters.`,
+  ),
+  contactEmail: z
+    .email("Contact email must be a valid email address.")
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(
+      z
+        .string()
+        .max(
+          MAX_BOOKING_CONTACT_EMAIL_LENGTH,
+          `Contact email must be at most ${MAX_BOOKING_CONTACT_EMAIL_LENGTH} characters.`,
+        ),
+    ),
+  contactPhoneNumber: nullableTrimmedStringSchema.pipe(
+    z
+      .string()
+      .trim()
+      .max(
+        MAX_BOOKING_CONTACT_PHONE_LENGTH,
+        `Contact phone number must be at most ${MAX_BOOKING_CONTACT_PHONE_LENGTH} characters.`,
+      )
+      .nullable()
+      .optional(),
   ),
 });
 
@@ -84,6 +114,9 @@ export interface BookingRequestRecord {
   endAt: string;
   durationDays: number;
   guestCount: number;
+  contactName: string;
+  contactEmail: string;
+  contactPhoneNumber?: string;
   note?: string;
   pricingCurrency: string;
   pricingSnapshot: z.infer<typeof postingPricingSchema>;
@@ -128,6 +161,9 @@ export interface CreateBookingRequestInput {
   startAt: string;
   endAt: string;
   guestCount: number;
+  contactName: string;
+  contactEmail: string;
+  contactPhoneNumber?: string | null;
   note?: string | null;
 }
 
@@ -143,6 +179,9 @@ export interface UpdateBookingRequestInput {
   startAt: string;
   endAt: string;
   guestCount: number;
+  contactName: string;
+  contactEmail: string;
+  contactPhoneNumber?: string | null;
   note?: string | null;
 }
 
@@ -169,6 +208,9 @@ export interface CreateBookingRequestPersistenceInput {
   endAt: Date;
   durationDays: number;
   guestCount: number;
+  contactName: string;
+  contactEmail: string;
+  contactPhoneNumber?: string | null;
   note?: string | null;
   pricingCurrency: string;
   pricingSnapshot: z.infer<typeof postingPricingSchema>;

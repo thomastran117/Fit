@@ -111,6 +111,9 @@ export class BookingsController {
       endAt: string;
       guestCount: number;
       note?: string | null;
+      contactName: string;
+      contactEmail: string;
+      contactPhoneNumber?: string | null;
     },
   ): CreateBookingRequestInput {
     return {
@@ -120,6 +123,9 @@ export class BookingsController {
       endAt: body.endAt,
       guestCount: body.guestCount,
       note: body.note ?? null,
+      contactName: body.contactName,
+      contactEmail: body.contactEmail,
+      contactPhoneNumber: body.contactPhoneNumber ?? null,
     };
   }
 
@@ -145,6 +151,9 @@ export class BookingsController {
       endAt: string;
       guestCount: number;
       note?: string | null;
+      contactName: string;
+      contactEmail: string;
+      contactPhoneNumber?: string | null;
     },
   ): UpdateBookingRequestInput {
     return {
@@ -154,6 +163,9 @@ export class BookingsController {
       endAt: body.endAt,
       guestCount: body.guestCount,
       note: body.note ?? null,
+      contactName: body.contactName,
+      contactEmail: body.contactEmail,
+      contactPhoneNumber: body.contactPhoneNumber ?? null,
     };
   }
 

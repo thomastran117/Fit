@@ -67,10 +67,6 @@ export class RentingsRepository extends BaseRepository {
           throw new BadRequestError("This booking request has already been converted into a renting.");
         }
 
-        if (bookingRequest.holdExpiresAt.getTime() <= now.getTime()) {
-          throw new BadRequestError("This booking request has already expired.");
-        }
-
         if (
           !bookingRequest.conversionReservationExpiresAt ||
           bookingRequest.conversionReservationExpiresAt.getTime() <= now.getTime()

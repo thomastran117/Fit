@@ -148,21 +148,12 @@ export class PaymentsService {
       const status = (details.status ?? "").toUpperCase();
 
       if (status === "COMPLETED") {
-        const result = await this.paymentsRepository.markPaymentSucceeded({
+        await this.paymentsRepository.markPaymentSucceeded({
           providerPaymentId: details.paymentId,
           providerOrderId: details.orderId,
           status: "COMPLETED",
           raw: verification.payload,
         });
-
-        if (result?.createdRenting) {
-          await this.postingsAnalyticsRepository.enqueueRentingConfirmedEvent({
-            postingId: result.payment.postingId,
-            ownerId: result.payment.ownerId,
-            occurredAt: result.payment.succeededAt ?? new Date().toISOString(),
-            estimatedTotal: result.payment.rentalSubtotalAmount,
-          });
-        }
       } else if (status === "FAILED" || status === "CANCELED") {
         await this.paymentsRepository.markPaymentFailed(
           {
@@ -193,22 +184,13 @@ export class PaymentsService {
     }
 
     if (status.status === "COMPLETED") {
-      const result = await this.paymentsRepository.markPaymentSucceeded(status);
+      const payment = await this.paymentsRepository.markPaymentSucceeded(status);
 
-      if (!result) {
+      if (!payment) {
         throw new ResourceNotFoundError("Payment could not be reconciled.");
       }
 
-      if (result.createdRenting) {
-        await this.postingsAnalyticsRepository.enqueueRentingConfirmedEvent({
-          postingId: result.payment.postingId,
-          ownerId: result.payment.ownerId,
-          occurredAt: result.payment.succeededAt ?? new Date().toISOString(),
-          estimatedTotal: result.payment.rentalSubtotalAmount,
-        });
-      }
-
-      return result.payment;
+      return payment;
     }
 
     if (status.status === "FAILED" || status.status === "CANCELED") {
@@ -244,17 +226,7 @@ export class PaymentsService {
     }
 
     if (status.status === "COMPLETED") {
-      const result = await this.paymentsRepository.markPaymentSucceeded(status);
-
-      if (result?.createdRenting) {
-        await this.postingsAnalyticsRepository.enqueueRentingConfirmedEvent({
-          postingId: result.payment.postingId,
-          ownerId: result.payment.ownerId,
-          occurredAt: result.payment.succeededAt ?? new Date().toISOString(),
-          estimatedTotal: result.payment.rentalSubtotalAmount,
-        });
-      }
-
+      await this.paymentsRepository.markPaymentSucceeded(status);
       return;
     }
 

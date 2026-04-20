@@ -3,6 +3,7 @@ import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/features/postings/postings.m
 
 export const PAYMENT_PROVIDER = "square" as const;
 export const DEFAULT_PLATFORM_FEE_BPS = 1000;
+export const DEFAULT_BOOKING_DEPOSIT_BPS = 2500;
 export const MAX_RETRY_ATTEMPTS = 5;
 export const PAYMENT_PROCESSING_TIMEOUT_MINUTES = 15;
 
