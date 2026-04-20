@@ -1,6 +1,7 @@
 import BadRequestError from "@/errors/http/bad-request.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PaymentProviderAdapter } from "@/features/payments/payment-provider";
 import type {
   CreatePaymentSessionInput,
@@ -38,6 +39,7 @@ export class PaymentsService {
     private readonly paymentsRepository: PaymentsRepository,
     private readonly paymentProvider: PaymentProviderAdapter,
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
+    private readonly postingsRepository: PostingsRepository,
   ) {}
 
   async createPaymentSession(input: CreatePaymentSessionInput): Promise<PaymentRecord> {
@@ -65,14 +67,22 @@ export class PaymentsService {
         paymentId: attempt.paymentId,
       });
 
-      return this.paymentsRepository.attachPaymentSession(attempt.paymentId, attempt.attemptId, session);
+      const payment = await this.paymentsRepository.attachPaymentSession(
+        attempt.paymentId,
+        attempt.attemptId,
+        session,
+      );
+      await this.enqueueSearchSync(payment.postingId);
+      return payment;
     } catch (error) {
       const errorInfo = this.paymentProvider.classifyError(error);
-      return this.paymentsRepository.recordAttemptFailure(
+      const payment = await this.paymentsRepository.recordAttemptFailure(
         attempt.paymentId,
         attempt.attemptId,
         errorInfo,
       );
+      await this.enqueueSearchSync(payment.postingId);
+      return payment;
     }
   }
 
@@ -112,7 +122,9 @@ export class PaymentsService {
       reason: input.reason,
     });
 
-    return this.paymentsRepository.completeRefund(refundId, result);
+    const payment = await this.paymentsRepository.completeRefund(refundId, result);
+    await this.enqueueSearchSync(payment.postingId);
+    return payment;
   }
 
   async listPayouts(input: ListPayoutsInput): Promise<PayoutListResult> {
@@ -148,14 +160,15 @@ export class PaymentsService {
       const status = (details.status ?? "").toUpperCase();
 
       if (status === "COMPLETED") {
-        await this.paymentsRepository.markPaymentSucceeded({
+        const payment = await this.paymentsRepository.markPaymentSucceeded({
           providerPaymentId: details.paymentId,
           providerOrderId: details.orderId,
           status: "COMPLETED",
           raw: verification.payload,
         });
+        await this.enqueueSearchSync(payment?.postingId);
       } else if (status === "FAILED" || status === "CANCELED") {
-        await this.paymentsRepository.markPaymentFailed(
+        const payment = await this.paymentsRepository.markPaymentFailed(
           {
             providerPaymentId: details.paymentId,
             providerOrderId: details.orderId,
@@ -166,6 +179,7 @@ export class PaymentsService {
           },
           status === "FAILED" ? "permanent" : "unknown",
         );
+        await this.enqueueSearchSync(payment?.postingId);
       }
     }
 
@@ -190,6 +204,7 @@ export class PaymentsService {
         throw new ResourceNotFoundError("Payment could not be reconciled.");
       }
 
+      await this.enqueueSearchSync(payment.postingId);
       return payment;
     }
 
@@ -203,6 +218,7 @@ export class PaymentsService {
         throw new ResourceNotFoundError("Payment could not be reconciled.");
       }
 
+      await this.enqueueSearchSync(result.postingId);
       return result;
     }
 
@@ -226,15 +242,17 @@ export class PaymentsService {
     }
 
     if (status.status === "COMPLETED") {
-      await this.paymentsRepository.markPaymentSucceeded(status);
+      const result = await this.paymentsRepository.markPaymentSucceeded(status);
+      await this.enqueueSearchSync(result?.postingId);
       return;
     }
 
     if (status.status === "FAILED" || status.status === "CANCELED") {
-      await this.paymentsRepository.markPaymentFailed(
+      const result = await this.paymentsRepository.markPaymentFailed(
         status,
         status.status === "FAILED" ? "permanent" : "unknown",
       );
+      await this.enqueueSearchSync(result?.postingId);
     }
   }
 
@@ -257,14 +275,20 @@ export class PaymentsService {
           paymentId: ready.paymentId,
         });
 
-        await this.paymentsRepository.attachPaymentSession(ready.paymentId, candidate.attemptId, session);
+        const payment = await this.paymentsRepository.attachPaymentSession(
+          ready.paymentId,
+          candidate.attemptId,
+          session,
+        );
+        await this.enqueueSearchSync(payment.postingId);
       } catch (error) {
         const errorInfo = this.paymentProvider.classifyError(error);
-        await this.paymentsRepository.recordAttemptFailure(
+        const payment = await this.paymentsRepository.recordAttemptFailure(
           ready.paymentId,
           candidate.attemptId,
           errorInfo,
         );
+        await this.enqueueSearchSync(payment.postingId);
       }
     }
 
@@ -296,5 +320,13 @@ export class PaymentsService {
     }
 
     return payouts.length;
+  }
+
+  private async enqueueSearchSync(postingId?: string): Promise<void> {
+    if (!postingId) {
+      return;
+    }
+
+    await this.postingsRepository.enqueueSearchSync(postingId);
   }
 }

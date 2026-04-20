@@ -14,6 +14,11 @@ import {
   connectRedis,
   disconnectRedis,
 } from "@/configuration/resources/redis";
+import {
+  connectRabbitMq,
+  disconnectRabbitMq,
+  isRabbitMqEnabled,
+} from "@/configuration/resources/rabbitmq";
 
 async function bootstrap(): Promise<void> {
   loadEnvironment();
@@ -23,6 +28,9 @@ async function bootstrap(): Promise<void> {
   await connectDatabase();
   await connectRedis();
   await connectElasticsearch();
+  if (isRabbitMqEnabled()) {
+    await connectRabbitMq();
+  }
   initializeContainer();
   const app = createApplication();
 
@@ -48,6 +56,7 @@ async function bootstrap(): Promise<void> {
 
     server.close();
     await Promise.allSettled([
+      disconnectRabbitMq(),
       disconnectRedis(),
       disconnectDatabase(),
       disconnectElasticsearch(),
@@ -67,6 +76,7 @@ async function bootstrap(): Promise<void> {
 void bootstrap().catch(async (error: unknown) => {
   console.error("Failed to start server", error);
   await Promise.allSettled([
+    disconnectRabbitMq(),
     disconnectRedis(),
     disconnectDatabase(),
     disconnectElasticsearch(),

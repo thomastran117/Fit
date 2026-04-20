@@ -7,6 +7,7 @@ import {
 import { normalizeAppRole } from "@/features/auth/auth.model";
 import { PaymentsController } from "@/features/payments/payments.controller";
 import { PostingsController } from "@/features/postings/postings.controller";
+import { SearchController } from "@/features/search/search.controller";
 import type { Context } from "hono";
 import type { AppBindings, ClientRequestContext } from "@/configuration/http/bindings";
 import type { ServiceContainer } from "@/configuration/bootstrap/container";
@@ -192,5 +193,36 @@ describe("authorization", () => {
     expect(repairCalled).toBe(true);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("restricts search reindex operations to admins", async () => {
+    let reindexCalled = false;
+    const controller = new SearchController({
+      startReindex: async () => {
+        reindexCalled = true;
+        return { id: "run-1", status: "pending" };
+      },
+      getReindexRun: async () => ({ id: "run-1", status: "running" }),
+      getStatus: async () => ({ ok: true }),
+    } as never);
+
+    const ownerContext = createContext({
+      authorization: "Bearer owner-token",
+      tokenService: new FakeTokenService(() => createClaims({ role: "owner" })),
+    });
+
+    await expect(controller.startReindex(ownerContext)).rejects.toBeInstanceOf(ForbiddenError);
+    expect(reindexCalled).toBe(false);
+
+    const adminContext = createContext({
+      authorization: "Bearer admin-token",
+      tokenService: new FakeTokenService(() => createClaims({ role: "admin" })),
+    });
+
+    const response = await controller.startReindex(adminContext);
+
+    expect(reindexCalled).toBe(true);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ id: "run-1", status: "pending" });
   });
 });

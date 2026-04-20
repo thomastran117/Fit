@@ -345,6 +345,11 @@ export interface PostingSearchDocument {
     blobUrl: string;
     position: number;
   }>;
+  blockedRanges: Array<{
+    startAt: string;
+    endAt: string;
+    source: "availability_block" | "booking_request" | "renting";
+  }>;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -352,12 +357,19 @@ export interface PostingSearchDocument {
 
 export interface PostingSearchOutboxRecord {
   id: string;
-  postingId: string;
-  operation: "upsert" | "delete";
+  postingId?: string;
+  reindexRunId?: string;
+  operation: "upsert" | "delete" | "barrier";
+  dedupeKey: string;
+  targetIndexName?: string;
   attempts: number;
+  publishAttempts: number;
   availableAt: string;
   processingAt?: string;
-  processedAt?: string;
+  publishedAt?: string;
+  indexedAt?: string;
+  deadLetteredAt?: string;
+  brokerMessageId?: string;
   lastError?: string;
   createdAt: string;
   updatedAt: string;

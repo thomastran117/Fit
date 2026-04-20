@@ -45,12 +45,20 @@ type RawEnvironmentValues = {
   POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
+  POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
+  POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS?: string;
+  POSTINGS_SEARCH_REINDEX_BATCH_SIZE?: string;
+  POSTINGS_SEARCH_REINDEX_POLL_INTERVAL_MS?: string;
+  POSTINGS_SEARCH_RELAY_BATCH_SIZE?: string;
+  POSTINGS_SEARCH_RELAY_MAX_ATTEMPTS?: string;
+  POSTINGS_SEARCH_RELAY_POLL_INTERVAL_MS?: string;
   PAYMENTS_RETRY_BATCH_SIZE?: string;
   PAYMENTS_RETRY_POLL_INTERVAL_MS?: string;
   PAYMENTS_REPAIR_BATCH_SIZE?: string;
   PAYMENTS_REPAIR_POLL_INTERVAL_MS?: string;
   PAYOUT_RELEASE_BATCH_SIZE?: string;
   PAYOUT_RELEASE_POLL_INTERVAL_MS?: string;
+  RABBITMQ_URL?: string;
   RATE_LIMITER_BUCKET_CAPACITY?: string;
   RATE_LIMITER_ENABLED?: string;
   RATE_LIMITER_LIMIT?: string;
@@ -151,6 +159,19 @@ export interface AppEnvironment {
       pollIntervalMs: number;
       batchSize: number;
     };
+    searchRelay: {
+      pollIntervalMs: number;
+      batchSize: number;
+      maxAttempts: number;
+    };
+    searchIndexer: {
+      prefetch: number;
+      maxAttempts: number;
+    };
+    searchReindex: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
     analytics: {
       pollIntervalMs: number;
       batchSize: number;
@@ -176,6 +197,9 @@ export interface AppEnvironment {
     connectionString?: string;
     containerName?: string;
     uploadSasTtlSeconds: number;
+  };
+  rabbitmq: {
+    url?: string;
   };
   elasticsearch: {
     enabled: boolean;
@@ -236,6 +260,13 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "PORT",
   "POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE",
   "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
+  "POSTINGS_SEARCH_INDEXER_PREFETCH",
+  "POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS",
+  "POSTINGS_SEARCH_REINDEX_BATCH_SIZE",
+  "POSTINGS_SEARCH_REINDEX_POLL_INTERVAL_MS",
+  "POSTINGS_SEARCH_RELAY_BATCH_SIZE",
+  "POSTINGS_SEARCH_RELAY_MAX_ATTEMPTS",
+  "POSTINGS_SEARCH_RELAY_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_OUTBOX_BATCH_SIZE",
   "POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS",
   "PAYMENTS_REPAIR_BATCH_SIZE",
@@ -244,6 +275,7 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "PAYMENTS_RETRY_POLL_INTERVAL_MS",
   "PAYOUT_RELEASE_BATCH_SIZE",
   "PAYOUT_RELEASE_POLL_INTERVAL_MS",
+  "RABBITMQ_URL",
   "RATE_LIMITER_BUCKET_CAPACITY",
   "RATE_LIMITER_ENABLED",
   "RATE_LIMITER_LIMIT",
@@ -647,6 +679,64 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           min: 1,
         }),
       },
+      searchRelay: {
+        pollIntervalMs: parseNumber(
+          raw,
+          "POSTINGS_SEARCH_RELAY_POLL_INTERVAL_MS",
+          parseNumber(raw, "POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS", 2_000, errors, {
+            integer: true,
+            min: 1,
+          }),
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        batchSize: parseNumber(
+          raw,
+          "POSTINGS_SEARCH_RELAY_BATCH_SIZE",
+          parseNumber(raw, "POSTINGS_SEARCH_OUTBOX_BATCH_SIZE", 25, errors, {
+            integer: true,
+            min: 1,
+          }),
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        maxAttempts: parseNumber(raw, "POSTINGS_SEARCH_RELAY_MAX_ATTEMPTS", 8, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      searchIndexer: {
+        prefetch: parseNumber(raw, "POSTINGS_SEARCH_INDEXER_PREFETCH", 25, errors, {
+          integer: true,
+          min: 1,
+        }),
+        maxAttempts: parseNumber(raw, "POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS", 8, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      searchReindex: {
+        pollIntervalMs: parseNumber(
+          raw,
+          "POSTINGS_SEARCH_REINDEX_POLL_INTERVAL_MS",
+          5_000,
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        batchSize: parseNumber(raw, "POSTINGS_SEARCH_REINDEX_BATCH_SIZE", 250, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
       analytics: {
         pollIntervalMs: parseNumber(
           raw,
@@ -724,6 +814,9 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           max: 60 * 60,
         },
       ),
+    },
+    rabbitmq: {
+      url: raw.RABBITMQ_URL,
     },
     elasticsearch: {
       enabled: elasticsearchEnabled,
@@ -847,6 +940,18 @@ class EnvironmentManager {
     return this.get().workers.search;
   }
 
+  getSearchRelayWorkerConfig(): AppEnvironment["workers"]["searchRelay"] {
+    return this.get().workers.searchRelay;
+  }
+
+  getSearchIndexerWorkerConfig(): AppEnvironment["workers"]["searchIndexer"] {
+    return this.get().workers.searchIndexer;
+  }
+
+  getSearchReindexWorkerConfig(): AppEnvironment["workers"]["searchReindex"] {
+    return this.get().workers.searchReindex;
+  }
+
   getAnalyticsWorkerConfig(): AppEnvironment["workers"]["analytics"] {
     return this.get().workers.analytics;
   }
@@ -869,6 +974,10 @@ class EnvironmentManager {
 
   getBlobStorageConfig(): AppEnvironment["blobStorage"] {
     return this.get().blobStorage;
+  }
+
+  getRabbitMqConfig(): AppEnvironment["rabbitmq"] {
+    return this.get().rabbitmq;
   }
 
   getElasticsearchConfig(): AppEnvironment["elasticsearch"] {

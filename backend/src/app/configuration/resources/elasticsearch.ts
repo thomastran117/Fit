@@ -34,11 +34,12 @@ export class ElasticsearchClient {
     init: RequestInit,
     options: {
       allowNotFound?: boolean;
+      contentType?: string;
     } = {},
   ): Promise<TResponse> {
     const config = this.requireConfig();
     const headers = new Headers(init.headers);
-    headers.set("content-type", "application/json");
+    headers.set("content-type", options.contentType ?? "application/json");
 
     if (config.username && config.password) {
       headers.set(

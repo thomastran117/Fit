@@ -41,6 +41,7 @@ function createDocument(
         position: 0,
       },
     ],
+    blockedRanges: [],
     createdAt: "2026-04-20T00:00:00.000Z",
     updatedAt: "2026-04-20T00:00:00.000Z",
     publishedAt: "2026-04-20T00:00:00.000Z",
@@ -58,10 +59,10 @@ describe("PostingsSearchService", () => {
       isEnabled: () => true,
     } as never);
 
-    await service.upsertDocument(createDocument());
+    await service.upsertDocument(createDocument(), "postings-test_v1");
 
     expect(requestJson).toHaveBeenCalledTimes(1);
-    expect(requestJson.mock.calls[0]?.[0]).toBe("/postings-test/_doc/posting-1");
+    expect(requestJson.mock.calls[0]?.[0]).toBe("/postings-test_v1/_doc/posting-1");
 
     const body = JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string) as Record<
       string,
@@ -136,5 +137,76 @@ describe("PostingsSearchService", () => {
     expect(batchFindPublic).toHaveBeenCalledWith({
       ids: [],
     });
+  });
+
+  it("excludes overlapping blocked ranges when availability search is provided", async () => {
+    const repository = {
+      batchFindPublic: jest.fn(async () => ({
+        postings: [],
+        missingIds: [],
+      })),
+      searchPublicFallback: jest.fn(),
+    } as unknown as PostingsRepository;
+    const requestJson = jest.fn(async () => ({
+      hits: {
+        total: {
+          value: 0,
+        },
+        hits: [],
+      },
+    }));
+    const service = new PostingsSearchService(repository, {
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      sort: "relevance",
+      availabilityWindow: {
+        startAt: "2026-04-21T00:00:00.000Z",
+        endAt: "2026-04-24T00:00:00.000Z",
+      },
+    });
+
+    const body = JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string) as {
+      query: {
+        bool: {
+          must_not: unknown[];
+        };
+      };
+    };
+
+    expect(body.query.bool.must_not).toEqual(
+      expect.arrayContaining([
+        {
+          nested: {
+            path: "blockedRanges",
+            query: {
+              bool: {
+                filter: [
+                  {
+                    range: {
+                      "blockedRanges.startAt": {
+                        lt: "2026-04-24T00:00:00.000Z",
+                      },
+                    },
+                  },
+                  {
+                    range: {
+                      "blockedRanges.endAt": {
+                        gt: "2026-04-21T00:00:00.000Z",
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    );
   });
 });

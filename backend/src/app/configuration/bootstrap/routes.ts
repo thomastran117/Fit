@@ -12,6 +12,7 @@ import type { PaymentsController } from "@/features/payments/payments.controller
 import type { ProfileController } from "@/features/profile/profile.controller";
 import type { PostingsController } from "@/features/postings/postings.controller";
 import type { RentingsController } from "@/features/rentings/rentings.controller";
+import type { SearchController } from "@/features/search/search.controller";
 
 type ControllerHandlerName<TController> = {
   [TKey in keyof TController]: TController[TKey] extends (
@@ -136,6 +137,18 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.put(
     "/profile/me",
     resolveHandler<ProfileController>(containerTokens.profileController, "updateMe"),
+  );
+  app.post(
+    "/admin/search/reindex",
+    resolveHandler<SearchController>(containerTokens.searchController, "startReindex"),
+  );
+  app.get(
+    "/admin/search/reindex-runs/:id",
+    resolveHandler<SearchController>(containerTokens.searchController, "getReindexRun"),
+  );
+  app.get(
+    "/admin/search/status",
+    resolveHandler<SearchController>(containerTokens.searchController, "getStatus"),
   );
   app.post(
     "/postings",

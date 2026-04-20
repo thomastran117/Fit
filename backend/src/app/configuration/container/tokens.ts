@@ -35,6 +35,9 @@ import { PostingsService } from "@/features/postings/postings.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
+import { SearchController } from "@/features/search/search.controller";
+import { SearchQueueService } from "@/features/search/search.queue.service";
+import { SearchService } from "@/features/search/search.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import { createServiceToken } from "@/configuration/container/core";
 
@@ -80,6 +83,9 @@ export const containerTokens = {
   ),
   postingsReviewsService: createServiceToken<PostingsReviewsService>("PostingsReviewsService"),
   postingsSearchService: createServiceToken<PostingsSearchService>("PostingsSearchService"),
+  searchQueueService: createServiceToken<SearchQueueService>("SearchQueueService"),
+  searchService: createServiceToken<SearchService>("SearchService"),
+  searchController: createServiceToken<SearchController>("SearchController"),
   contentSanitizationService: createServiceToken<ContentSanitizationService>(
     "ContentSanitizationService",
   ),
