@@ -54,6 +54,9 @@ export class BookingsService {
       endAt: normalized.endAt,
       durationDays: normalized.durationDays,
       guestCount: normalized.guestCount,
+      contactName: normalized.contactName,
+      contactEmail: normalized.contactEmail,
+      contactPhoneNumber: normalized.contactPhoneNumber,
       note: normalized.note,
       pricingCurrency: posting.pricing.currency,
       pricingSnapshot: posting.pricing,
@@ -117,6 +120,9 @@ export class BookingsService {
         startAt: input.startAt,
         endAt: input.endAt,
         guestCount: input.guestCount,
+        contactName: input.contactName,
+        contactEmail: input.contactEmail,
+        contactPhoneNumber: input.contactPhoneNumber,
         note: input.note,
       },
       posting,
@@ -135,6 +141,9 @@ export class BookingsService {
       endAt: normalized.endAt,
       durationDays: normalized.durationDays,
       guestCount: normalized.guestCount,
+      contactName: normalized.contactName,
+      contactEmail: normalized.contactEmail,
+      contactPhoneNumber: normalized.contactPhoneNumber,
       note: normalized.note,
       pricingCurrency: posting.pricing.currency,
       pricingSnapshot: posting.pricing,
@@ -278,6 +287,9 @@ export class BookingsService {
     }
 
     const note = input.note?.trim() || null;
+    const contactName = input.contactName.trim();
+    const contactEmail = input.contactEmail.trim().toLowerCase();
+    const contactPhoneNumber = input.contactPhoneNumber?.trim() || null;
 
     if (note && note.length > MAX_BOOKING_NOTE_LENGTH) {
       throw new BadRequestError(
@@ -290,6 +302,9 @@ export class BookingsService {
       startAt,
       endAt,
       guestCount: input.guestCount,
+      contactName,
+      contactEmail,
+      contactPhoneNumber,
       note,
       durationDays,
     };

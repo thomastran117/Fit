@@ -50,6 +50,9 @@ function createBookingRequestRecord(overrides: Partial<BookingRequestRecord> = {
     endAt: "2026-05-04T00:00:00.000Z",
     durationDays: 3,
     guestCount: 2,
+    contactName: "Jordan Lee",
+    contactEmail: "jordan@example.com",
+    contactPhoneNumber: "+1 416 555 0100",
     pricingCurrency: "CAD",
     pricingSnapshot: {
       currency: "CAD",
@@ -135,6 +138,9 @@ describe("BookingsService", () => {
       startAt: "2026-05-01T00:00:00.000Z",
       endAt: "2026-05-04T00:00:00.000Z",
       guestCount: 2,
+      contactName: "Jordan Lee",
+      contactEmail: "jordan@example.com",
+      contactPhoneNumber: "+1 416 555 0100",
       note: "Can arrive after 5pm",
     });
 
@@ -160,10 +166,37 @@ describe("BookingsService", () => {
         startAt: "2026-05-01T00:00:00.000Z",
         endAt: "2026-05-04T00:00:00.000Z",
         guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+        contactPhoneNumber: "+1 416 555 0100",
       }),
     ).rejects.toMatchObject<Partial<BadRequestError>>({
       message:
         "You can only keep 2 active booking requests for this posting at a time. Please update or complete an existing request before creating another.",
     });
+  });
+
+  it("persists booking contact info as part of the request snapshot", async () => {
+    const { service, bookingsRepository } = createService();
+
+    await service.create({
+      postingId: "posting-1",
+      renterId: "renter-1",
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      guestCount: 2,
+      contactName: "Jordan Lee",
+      contactEmail: "Jordan@example.com",
+      contactPhoneNumber: "  +1 416 555 0100  ",
+      note: null,
+    });
+
+    expect(bookingsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+        contactPhoneNumber: "+1 416 555 0100",
+      }),
+    );
   });
 });

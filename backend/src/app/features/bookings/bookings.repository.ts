@@ -59,6 +59,9 @@ export class BookingsRepository extends BaseRepository {
           endAt: input.endAt,
           durationDays: input.durationDays,
           guestCount: input.guestCount,
+          contactName: input.contactName,
+          contactEmail: input.contactEmail,
+          contactPhoneNumber: input.contactPhoneNumber ?? null,
           note: input.note ?? null,
           pricingCurrency: input.pricingCurrency,
           pricingSnapshot: input.pricingSnapshot as Prisma.InputJsonValue,
@@ -124,6 +127,9 @@ export class BookingsRepository extends BaseRepository {
       endAt: Date;
       durationDays: number;
       guestCount: number;
+      contactName: string;
+      contactEmail: string;
+      contactPhoneNumber?: string | null;
       note?: string | null;
       pricingCurrency: string;
       pricingSnapshot: PostingPricing;
@@ -162,6 +168,9 @@ export class BookingsRepository extends BaseRepository {
             endAt: input.endAt,
             durationDays: input.durationDays,
             guestCount: input.guestCount,
+            contactName: input.contactName,
+            contactEmail: input.contactEmail,
+            contactPhoneNumber: input.contactPhoneNumber ?? null,
             note: input.note ?? null,
             pricingCurrency: input.pricingCurrency,
             pricingSnapshot: input.pricingSnapshot as Prisma.InputJsonValue,
@@ -744,6 +753,9 @@ export class BookingsRepository extends BaseRepository {
       endAt: bookingRequest.endAt.toISOString(),
       durationDays: bookingRequest.durationDays,
       guestCount: bookingRequest.guestCount,
+      contactName: bookingRequest.contactName,
+      contactEmail: bookingRequest.contactEmail,
+      contactPhoneNumber: bookingRequest.contactPhoneNumber ?? undefined,
       note: bookingRequest.note ?? undefined,
       pricingCurrency: bookingRequest.pricingCurrency,
       pricingSnapshot: bookingRequest.pricingSnapshot as PostingPricing,
