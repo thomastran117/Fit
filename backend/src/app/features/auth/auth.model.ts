@@ -1,9 +1,43 @@
 import type { ClientRequestContext } from "@/configuration/http/bindings";
 import { z } from "zod";
 
-const optionalTrimmedString = z.string().trim().min(1).optional();
+const UNSAFE_AUTH_INPUT_MESSAGE = "Input contains unsupported HTML or script content.";
+const UNSAFE_AUTH_INPUT_PATTERN =
+  /<[^>]*>|&lt;|&gt;|javascript:|data:text\/html|on[a-z]+\s*=|<\/?script\b/i;
+
+function containsUnsafeAuthInput(value: string): boolean {
+  return UNSAFE_AUTH_INPUT_PATTERN.test(value);
+}
+
+const safeTrimmedString = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !containsUnsafeAuthInput(value), UNSAFE_AUTH_INPUT_MESSAGE);
+
+const requiredSafeTrimmedString = (requiredMessage: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, requiredMessage)
+    .refine((value) => !containsUnsafeAuthInput(value), UNSAFE_AUTH_INPUT_MESSAGE);
+
+const optionalTrimmedString = safeTrimmedString.optional();
+export const appRoleSchema = z.enum(["user", "owner", "admin"]);
+export type AppRole = z.infer<typeof appRoleSchema>;
+export const DEFAULT_APP_ROLE: AppRole = "user";
 const STRONG_PASSWORD_MESSAGE =
   "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.";
+
+export function normalizeAppRole(role: string | null | undefined): AppRole {
+  const parsedRole = appRoleSchema.safeParse(role ?? DEFAULT_APP_ROLE);
+
+  if (parsedRole.success) {
+    return parsedRole.data;
+  }
+
+  throw new Error(`Unsupported application role: ${role ?? "undefined"}.`);
+}
 
 export function isStrongPassword(password: string): boolean {
   return (
@@ -18,12 +52,13 @@ export function isStrongPassword(password: string): boolean {
 export const strongPasswordSchema = z
   .string()
   .min(8, STRONG_PASSWORD_MESSAGE)
+  .refine((value) => !containsUnsafeAuthInput(value), UNSAFE_AUTH_INPUT_MESSAGE)
   .refine(isStrongPassword, STRONG_PASSWORD_MESSAGE);
 
 export const localSignupRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   password: strongPasswordSchema,
-  captchaToken: z.string().trim().min(1, "Captcha token is required."),
+  captchaToken: requiredSafeTrimmedString("Captcha token is required."),
   firstName: optionalTrimmedString,
   lastName: optionalTrimmedString,
   deviceId: optionalTrimmedString,
@@ -31,8 +66,12 @@ export const localSignupRequestSchema = z.object({
 
 export const localAuthenticateRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
-  password: z.string().min(1, "Password is required."),
-  captchaToken: z.string().trim().min(1, "Captcha token is required."),
+  password: z
+    .string()
+    .min(1, "Password is required.")
+    .refine((value) => !containsUnsafeAuthInput(value), UNSAFE_AUTH_INPUT_MESSAGE),
+  captchaToken: requiredSafeTrimmedString("Captcha token is required."),
+  rememberMe: z.boolean().optional(),
   deviceId: optionalTrimmedString,
 });
 
@@ -41,7 +80,8 @@ export const oauthAuthenticateRequestSchema = z
     code: optionalTrimmedString,
     codeVerifier: optionalTrimmedString,
     idToken: optionalTrimmedString,
-    nonce: z.string().trim().min(1, "Nonce is required."),
+    nonce: requiredSafeTrimmedString("Nonce is required."),
+    rememberMe: z.boolean().optional(),
     deviceId: optionalTrimmedString,
     firstName: optionalTrimmedString,
     lastName: optionalTrimmedString,
@@ -93,7 +133,7 @@ export const refreshRequestSchema = z.object({
 
 export const forgotPasswordRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
-  captchaToken: z.string().trim().min(1, "Captcha token is required."),
+  captchaToken: requiredSafeTrimmedString("Captcha token is required."),
 });
 
 export const resendForgotPasswordRequestSchema = z.object({
@@ -108,7 +148,10 @@ export const resetPasswordRequestSchema = z.object({
 });
 
 export const changePasswordRequestSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required."),
+  currentPassword: z
+    .string()
+    .min(1, "Current password is required.")
+    .refine((value) => !containsUnsafeAuthInput(value), UNSAFE_AUTH_INPUT_MESSAGE),
   newPassword: strongPasswordSchema,
 });
 
@@ -150,6 +193,7 @@ export interface LocalAuthenticateInput {
   client: ClientRequestContext;
   email: string;
   password: string;
+  rememberMe?: boolean;
   deviceId?: string;
 }
 
@@ -168,6 +212,7 @@ export interface OAuthAuthenticateInput {
   codeVerifier?: string;
   idToken?: string;
   nonce: string;
+  rememberMe?: boolean;
   deviceId?: string;
   firstName?: string;
   lastName?: string;
@@ -255,7 +300,7 @@ export interface AuthUserRecord {
   tokenVersion: number;
   firstName?: string;
   lastName?: string;
-  role: string;
+  role: AppRole;
   emailVerified: boolean;
   profile: UserProfileRecord;
   createdAt: string;
@@ -274,13 +319,14 @@ export interface AuthUserProfile {
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
-  role: string;
+  role: AppRole;
   emailVerified: boolean;
 }
 
 export interface AuthSessionResult {
   accessToken: string;
   refreshToken: string;
+  refreshTokenExpiresInSeconds: number;
   device: {
     deviceId?: string;
     known: boolean;
@@ -294,6 +340,7 @@ export interface AuthResponseUser {
   email: string;
   username: string;
   avatarUrl?: string;
+  role: AppRole;
 }
 
 export interface AuthResponseBody {

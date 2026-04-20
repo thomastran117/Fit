@@ -1,20 +1,18 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { requireMinimumRole } from "@/features/auth/authorization";
+import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError } from "@/configuration/validation/request";
-import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type { ListMyRentingsInput, ListRentingsQuery } from "@/features/rentings/rentings.model";
 import { listRentingsQuerySchema } from "@/features/rentings/rentings.model";
 import type { RentingsService } from "@/features/rentings/rentings.service";
-import type { TokenService } from "@/features/auth/token/token.service";
 
 export class RentingsController {
-  constructor(
-    private readonly rentingsService: RentingsService,
-    private readonly tokenService: TokenService,
-  ) {}
+  constructor(private readonly rentingsService: RentingsService) {}
 
   convertBookingRequest = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.rentingsService.convertApprovedBookingRequest({
       bookingRequestId: this.requireBookingRequestId(context),
       ownerId: auth.sub,
@@ -101,18 +99,6 @@ export class RentingsController {
   }
 
   private async requireAuth(context: Context<AppBindings>) {
-    const authorization = context.req.header("authorization");
-
-    if (!authorization) {
-      throw new UnauthorizedError("Authorization header is required.");
-    }
-
-    const [scheme, token] = authorization.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
-    }
-
-    return this.tokenService.verifyAccessToken(token);
+    return requireJwtAuth(context);
   }
 }

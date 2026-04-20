@@ -1,10 +1,11 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { requireMinimumRole } from "@/features/auth/authorization";
+import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import {
   RequestValidationError,
   parseRequestBody,
 } from "@/configuration/validation/request";
-import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type {
   CreateBookingRequestInput,
   DecideBookingRequestInput,
@@ -20,13 +21,9 @@ import {
   updateBookingRequestSchema,
 } from "@/features/bookings/bookings.model";
 import type { BookingsService } from "@/features/bookings/bookings.service";
-import type { TokenService } from "@/features/auth/token/token.service";
 
 export class BookingsController {
-  constructor(
-    private readonly bookingsService: BookingsService,
-    private readonly tokenService: TokenService,
-  ) {}
+  constructor(private readonly bookingsService: BookingsService) {}
 
   createForPosting = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
@@ -47,6 +44,7 @@ export class BookingsController {
 
   listForOwnerPosting = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const result = await this.bookingsService.listForOwnerPosting(
       this.toListOwnerPostingInput(auth.sub, this.requirePostingId(context), this.parseListQuery(context)),
     );
@@ -73,6 +71,7 @@ export class BookingsController {
 
   approve = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const body = await parseRequestBody(context, decideBookingRequestSchema);
     const result = await this.bookingsService.approve(
       this.toDecisionInput(this.requireBookingRequestId(context), auth.sub, body),
@@ -82,6 +81,7 @@ export class BookingsController {
 
   decline = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
     const body = await parseRequestBody(context, decideBookingRequestSchema);
     const result = await this.bookingsService.decline(
       this.toDecisionInput(this.requireBookingRequestId(context), auth.sub, body),
@@ -214,19 +214,7 @@ export class BookingsController {
   }
 
   private async requireAuth(context: Context<AppBindings>) {
-    const authorization = context.req.header("authorization");
-
-    if (!authorization) {
-      throw new UnauthorizedError("Authorization header is required.");
-    }
-
-    const [scheme, token] = authorization.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new UnauthorizedError("Authorization header must use the Bearer scheme.");
-    }
-
-    return this.tokenService.verifyAccessToken(token);
+    return requireJwtAuth(context);
   }
 
   private toValidationError(error: unknown, message: string): RequestValidationError {

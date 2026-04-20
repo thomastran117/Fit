@@ -376,7 +376,7 @@ export class AuthService {
     const deviceId = claims.deviceId ?? input.client.device.id;
     const deviceStatus = await this.deviceService.registerKnownDevice(user, input.client, deviceId);
 
-    return this.issueTokensForUser(user, deviceStatus, deviceId);
+    return this.issueTokensForUser(user, deviceStatus, deviceId, Boolean(claims.rememberMe));
   }
 
   async logout(context: AuthRequestContext): Promise<{
@@ -488,6 +488,7 @@ export class AuthService {
     user: AuthUserRecord,
     deviceStatus: { deviceId?: string; known: boolean; knownByIp: boolean },
     deviceId?: string,
+    rememberMe = false,
   ): Promise<AuthSessionResult> {
     const accessToken = this.tokenService.createAccessToken({
       sub: user.id,
@@ -497,15 +498,25 @@ export class AuthService {
       tokenVersion: user.tokenVersion,
     });
 
-    const refreshToken = await this.tokenService.createRefreshToken({
-      sub: user.id,
-      deviceId,
-      tokenVersion: user.tokenVersion,
-    });
+    const refreshTokenExpiresInSeconds = this.tokenService.getRefreshTokenExpiresInSeconds(
+      rememberMe,
+    );
+    const refreshToken = await this.tokenService.createRefreshToken(
+      {
+        sub: user.id,
+        deviceId,
+        rememberMe,
+        tokenVersion: user.tokenVersion,
+      },
+      {
+        expiresInSeconds: refreshTokenExpiresInSeconds,
+      },
+    );
 
     return {
       accessToken,
       refreshToken,
+      refreshTokenExpiresInSeconds,
       device: deviceStatus,
       user: this.toUserProfile(user),
     };
@@ -617,7 +628,7 @@ export class AuthService {
 
   private async authenticateVerifiedUser(
     user: AuthUserRecord,
-    input: { deviceId?: string; client: ClientRequestContext },
+    input: { deviceId?: string; client: ClientRequestContext; rememberMe?: boolean },
   ): Promise<AuthSessionResult> {
     const deviceStatus = await this.deviceService.evaluateSuccessfulAuthentication(
       user,
@@ -625,7 +636,7 @@ export class AuthService {
       input.deviceId,
     );
 
-    return this.issueTokensForUser(user, deviceStatus, input.deviceId);
+    return this.issueTokensForUser(user, deviceStatus, input.deviceId, Boolean(input.rememberMe));
   }
 
   private getLocalLoginAttemptKey(email: string): string {
