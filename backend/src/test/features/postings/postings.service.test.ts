@@ -55,6 +55,10 @@ function createService(repository: FakePostingsRepository): PostingsService {
 function createValidInput(): UpsertPostingInput {
   return {
     ownerId: "owner-1",
+    variant: {
+      family: "place",
+      subtype: "entire_place",
+    },
     name: "Sunny loft near transit",
     description: "Bright loft with large windows, private balcony, and storage locker.",
     pricing: {
@@ -102,6 +106,7 @@ function buildPostingRecord(input: UpsertPostingInput): PostingRecord {
     id: "posting-1",
     ownerId: input.ownerId,
     status: "draft",
+    variant: input.variant,
     name: input.name,
     description: input.description,
     pricing: input.pricing,
@@ -203,5 +208,55 @@ describe("PostingsService", () => {
 
     expect(repository.createCalls).toBe(1);
     expect(created.tags).toEqual(["loft", "transit"]);
+  });
+
+  it("rejects subtypes that do not belong to the selected family", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.variant = {
+      family: "place",
+      subtype: "car",
+    };
+
+    const error = await service.createDraft(input).catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    const details = getValidationDetails(error);
+    expect(details[0]?.path).toBe("variant.subtype");
+    expect(repository.createCalls).toBe(0);
+  });
+
+  it("rejects invalid searchable attribute types for the selected variant", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.attributes.guest_capacity = "four";
+
+    const error = await service.createDraft(input).catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    const details = getValidationDetails(error);
+    expect(details[0]?.path).toBe("attributes.guest_capacity");
+    expect(repository.createCalls).toBe(0);
+  });
+
+  it("keeps unknown attributes while normalizing searchable variant attributes", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+    const input = createValidInput();
+    input.attributes = {
+      guest_capacity: 4,
+      amenities: [" WiFi ", "WiFi", " Desk "],
+      ownerNote: "  Bring ID  ",
+    };
+
+    const created = await service.createDraft(input);
+
+    expect(created.attributes).toEqual({
+      guest_capacity: 4,
+      amenities: ["WiFi", "Desk"],
+      ownerNote: "Bring ID",
+    });
   });
 });

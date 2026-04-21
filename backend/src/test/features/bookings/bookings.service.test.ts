@@ -12,6 +12,10 @@ function createPostingRecord(): PostingRecord {
     id: "posting-1",
     ownerId: "owner-1",
     status: "published",
+    variant: {
+      family: "place",
+      subtype: "entire_place",
+    },
     name: "City loft",
     description: "A bright loft.",
     pricing: {
@@ -97,6 +101,7 @@ function createService(options?: {
 
   const postingsRepository = {
     findById: jest.fn(async () => posting),
+    enqueueSearchSync: jest.fn(async () => undefined),
   } as unknown as PostingsRepository;
 
   const analyticsRepository = {
@@ -125,12 +130,16 @@ function createService(options?: {
     analyticsRepository: analyticsRepository as unknown as {
       enqueueBookingRequestedEvent: jest.Mock;
     },
+    postingsRepository: postingsRepository as unknown as {
+      findById: jest.Mock;
+      enqueueSearchSync: jest.Mock;
+    },
   };
 }
 
 describe("BookingsService", () => {
   it("allows overlapping booking requests before payment when the posting is otherwise available", async () => {
-    const { service, bookingsRepository, analyticsRepository } = createService();
+    const { service, bookingsRepository, analyticsRepository, postingsRepository } = createService();
 
     const result = await service.create({
       postingId: "posting-1",
@@ -151,6 +160,7 @@ describe("BookingsService", () => {
     });
     expect(bookingsRepository.create).toHaveBeenCalledTimes(1);
     expect(analyticsRepository.enqueueBookingRequestedEvent).toHaveBeenCalledTimes(1);
+    expect(postingsRepository.enqueueSearchSync).toHaveBeenCalledWith("posting-1");
     expect(result.id).toBe("booking-1");
   });
 

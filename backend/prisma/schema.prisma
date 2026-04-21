@@ -77,6 +77,8 @@ model Posting {
   id                String                     @id @db.VarChar(36)
   ownerId           String                     @map("owner_id") @db.VarChar(36)
   status            PostingStatus
+  family            PostingFamily
+  subtype           String                     @db.VarChar(50)
   name              String                     @db.VarChar(150)
   description       String                     @db.Text
   pricingCurrency   String                     @map("pricing_currency") @db.VarChar(3)
@@ -111,6 +113,7 @@ model Posting {
 
   @@index([ownerId, status])
   @@index([status, publishedAt])
+  @@index([status, family, subtype, publishedAt])
   @@index([country, region, city])
   @@map("postings")
 }
@@ -358,20 +361,54 @@ model PaymentLedgerEntry {
 
 model PostingSearchOutbox {
   id           String                     @id @db.VarChar(36)
-  postingId    String                     @map("posting_id") @db.VarChar(36)
+  postingId    String?                    @map("posting_id") @db.VarChar(36)
+  reindexRunId String?                    @map("reindex_run_id") @db.VarChar(36)
   operation    PostingSearchOutboxOperation
+  dedupeKey    String                     @map("dedupe_key") @db.VarChar(255)
+  targetIndexName String?                 @map("target_index_name") @db.VarChar(191)
   attempts     Int                        @default(0)
+  publishAttempts Int                     @default(0) @map("publish_attempts")
   availableAt  DateTime                   @default(now()) @map("available_at") @db.DateTime(6)
   processingAt DateTime?                  @map("processing_at") @db.DateTime(6)
   processedAt  DateTime?                  @map("processed_at") @db.DateTime(6)
+  indexedAt    DateTime?                  @map("indexed_at") @db.DateTime(6)
+  deadLetteredAt DateTime?                @map("dead_lettered_at") @db.DateTime(6)
+  brokerMessageId String?                 @map("broker_message_id") @db.VarChar(255)
   lastError    String?                    @map("last_error") @db.VarChar(2048)
   createdAt    DateTime                   @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt    DateTime                   @updatedAt @map("updated_at") @db.DateTime(6)
-  posting      Posting                    @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  posting      Posting?                   @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  reindexRun   SearchReindexRun?          @relation(fields: [reindexRunId], references: [id], onDelete: SetNull)
 
-  @@index([availableAt, processedAt, processingAt])
+  @@index([availableAt, processedAt, deadLetteredAt, processingAt])
   @@index([postingId, operation])
+  @@index([reindexRunId, indexedAt, deadLetteredAt])
+  @@index([targetIndexName, indexedAt, deadLetteredAt])
   @@map("posting_search_outbox")
+}
+
+model SearchReindexRun {
+  id               String              @id @db.VarChar(36)
+  status           SearchReindexStatus
+  targetIndexName  String              @map("target_index_name") @db.VarChar(191)
+  retainedIndexName String?            @map("retained_index_name") @db.VarChar(191)
+  sourceSnapshotAt DateTime            @map("source_snapshot_at") @db.DateTime(6)
+  barrierOutboxId  String?             @unique @map("barrier_outbox_id") @db.VarChar(36)
+  totalPostings    Int                 @default(0) @map("total_postings")
+  indexedPostings  Int                 @default(0) @map("indexed_postings")
+  failedPostings   Int                 @default(0) @map("failed_postings")
+  startedAt        DateTime?           @map("started_at") @db.DateTime(6)
+  completedAt      DateTime?           @map("completed_at") @db.DateTime(6)
+  failedAt         DateTime?           @map("failed_at") @db.DateTime(6)
+  processingAt     DateTime?           @map("processing_at") @db.DateTime(6)
+  lastError        String?             @map("last_error") @db.VarChar(2048)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.DateTime(6)
+  outboxEntries    PostingSearchOutbox[]
+
+  @@index([status, createdAt])
+  @@index([processingAt, status])
+  @@map("search_reindex_runs")
 }
 
 model PostingViewEvent {
@@ -497,9 +534,24 @@ enum PostingAvailabilityStatus {
   unavailable
 }
 
+enum PostingFamily {
+  place
+  equipment
+  vehicle
+}
+
 enum PostingSearchOutboxOperation {
   upsert
   delete
+  barrier
+}
+
+enum SearchReindexStatus {
+  pending
+  running
+  waiting_for_catchup
+  completed
+  failed
 }
 
 enum PostingAnalyticsEventType {

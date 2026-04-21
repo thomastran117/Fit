@@ -3,6 +3,7 @@ import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import { CONVERSION_RESERVATION_MINUTES } from "@/features/bookings/bookings.model";
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { ConvertBookingRequestInput, ListMyRentingsInput, ListRentingsResult, RentingRecord } from "@/features/rentings/rentings.model";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 
@@ -11,6 +12,7 @@ export class RentingsService {
     private readonly rentingsRepository: RentingsRepository,
     private readonly bookingsRepository: BookingsRepository,
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
+    private readonly postingsRepository: PostingsRepository,
   ) {}
 
   async convertApprovedBookingRequest(input: ConvertBookingRequestInput): Promise<RentingRecord> {
@@ -40,6 +42,7 @@ export class RentingsService {
         occurredAt: renting.confirmedAt,
         estimatedTotal: renting.estimatedTotal,
       });
+      await this.postingsRepository.enqueueSearchSync(renting.postingId);
 
       return renting;
     } catch (error) {

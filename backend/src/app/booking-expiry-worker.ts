@@ -40,6 +40,7 @@ async function bootstrap(): Promise<void> {
 
     try {
       const repository = scope.resolve(containerTokens.bookingsRepository);
+      const postingsRepository = scope.resolve(containerTokens.postingsRepository);
       const jobs = await repository.listExpiredCandidates(batchSize);
 
       if (jobs.length === 0) {
@@ -49,10 +50,15 @@ async function bootstrap(): Promise<void> {
 
       for (const job of jobs) {
         try {
-          await repository.expire(job.id);
+          const expired = await repository.expire(job.id);
+
+          if (expired) {
+            await postingsRepository.enqueueSearchSync(job.postingId);
+          }
         } catch (error) {
           console.error("Failed to expire booking request hold", {
             bookingRequestId: job.id,
+            postingId: job.postingId,
             status: job.status,
             error,
           });

@@ -35,6 +35,9 @@ import { PostingsService } from "@/features/postings/postings.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
+import { SearchController } from "@/features/search/search.controller";
+import { SearchQueueService } from "@/features/search/search.queue.service";
+import { SearchService } from "@/features/search/search.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import type { RootServiceContainer } from "@/configuration/container/core";
 import { containerTokens } from "@/configuration/container/tokens";
@@ -285,12 +288,14 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.paymentsRepository,
       containerTokens.paymentProvider,
       containerTokens.postingsAnalyticsRepository,
+      containerTokens.postingsRepository,
     ],
     resolve: ({ resolve }) =>
       new PaymentsService(
         resolve(containerTokens.paymentsRepository),
         resolve(containerTokens.paymentProvider),
         resolve(containerTokens.postingsAnalyticsRepository),
+        resolve(containerTokens.postingsRepository),
       ),
   });
   container.register({
@@ -306,12 +311,14 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.rentingsRepository,
       containerTokens.bookingsRepository,
       containerTokens.postingsAnalyticsRepository,
+      containerTokens.postingsRepository,
     ],
     resolve: ({ resolve }) =>
       new RentingsService(
         resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.bookingsRepository),
         resolve(containerTokens.postingsAnalyticsRepository),
+        resolve(containerTokens.postingsRepository),
       ),
   });
   container.register({
@@ -345,6 +352,33 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     dependencies: [containerTokens.postingsRepository],
     resolve: ({ resolve }) =>
       new PostingsSearchService(resolve(containerTokens.postingsRepository)),
+  });
+  container.register({
+    token: containerTokens.searchQueueService,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new SearchQueueService(),
+  });
+  container.register({
+    token: containerTokens.searchService,
+    lifetime: "scoped",
+    dependencies: [
+      containerTokens.postingsRepository,
+      containerTokens.postingsSearchService,
+      containerTokens.searchQueueService,
+    ],
+    resolve: ({ resolve }) =>
+      new SearchService(
+        resolve(containerTokens.postingsRepository),
+        resolve(containerTokens.postingsSearchService),
+        resolve(containerTokens.searchQueueService),
+      ),
+  });
+  container.register({
+    token: containerTokens.searchController,
+    lifetime: "scoped",
+    dependencies: [containerTokens.searchService],
+    resolve: ({ resolve }) => new SearchController(resolve(containerTokens.searchService)),
   });
   container.register({
     token: containerTokens.contentSanitizationService,

@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  POSTING_FAMILY_VALUES,
+  POSTING_SUBTYPE_VALUES,
+  type PostingAttributeValue as VariantPostingAttributeValue,
+} from "@/features/postings/postings.variants";
 
 export const MAX_POSTING_PHOTOS = 10;
 export const MAX_BATCH_IDS = 50;
@@ -13,6 +18,8 @@ export const postingAvailabilityStatusSchema = z.enum([
   "limited",
   "unavailable",
 ]);
+export const postingFamilySchema = z.enum(POSTING_FAMILY_VALUES);
+export const postingSubtypeSchema = z.enum(POSTING_SUBTYPE_VALUES);
 export const postingSearchSourceSchema = z.enum(["elasticsearch", "database"]);
 export const postingSortSchema = z.enum(["relevance", "newest", "dailyPrice", "nearest"]);
 
@@ -71,6 +78,11 @@ export const postingAttributesSchema = z
   )
   .default({});
 
+export const postingVariantSchema = z.object({
+  family: postingFamilySchema,
+  subtype: postingSubtypeSchema,
+});
+
 export const postingPhotoSchema = z.object({
   blobUrl: z.url("Photo URL must be a valid URL."),
   blobName: trimmedStringSchema.max(1024),
@@ -84,6 +96,7 @@ export const postingAvailabilityBlockSchema = z.object({
 });
 
 export const upsertPostingRequestSchema = z.object({
+  variant: postingVariantSchema,
   name: trimmedStringSchema.max(150),
   description: trimmedStringSchema.max(5000),
   pricing: postingPricingSchema,
@@ -124,6 +137,8 @@ export const publicSearchPostingsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   q: z.string().trim().min(1).max(120).optional(),
+  family: postingFamilySchema.optional(),
+  subtype: postingSubtypeSchema.optional(),
   tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
   availabilityStatus: postingAvailabilityStatusSchema.optional(),
   minDailyPrice: z.coerce.number().finite().nonnegative().optional(),
@@ -138,9 +153,13 @@ export const publicSearchPostingsQuerySchema = z.object({
 
 export type PostingStatus = z.infer<typeof postingStatusSchema>;
 export type PostingAvailabilityStatus = z.infer<typeof postingAvailabilityStatusSchema>;
+export type PostingFamily = z.infer<typeof postingFamilySchema>;
+export type PostingSubtype = z.infer<typeof postingSubtypeSchema>;
 export type PostingSearchSource = z.infer<typeof postingSearchSourceSchema>;
 export type PostingSort = z.infer<typeof postingSortSchema>;
 export type PostingPricing = z.infer<typeof postingPricingSchema>;
+export type PostingVariant = z.infer<typeof postingVariantSchema>;
+export type PostingAttributeValue = VariantPostingAttributeValue;
 export type PostingPhotoInput = z.infer<typeof postingPhotoSchema>;
 export type PostingAvailabilityBlockInput = z.infer<typeof postingAvailabilityBlockSchema>;
 export type UpsertPostingRequestBody = z.infer<typeof upsertPostingRequestSchema>;
@@ -187,13 +206,14 @@ export interface PostingRecord {
   id: string;
   ownerId: string;
   status: PostingStatus;
+  variant: PostingVariant;
   name: string;
   description: string;
   pricing: PostingPricing;
   pricingCurrency: string;
   photos: PostingPhotoRecord[];
   tags: string[];
-  attributes: Record<string, string | number | boolean | string[]>;
+  attributes: Record<string, PostingAttributeValue>;
   availabilityStatus: PostingAvailabilityStatus;
   availabilityNotes?: string;
   maxBookingDurationDays?: number;
@@ -244,12 +264,13 @@ export interface PostingGeoInput {
 
 export interface UpsertPostingInput {
   ownerId: string;
+  variant: PostingVariant;
   name: string;
   description: string;
   pricing: PostingPricing;
   photos: PostingPhotoInput[];
   tags: string[];
-  attributes: Record<string, string | number | boolean | string[]>;
+  attributes: Record<string, PostingAttributeValue>;
   availabilityStatus: PostingAvailabilityStatus;
   availabilityNotes?: string | null;
   maxBookingDurationDays?: number | null;
@@ -282,6 +303,8 @@ export interface SearchPostingsInput {
   page: number;
   pageSize: number;
   query?: string;
+  family?: PostingFamily;
+  subtype?: PostingSubtype;
   tags?: string[];
   availabilityStatus?: PostingAvailabilityStatus;
   minDailyPrice?: number;
@@ -302,11 +325,12 @@ export interface PostingSearchDocument {
   id: string;
   ownerId: string;
   status: PostingStatus;
+  variant: PostingVariant;
   name: string;
   description: string;
   tags: string[];
-  attributes: Record<string, string | number | boolean | string[]>;
   availabilityStatus: PostingAvailabilityStatus;
+  searchableAttributes: Record<string, PostingAttributeValue>;
   pricing: PostingPricing;
   pricingCurrency: string;
   location: {
@@ -321,6 +345,11 @@ export interface PostingSearchDocument {
     blobUrl: string;
     position: number;
   }>;
+  blockedRanges: Array<{
+    startAt: string;
+    endAt: string;
+    source: "availability_block" | "booking_request" | "renting";
+  }>;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -328,12 +357,19 @@ export interface PostingSearchDocument {
 
 export interface PostingSearchOutboxRecord {
   id: string;
-  postingId: string;
-  operation: "upsert" | "delete";
+  postingId?: string;
+  reindexRunId?: string;
+  operation: "upsert" | "delete" | "barrier";
+  dedupeKey: string;
+  targetIndexName?: string;
   attempts: number;
+  publishAttempts: number;
   availableAt: string;
   processingAt?: string;
-  processedAt?: string;
+  publishedAt?: string;
+  indexedAt?: string;
+  deadLetteredAt?: string;
+  brokerMessageId?: string;
   lastError?: string;
   createdAt: string;
   updatedAt: string;

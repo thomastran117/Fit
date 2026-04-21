@@ -14,7 +14,10 @@
     "dev:payment-retry-worker": "tsx watch src/app/payment-retry-worker.ts",
     "dev:payout-release-worker": "tsx watch src/app/payout-release-worker.ts",
     "dev:search-worker": "tsx watch src/app/search-worker.ts",
-    "build": "tsup src/app/server.ts src/app/search-worker.ts src/app/analytics-worker.ts src/app/booking-expiry-worker.ts src/app/payment-retry-worker.ts src/app/payment-repair-worker.ts src/app/payout-release-worker.ts --format esm --platform node --target node22 --out-dir dist --clean",
+    "dev:search-outbox-relay-worker": "tsx watch src/app/search-outbox-relay-worker.ts",
+    "dev:search-indexer-worker": "tsx watch src/app/search-indexer-worker.ts",
+    "dev:search-reindex-worker": "tsx watch src/app/search-reindex-worker.ts",
+    "build": "tsup src/app/server.ts src/app/search-worker.ts src/app/search-outbox-relay-worker.ts src/app/search-indexer-worker.ts src/app/search-reindex-worker.ts src/app/analytics-worker.ts src/app/booking-expiry-worker.ts src/app/payment-retry-worker.ts src/app/payment-repair-worker.ts src/app/payout-release-worker.ts --format esm --platform node --target node22 --out-dir dist --clean",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -30,6 +33,7 @@
     "@azure/storage-blob": "^12.31.0",
     "@hono/node-server": "^1.19.4",
     "@prisma/client": "^6.7.0",
+    "amqplib": "^1.0.3",
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.3",
     "hono": "^4.9.8",
@@ -39,6 +43,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.8",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
     "@types/nodemailer": "^8.0.0",

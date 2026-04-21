@@ -71,6 +71,7 @@ export class BookingsService {
       occurredAt: created.createdAt,
       estimatedTotal: created.estimatedTotal,
     });
+    await this.postingsRepository.enqueueSearchSync(created.postingId);
 
     return created;
   }
@@ -155,6 +156,7 @@ export class BookingsService {
       throw new ResourceNotFoundError("Booking request could not be found.");
     }
 
+    await this.postingsRepository.enqueueSearchSync(updated.postingId);
     return updated;
   }
 
@@ -202,6 +204,7 @@ export class BookingsService {
       throw new ResourceNotFoundError("Booking request could not be found.");
     }
 
+    await this.postingsRepository.enqueueSearchSync(approved.postingId);
     return approved;
   }
 
@@ -219,6 +222,7 @@ export class BookingsService {
       throw new ResourceNotFoundError("Booking request could not be found.");
     }
 
+    await this.postingsRepository.enqueueSearchSync(declined.postingId);
     return declined;
   }
 
