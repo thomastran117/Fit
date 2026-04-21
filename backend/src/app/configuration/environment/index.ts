@@ -22,6 +22,8 @@ type RawEnvironmentValues = {
   CSRF_ALLOWED_ORIGINS?: string;
   DATABASE_URL?: string;
   ELASTICSEARCH_ENABLED?: string;
+  ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS?: string;
+  ELASTICSEARCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD?: string;
   ELASTICSEARCH_PASSWORD?: string;
   ELASTICSEARCH_POSTINGS_INDEX?: string;
   ELASTICSEARCH_TIMEOUT_MS?: string;
@@ -208,6 +210,8 @@ export interface AppEnvironment {
     password?: string;
     postingsIndexName: string;
     timeoutMs: number;
+    circuitBreakerFailureThreshold: number;
+    circuitBreakerCooldownMs: number;
   };
   square: {
     accessToken: string;
@@ -239,6 +243,8 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "CSRF_ALLOWED_ORIGINS",
   "DATABASE_URL",
   "ELASTICSEARCH_ENABLED",
+  "ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS",
+  "ELASTICSEARCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
   "ELASTICSEARCH_PASSWORD",
   "ELASTICSEARCH_POSTINGS_INDEX",
   "ELASTICSEARCH_TIMEOUT_MS",
@@ -828,6 +834,26 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
         integer: true,
         min: 1,
       }),
+      circuitBreakerFailureThreshold: parseNumber(
+        raw,
+        "ELASTICSEARCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
+        3,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      circuitBreakerCooldownMs: parseNumber(
+        raw,
+        "ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS",
+        30_000,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
     },
     square: {
       accessToken: squareAccessToken,

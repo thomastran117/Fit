@@ -1,6 +1,7 @@
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";
+import { ElasticsearchUnavailableError } from "@/configuration/resources/elasticsearch";
 
 function createDocument(
   overrides: Partial<PostingSearchDocument> = {},
@@ -208,5 +209,46 @@ describe("PostingsSearchService", () => {
         },
       ]),
     );
+  });
+
+  it("falls back to database search when Elasticsearch is unavailable", async () => {
+    const batchFindPublic = jest.fn(async () => ({
+      postings: [],
+      missingIds: ["posting-1"],
+    }));
+    const searchPublicFallback = jest.fn(async () => ({
+      ids: ["posting-1"],
+      total: 1,
+    }));
+    const repository = {
+      batchFindPublic,
+      searchPublicFallback,
+    } as unknown as PostingsRepository;
+    const requestJson = jest.fn(async () => {
+      throw new ElasticsearchUnavailableError("Elasticsearch is unavailable.");
+    });
+    const service = new PostingsSearchService(repository, {
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    const result = await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      query: "loft",
+      sort: "relevance",
+    });
+
+    expect(result.source).toBe("database");
+    expect(searchPublicFallback).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 10,
+      query: "loft",
+      sort: "relevance",
+    });
+    expect(batchFindPublic).toHaveBeenCalledWith({
+      ids: ["posting-1"],
+    });
   });
 });

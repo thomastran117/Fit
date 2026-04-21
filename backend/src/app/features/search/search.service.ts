@@ -76,6 +76,10 @@ export class SearchService {
         readTargets,
         writeTargets,
       },
+      elasticsearch: {
+        enabled: this.postingsSearchService.isElasticsearchEnabled(),
+        circuitBreaker: this.postingsSearchService.getCircuitBreakerState(),
+      },
       currentReindexRun: currentReindexRun ?? undefined,
       pendingOutboxCount,
       queueCounts,

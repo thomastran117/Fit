@@ -1,6 +1,8 @@
 import {
+  ElasticsearchCircuitOpenError,
   ElasticsearchUnavailableError,
   getElasticsearchClient,
+  type ElasticsearchCircuitBreakerState,
   type ElasticsearchClient,
 } from "@/configuration/resources/elasticsearch";
 import type {
@@ -191,6 +193,10 @@ export class PostingsSearchService {
     return this.elasticsearch.isEnabled();
   }
 
+  getCircuitBreakerState(): ElasticsearchCircuitBreakerState {
+    return this.elasticsearch.getCircuitBreakerState();
+  }
+
   getBaseIndexName(): string {
     return this.elasticsearch.getPostingsIndexName();
   }
@@ -208,7 +214,11 @@ export class PostingsSearchService {
       try {
         return await this.searchIdsInElasticsearch(input);
       } catch (error) {
-        console.warn("Postings search falling back to database", error);
+        if (error instanceof ElasticsearchCircuitOpenError) {
+          console.info("Postings search using database fallback because Elasticsearch circuit is open.");
+        } else {
+          console.warn("Postings search falling back to database", error);
+        }
       }
     }
 

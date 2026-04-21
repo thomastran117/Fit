@@ -51,6 +51,16 @@ export interface SearchStatusResult {
     readTargets: string[];
     writeTargets: string[];
   };
+  elasticsearch: {
+    enabled: boolean;
+    circuitBreaker: {
+      state: "closed" | "open" | "half_open";
+      consecutiveFailures: number;
+      failureThreshold: number;
+      cooldownMs: number;
+      openedUntil?: string;
+    };
+  };
   currentReindexRun?: SearchReindexRunRecord;
   pendingOutboxCount: number;
   queueCounts: {

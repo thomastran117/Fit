@@ -9,6 +9,16 @@ export interface ElasticsearchConfig {
   password?: string;
   postingsIndexName: string;
   timeoutMs: number;
+  circuitBreakerFailureThreshold: number;
+  circuitBreakerCooldownMs: number;
+}
+
+export interface ElasticsearchCircuitBreakerState {
+  state: "closed" | "open" | "half_open";
+  consecutiveFailures: number;
+  failureThreshold: number;
+  cooldownMs: number;
+  openedUntil?: string;
 }
 
 export class ElasticsearchUnavailableError extends Error {
@@ -18,11 +28,41 @@ export class ElasticsearchUnavailableError extends Error {
   }
 }
 
+export class ElasticsearchCircuitOpenError extends ElasticsearchUnavailableError {
+  constructor(openedUntil: Date) {
+    super(`Elasticsearch circuit breaker is open until ${openedUntil.toISOString()}.`);
+    this.name = "ElasticsearchCircuitOpenError";
+  }
+}
+
 export class ElasticsearchClient {
+  private consecutiveFailures = 0;
+  private openedUntil: Date | null = null;
+
   constructor(private readonly config: ElasticsearchConfig) {}
 
   isEnabled(): boolean {
     return Boolean(this.config.enabled && this.config.url);
+  }
+
+  isCircuitOpen(): boolean {
+    return Boolean(this.openedUntil && this.openedUntil.getTime() > Date.now());
+  }
+
+  getCircuitBreakerState(): ElasticsearchCircuitBreakerState {
+    const isOpen = this.isCircuitOpen();
+    const isHalfOpen =
+      Boolean(this.openedUntil) &&
+      !isOpen &&
+      this.consecutiveFailures >= this.config.circuitBreakerFailureThreshold;
+
+    return {
+      state: isOpen ? "open" : isHalfOpen ? "half_open" : "closed",
+      consecutiveFailures: this.consecutiveFailures,
+      failureThreshold: this.config.circuitBreakerFailureThreshold,
+      cooldownMs: this.config.circuitBreakerCooldownMs,
+      ...(this.openedUntil ? { openedUntil: this.openedUntil.toISOString() } : {}),
+    };
   }
 
   getPostingsIndexName(): string {
@@ -38,6 +78,11 @@ export class ElasticsearchClient {
     } = {},
   ): Promise<TResponse> {
     const config = this.requireConfig();
+
+    if (this.isCircuitOpen() && this.openedUntil) {
+      throw new ElasticsearchCircuitOpenError(this.openedUntil);
+    }
+
     const headers = new Headers(init.headers);
     headers.set("content-type", options.contentType ?? "application/json");
 
@@ -61,6 +106,7 @@ export class ElasticsearchClient {
       });
 
       if (options.allowNotFound && response.status === 404) {
+        this.recordSuccess();
         return {} as TResponse;
       }
 
@@ -72,20 +118,38 @@ export class ElasticsearchClient {
       }
 
       if (response.status === 204) {
+        this.recordSuccess();
         return {} as TResponse;
       }
 
-      return (await response.json()) as TResponse;
+      const json = (await response.json()) as TResponse;
+      this.recordSuccess();
+      return json;
     } catch (error) {
-      if (error instanceof ElasticsearchUnavailableError) {
-        throw error;
-      }
+      const wrappedError =
+        error instanceof ElasticsearchUnavailableError
+          ? error
+          : new ElasticsearchUnavailableError(
+              error instanceof Error ? error.message : "Elasticsearch request failed.",
+            );
 
-      throw new ElasticsearchUnavailableError(
-        error instanceof Error ? error.message : "Elasticsearch request failed.",
-      );
+      this.recordFailure();
+      throw wrappedError;
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  private recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    this.openedUntil = null;
+  }
+
+  private recordFailure(): void {
+    this.consecutiveFailures += 1;
+
+    if (this.consecutiveFailures >= this.config.circuitBreakerFailureThreshold) {
+      this.openedUntil = new Date(Date.now() + this.config.circuitBreakerCooldownMs);
     }
   }
 
@@ -135,6 +199,11 @@ function createElasticsearchClient(): ElasticsearchClient {
     password: getOptionalEnvironmentVariable("ELASTICSEARCH_PASSWORD"),
     postingsIndexName: getOptionalEnvironmentVariable("ELASTICSEARCH_POSTINGS_INDEX") ?? "postings",
     timeoutMs: readNumber("ELASTICSEARCH_TIMEOUT_MS", 2_000),
+    circuitBreakerFailureThreshold: readNumber(
+      "ELASTICSEARCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
+      3,
+    ),
+    circuitBreakerCooldownMs: readNumber("ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS", 30_000),
   });
 }
 
