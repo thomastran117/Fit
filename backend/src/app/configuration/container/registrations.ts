@@ -16,6 +16,8 @@ import { BookingsController } from "@/features/bookings/bookings.controller";
 import { BookingsRepository } from "@/features/bookings/bookings.repository";
 import { BookingsService } from "@/features/bookings/bookings.service";
 import { CacheService } from "@/features/cache/cache.service";
+import { EmailDeliveryService } from "@/features/email/email.delivery.service";
+import { EmailQueueService } from "@/features/email/email.queue.service";
 import { EmailService } from "@/features/email/email.service";
 import { PaymentsController } from "@/features/payments/payments.controller";
 import { PaymentsRepository } from "@/features/payments/payments.repository";
@@ -50,10 +52,22 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     resolve: () => new CacheService(),
   });
   container.register({
-    token: containerTokens.emailService,
+    token: containerTokens.emailQueueService,
     lifetime: "singleton",
     dependencies: [],
-    resolve: () => new EmailService(),
+    resolve: () => new EmailQueueService(),
+  });
+  container.register({
+    token: containerTokens.emailDeliveryService,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new EmailDeliveryService(),
+  });
+  container.register({
+    token: containerTokens.emailService,
+    lifetime: "singleton",
+    dependencies: [containerTokens.emailQueueService],
+    resolve: ({ resolve }) => new EmailService(resolve(containerTokens.emailQueueService)),
   });
   container.register({
     token: containerTokens.captchaService,

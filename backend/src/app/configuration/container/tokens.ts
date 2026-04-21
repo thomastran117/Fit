@@ -16,6 +16,8 @@ import { BookingsController } from "@/features/bookings/bookings.controller";
 import { BookingsRepository } from "@/features/bookings/bookings.repository";
 import { BookingsService } from "@/features/bookings/bookings.service";
 import { CacheService } from "@/features/cache/cache.service";
+import { EmailDeliveryService } from "@/features/email/email.delivery.service";
+import { EmailQueueService } from "@/features/email/email.queue.service";
 import { EmailService } from "@/features/email/email.service";
 import type { PaymentProviderAdapter } from "@/features/payments/payment-provider";
 import { PaymentsController } from "@/features/payments/payments.controller";
@@ -43,6 +45,8 @@ import { createServiceToken } from "@/configuration/container/core";
 
 export const containerTokens = {
   cacheService: createServiceToken<CacheService>("CacheService"),
+  emailQueueService: createServiceToken<EmailQueueService>("EmailQueueService"),
+  emailDeliveryService: createServiceToken<EmailDeliveryService>("EmailDeliveryService"),
   emailService: createServiceToken<EmailService>("EmailService"),
   captchaService: createServiceToken<CaptchaService>("CaptchaService"),
   otpService: createServiceToken<OtpService>("OtpService"),

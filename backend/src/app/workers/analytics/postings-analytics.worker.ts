@@ -1,71 +1,37 @@
-import { containerTokens, initializeContainer } from "@/configuration/bootstrap/container";
-import { environment, loadEnvironment } from "@/configuration/environment/index";
-import {
-  connectDatabase,
-  disconnectDatabase,
-} from "@/configuration/resources/database";
+import { containerTokens } from "@/configuration/bootstrap/container";
+import { environment } from "@/configuration/environment/index";
 import type {
   ProcessBookingRequestedEventInput,
   ProcessRentingConfirmedEventInput,
   ProcessPostingViewedEventInput,
 } from "@/features/postings/postings.analytics.model";
+import { databaseWorkerResource, disconnectResources } from "@/workers/shared/resources";
+import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-runtime";
 
-async function bootstrap(): Promise<void> {
-  loadEnvironment();
-  await connectDatabase();
-  const container = initializeContainer();
+const workerName = "Postings analytics worker";
+const workerResources = [databaseWorkerResource];
 
-  const { pollIntervalMs, batchSize } = environment.getAnalyticsWorkerConfig();
-
-  console.log("Postings analytics worker started.");
-
-  let isShuttingDown = false;
-
-  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-    if (isShuttingDown) {
-      return;
-    }
-
-    isShuttingDown = true;
-    console.log(`Received ${signal}. Shutting down postings analytics worker...`);
-    await disconnectDatabase();
-    process.exit(0);
-  };
-
-  process.once("SIGINT", () => {
-    void shutdown("SIGINT");
-  });
-
-  process.once("SIGTERM", () => {
-    void shutdown("SIGTERM");
-  });
-
-  while (!isShuttingDown) {
-    const scope = container.createScope();
-
-    try {
+export async function bootstrapPostingsAnalyticsWorker(): Promise<void> {
+  await bootstrapPollingWorker({
+    name: workerName,
+    resources: workerResources,
+    getPollIntervalMs: () => environment.getAnalyticsWorkerConfig().pollIntervalMs,
+    runOnce: async ({ scope }) => {
       const repository = scope.resolve(containerTokens.postingsAnalyticsRepository);
+      const { batchSize } = environment.getAnalyticsWorkerConfig();
       const jobs = await repository.claimOutboxBatch(batchSize);
-
-      if (jobs.length === 0) {
-        await sleep(pollIntervalMs);
-        continue;
-      }
 
       for (const job of jobs) {
         try {
           if (job.eventType === "posting_viewed") {
             const payload = job.payload as Record<string, unknown>;
             const occurredAt = readString(payload.occurredAt, "occurredAt");
-            const eventDate = floorToUtcDay(occurredAt);
-            const eventHour = floorToUtcHour(occurredAt);
-
             const input: ProcessPostingViewedEventInput = {
               postingId: job.postingId,
               ownerId: job.ownerId,
               occurredAt,
-              eventDate,
-              eventHour,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
               viewerHash: readString(payload.viewerHash, "viewerHash"),
               userId: readOptionalString(payload.userId),
               ipAddressHash: readOptionalString(payload.ipAddressHash),
@@ -121,13 +87,10 @@ async function bootstrap(): Promise<void> {
           );
         }
       }
-    } catch (error) {
-      console.error("Postings analytics worker loop failed", error);
-      await sleep(pollIntervalMs);
-    } finally {
-      await scope.dispose();
-    }
-  }
+
+      return jobs.length;
+    },
+  });
 }
 
 function floorToUtcDay(isoTimestamp: string): string {
@@ -158,15 +121,8 @@ function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function sleep(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
-void bootstrap().catch(async (error: unknown) => {
-  console.error("Failed to start postings analytics worker", error);
-  await disconnectDatabase();
-  process.exit(1);
+startWorker({
+  name: workerName,
+  bootstrap: bootstrapPostingsAnalyticsWorker,
+  cleanup: () => disconnectResources(workerResources),
 });
-
