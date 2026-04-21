@@ -29,6 +29,8 @@ type RawEnvironmentValues = {
   ELASTICSEARCH_TIMEOUT_MS?: string;
   ELASTICSEARCH_URL?: string;
   ELASTICSEARCH_USERNAME?: string;
+  EMAIL_WORKER_PREFETCH?: string;
+  EMAIL_MAX_ATTEMPTS?: string;
   EMAIL_FROM?: string;
   EMAIL_FROM_NAME?: string;
   FRONTEND_URL?: string;
@@ -174,6 +176,10 @@ export interface AppEnvironment {
       pollIntervalMs: number;
       batchSize: number;
     };
+    email: {
+      prefetch: number;
+      maxAttempts: number;
+    };
     analytics: {
       pollIntervalMs: number;
       batchSize: number;
@@ -250,6 +256,8 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "ELASTICSEARCH_TIMEOUT_MS",
   "ELASTICSEARCH_URL",
   "ELASTICSEARCH_USERNAME",
+  "EMAIL_WORKER_PREFETCH",
+  "EMAIL_MAX_ATTEMPTS",
   "EMAIL_FROM",
   "EMAIL_FROM_NAME",
   "FRONTEND_URL",
@@ -743,6 +751,16 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           min: 1,
         }),
       },
+      email: {
+        prefetch: parseNumber(raw, "EMAIL_WORKER_PREFETCH", 10, errors, {
+          integer: true,
+          min: 1,
+        }),
+        maxAttempts: parseNumber(raw, "EMAIL_MAX_ATTEMPTS", 8, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
       analytics: {
         pollIntervalMs: parseNumber(
           raw,
@@ -976,6 +994,10 @@ class EnvironmentManager {
 
   getSearchReindexWorkerConfig(): AppEnvironment["workers"]["searchReindex"] {
     return this.get().workers.searchReindex;
+  }
+
+  getEmailWorkerConfig(): AppEnvironment["workers"]["email"] {
+    return this.get().workers.email;
   }
 
   getAnalyticsWorkerConfig(): AppEnvironment["workers"]["analytics"] {

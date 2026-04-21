@@ -50,6 +50,10 @@ x-search-worker-depends-on: &search-worker-depends-on
   rabbitmq:
     condition: service_healthy
 
+x-rabbitmq-worker-depends-on: &rabbitmq-worker-depends-on
+  rabbitmq:
+    condition: service_healthy
+
 services:
   mysql:
     image: mysql:8.4
@@ -161,6 +165,15 @@ services:
     depends_on: *db-worker-depends-on
     environment: *backend-environment
     command: ["node", "dist/workers/bookings/booking-expiry.worker.js"]
+
+  email-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-email-worker
+    restart: unless-stopped
+    depends_on: *rabbitmq-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/email/email-delivery.worker.js"]
 
   payment-retry-worker:
     build: *backend-build
