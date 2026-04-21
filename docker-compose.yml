@@ -1,3 +1,55 @@
+x-backend-build: &backend-build
+  context: ./backend
+  dockerfile: Dockerfile
+
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  DATABASE_URL: mysql://rent:rent@mysql:3306/rent
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  ELASTICSEARCH_ENABLED: "true"
+  ELASTICSEARCH_URL: http://elasticsearch:9200
+  ELASTICSEARCH_POSTINGS_INDEX: postings
+  RABBITMQ_URL: amqp://rabbitmq:5672
+  FRONTEND_URL: http://localhost:3040
+  APP_BASE_URL: http://localhost:3040
+  GMAIL_USER: change-me@example.com
+  GMAIL_APP_PASSWORD: change-me
+  ACCESS_TOKEN_SECRET: change-me-access-token-secret
+  REFRESH_TOKEN_SECRET: change-me-refresh-token-secret
+  SQUARE_ACCESS_TOKEN: change-me-square-access-token
+  SQUARE_LOCATION_ID: change-me-square-location-id
+  SQUARE_WEBHOOK_SIGNATURE_KEY: change-me-square-webhook-signature-key
+  SQUARE_WEBHOOK_NOTIFICATION_URL: http://localhost:8040/payments/webhooks/square
+
+x-api-depends-on: &api-depends-on
+  backend-migrate:
+    condition: service_completed_successfully
+  mysql:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  elasticsearch:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+
+x-db-worker-depends-on: &db-worker-depends-on
+  backend-migrate:
+    condition: service_completed_successfully
+  mysql:
+    condition: service_healthy
+
+x-search-worker-depends-on: &search-worker-depends-on
+  backend-migrate:
+    condition: service_completed_successfully
+  mysql:
+    condition: service_healthy
+  elasticsearch:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+
 services:
   mysql:
     image: mysql:8.4
@@ -68,39 +120,101 @@ services:
       retries: 20
       start_period: 20s
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: rent-backend
-    restart: unless-stopped
+  backend-migrate:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-backend-migrate
+    restart: "no"
     depends_on:
       mysql:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    environment: *backend-environment
+    command: ["npx", "prisma", "migrate", "deploy"]
+
+  backend:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-backend
+    restart: unless-stopped
+    depends_on: *api-depends-on
     environment:
-      NODE_ENV: production
+      <<: *backend-environment
       PORT: 8040
-      DATABASE_URL: mysql://rent:rent@mysql:3306/rent
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      ELASTICSEARCH_ENABLED: "true"
-      ELASTICSEARCH_URL: http://elasticsearch:9200
-      ELASTICSEARCH_POSTINGS_INDEX: postings
-      RABBITMQ_URL: amqp://rabbitmq:5672
-      FRONTEND_URL: http://localhost:3040
-      APP_BASE_URL: http://localhost:3040
-      GMAIL_USER: change-me@example.com
-      GMAIL_APP_PASSWORD: change-me
-      ACCESS_TOKEN_SECRET: change-me-access-token-secret
-      REFRESH_TOKEN_SECRET: change-me-refresh-token-secret
+    command: ["node", "dist/server.js"]
     ports:
       - "8040:8040"
+
+  analytics-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-analytics-worker
+    restart: unless-stopped
+    depends_on: *db-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/analytics/postings-analytics.worker.js"]
+
+  booking-expiry-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-booking-expiry-worker
+    restart: unless-stopped
+    depends_on: *db-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/bookings/booking-expiry.worker.js"]
+
+  payment-retry-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-payment-retry-worker
+    restart: unless-stopped
+    depends_on: *db-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/payments/payment-retry.worker.js"]
+
+  payment-repair-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-payment-repair-worker
+    restart: unless-stopped
+    depends_on: *db-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/payments/payment-repair.worker.js"]
+
+  payout-release-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-payout-release-worker
+    restart: unless-stopped
+    depends_on: *db-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/payments/payout-release.worker.js"]
+
+  search-outbox-relay-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-search-outbox-relay-worker
+    restart: unless-stopped
+    depends_on: *search-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/search/search-outbox-relay.worker.js"]
+
+  search-indexer-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-search-indexer-worker
+    restart: unless-stopped
+    depends_on: *search-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/search/search-indexer.worker.js"]
+
+  search-reindex-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-search-reindex-worker
+    restart: unless-stopped
+    depends_on: *search-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/search/search-reindex.worker.js"]
 
   frontend:
     build:
