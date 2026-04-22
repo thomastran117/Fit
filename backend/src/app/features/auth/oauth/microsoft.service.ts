@@ -95,6 +95,10 @@ function splitName(name?: string): { firstName?: string; lastName?: string } {
   };
 }
 
+function normalizeEmailVerified(value: boolean | string | undefined): boolean {
+  return value === true || value === "true";
+}
+
 class MicrosoftOAuthService {
   constructor(private readonly tokenVerifier: OAuthTokenVerifier) {}
 
@@ -109,15 +113,17 @@ class MicrosoftOAuthService {
       nonce: input.nonce,
     });
 
-    const emailClaim =
-      typeof payload.email === "string"
-        ? payload.email
-        : typeof payload.preferred_username === "string"
-          ? payload.preferred_username
-          : undefined;
+    const emailClaim = typeof payload.email === "string" ? payload.email : undefined;
 
     if (!payload.sub || !emailClaim) {
       throw new UnauthorizedError("Microsoft ID token is missing required claims.");
+    }
+
+    const emailVerified =
+      payload.email_verified === undefined ? true : normalizeEmailVerified(payload.email_verified);
+
+    if (!emailVerified) {
+      throw new UnauthorizedError("Microsoft account email is not verified.");
     }
 
     const tokenNames = splitName(typeof payload.name === "string" ? payload.name : undefined);
@@ -126,7 +132,7 @@ class MicrosoftOAuthService {
       provider: "microsoft",
       providerUserId: payload.sub,
       email: emailClaim.trim().toLowerCase(),
-      emailVerified: true,
+      emailVerified,
       firstName: input.firstName ?? tokenNames.firstName,
       lastName: input.lastName ?? tokenNames.lastName,
     };

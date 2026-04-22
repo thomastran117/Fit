@@ -255,7 +255,7 @@ describe("AuthService", () => {
     });
   });
 
-  it("rejects signup when a verified account already exists for the email", async () => {
+  it("returns a generic pending verification response when a verified account already exists for the email", async () => {
     const service = createService({
       findUserByEmail: async () => createUser(),
     });
@@ -269,7 +269,11 @@ describe("AuthService", () => {
         lastName: "User",
         deviceId: "device-1",
       }),
-    ).rejects.toBeInstanceOf(ConflictError);
+    ).resolves.toEqual({
+      verificationRequired: true,
+      email: "user@example.com",
+      alreadyPending: true,
+    });
   });
 
   it("accepts forgot password requests without sending email for unknown accounts", async () => {
@@ -337,6 +341,7 @@ describe("AuthService", () => {
     const user = createUser();
     let issuedRememberMe: boolean | undefined;
     let issuedRefreshOptions: { expiresInSeconds?: number } | undefined;
+    let revokedRefreshToken: string | undefined;
     const service = createService({
       findUserById: async () => user,
       verifyRefreshToken: async () => ({
@@ -344,6 +349,10 @@ describe("AuthService", () => {
         deviceId: "device-1",
         rememberMe: true,
       }),
+      revokeRefreshToken: async (token) => {
+        revokedRefreshToken = token;
+        return true;
+      },
       createRefreshToken: async (payload, options) => {
         issuedRememberMe = (payload as { rememberMe?: boolean }).rememberMe;
         issuedRefreshOptions = options;
@@ -362,6 +371,7 @@ describe("AuthService", () => {
     expect(session.refreshTokenExpiresInSeconds).toBe(2_592_000);
     expect(issuedRememberMe).toBe(true);
     expect(issuedRefreshOptions?.expiresInSeconds).toBe(2_592_000);
+    expect(revokedRefreshToken).toBe("incoming-refresh-token");
   });
 
   it("rejects change password when the current password is incorrect", async () => {
@@ -609,6 +619,33 @@ describe("AuthService", () => {
     expect(result.user.email).toBe(createdUser.email);
   });
 
+  it("rejects OAuth authentication when the email belongs to an unlinked account", async () => {
+    const existingUser = {
+      ...createUser(),
+      email: "oauth@example.com",
+      passwordHash: await bcrypt.hash("CorrectHorseBatteryStaple1!", 4),
+    };
+    const service = createService({
+      findUserByEmail: async () => existingUser,
+      verifyGoogle: async () => ({
+        email: existingUser.email,
+        provider: "google",
+        providerUserId: "google-user-1",
+        emailVerified: true,
+      }),
+    });
+
+    await expect(
+      service.googleAuthenticate({
+        client: createClient(),
+        nonce: "nonce-1",
+        code: "code-1",
+        codeVerifier: "verifier-1",
+        deviceId: "device-1",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
   it("rejects OAuth authentication when the provider email is not verified", async () => {
     const service = createService({
       verifyGoogle: async () => ({
@@ -630,7 +667,7 @@ describe("AuthService", () => {
     ).rejects.toThrow("OAuth account email must be verified.");
   });
 
-  it("rejects resend verification email when the user is already verified", async () => {
+  it("accepts resend verification email without revealing that the user is already verified", async () => {
     const service = createService({
       findUserByEmail: async () => createUser(),
     });
@@ -639,7 +676,10 @@ describe("AuthService", () => {
       service.resendVerificationEmail({
         email: "user@example.com",
       }),
-    ).rejects.toBeInstanceOf(ConflictError);
+    ).resolves.toEqual({
+      resent: true,
+      email: "user@example.com",
+    });
   });
 
   it("rejects verifyEmail when the account cannot be found", async () => {

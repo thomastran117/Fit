@@ -196,6 +196,14 @@ function createApp(overrides?: {
 }
 
 describe("Auth integration", () => {
+  beforeEach(() => {
+    process.env.TRUST_PROXY_HEADERS = "true";
+  });
+
+  afterEach(() => {
+    delete process.env.TRUST_PROXY_HEADERS;
+  });
+
   it("POST /auth/local/login parses client headers, verifies captcha, and returns a desktop auth session with a refresh cookie", async () => {
     const { app, authService, captchaService } = createApp();
 

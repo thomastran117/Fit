@@ -6,7 +6,7 @@ const tokenConfig = {
   rememberMeRefreshTokenTtlSeconds: 90 * 24 * 60 * 60,
   issuer: undefined,
   audience: undefined,
-  refreshTokenMode: "stateless" as const,
+  refreshTokenMode: "stateful" as const,
   refreshTokenCachePrefix: "auth:refresh",
 };
 
@@ -47,6 +47,6 @@ export function getEnvironment() {
   return environment.get();
 }
 
-export function getOptionalEnvironmentVariable(_name: string) {
-  return undefined;
+export function getOptionalEnvironmentVariable(name: string) {
+  return process.env[name];
 }

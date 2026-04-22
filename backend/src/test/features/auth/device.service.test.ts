@@ -64,6 +64,8 @@ function createKnownDevice(overrides?: Partial<KnownDeviceRecord>): KnownDeviceR
 }
 
 function createService(overrides?: {
+  findKnownDevice?: (userId: string, deviceId: string) => Promise<KnownDeviceRecord | null>;
+  touchKnownDevice?: (userId: string, deviceId: string, ipAddress?: string) => Promise<void>;
   hasKnownIpAddress?: (userId: string, ipAddress: string) => Promise<boolean>;
   touchKnownIpAddress?: (userId: string, ipAddress: string) => Promise<void>;
   registerKnownDevice?: (input: {
@@ -90,6 +92,8 @@ function createService(overrides?: {
   unknownDeviceAlertCooldownInSeconds?: number;
 }) {
   const deviceRepository = {
+    findKnownDevice: jest.fn(overrides?.findKnownDevice ?? (async () => null)),
+    touchKnownDevice: jest.fn(overrides?.touchKnownDevice ?? (async () => {})),
     hasKnownIpAddress: jest.fn(overrides?.hasKnownIpAddress ?? (async () => false)),
     touchKnownIpAddress: jest.fn(overrides?.touchKnownIpAddress ?? (async () => {})),
     registerKnownDevice:
@@ -172,7 +176,32 @@ describe("DeviceService", () => {
     expect(deviceRepository.registerKnownDevice).not.toHaveBeenCalled();
   });
 
-  it("marks authentication as known when the ip address has been seen before", async () => {
+  it("marks authentication as known when the exact device has been seen before", async () => {
+    const { service, deviceRepository, emailService } = createService({
+      findKnownDevice: async () => createKnownDevice(),
+    });
+
+    const result = await service.evaluateSuccessfulAuthentication(
+      createUser(),
+      createClient(),
+      "device-1",
+    );
+
+    expect(result).toEqual({
+      deviceId: "device-1",
+      known: true,
+      knownByIp: true,
+    });
+    expect(deviceRepository.touchKnownDevice).toHaveBeenCalledWith(
+      "user-1",
+      "device-1",
+      "127.0.0.1",
+    );
+    expect(deviceRepository.hasKnownIpAddress).not.toHaveBeenCalled();
+    expect(emailService.sendNewDeviceEmail).not.toHaveBeenCalled();
+  });
+
+  it("keeps authentication unknown when only the ip address has been seen before", async () => {
     const { service, deviceRepository, emailService } = createService({
       hasKnownIpAddress: async () => true,
     });
@@ -185,19 +214,13 @@ describe("DeviceService", () => {
 
     expect(result).toEqual({
       deviceId: "device-2",
-      known: true,
+      known: false,
       knownByIp: true,
     });
+    expect(deviceRepository.findKnownDevice).toHaveBeenCalledWith("user-1", "device-2");
     expect(deviceRepository.hasKnownIpAddress).toHaveBeenCalledWith("user-1", "127.0.0.1");
     expect(deviceRepository.touchKnownIpAddress).toHaveBeenCalledWith("user-1", "127.0.0.1");
-    expect(deviceRepository.registerKnownDevice).toHaveBeenCalledWith({
-      userId: "user-1",
-      deviceId: "device-2",
-      type: "desktop",
-      platform: "macOS",
-      userAgent: "test-agent",
-      ipAddress: "127.0.0.1",
-    });
+    expect(deviceRepository.registerKnownDevice).not.toHaveBeenCalled();
     expect(emailService.sendNewDeviceEmail).not.toHaveBeenCalled();
   });
 
@@ -214,7 +237,7 @@ describe("DeviceService", () => {
 
     expect(result).toEqual({
       deviceId: undefined,
-      known: true,
+      known: false,
       knownByIp: true,
     });
     expect(deviceRepository.touchKnownIpAddress).toHaveBeenCalledWith("user-1", "127.0.0.1");

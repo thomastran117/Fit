@@ -69,6 +69,20 @@ export class DeviceService {
     client: ClientRequestContext,
     deviceId?: string,
   ): Promise<KnownDeviceStatus> {
+    if (deviceId) {
+      const knownDevice = await this.deviceRepository.findKnownDevice(user.id, deviceId);
+
+      if (knownDevice) {
+        await this.deviceRepository.touchKnownDevice(user.id, deviceId, client.ip);
+
+        return {
+          deviceId,
+          known: true,
+          knownByIp: Boolean(client.ip && knownDevice.lastIpAddress === client.ip),
+        };
+      }
+    }
+
     if (!client.ip) {
       return {
         deviceId,
@@ -82,20 +96,9 @@ export class DeviceService {
     if (knownByIp) {
       await this.deviceRepository.touchKnownIpAddress(user.id, client.ip);
 
-      if (deviceId) {
-        await this.deviceRepository.registerKnownDevice({
-          userId: user.id,
-          deviceId,
-          type: client.device.type,
-          platform: client.device.platform,
-          userAgent: client.device.userAgent,
-          ipAddress: client.ip,
-        });
-      }
-
       return {
         deviceId,
-        known: true,
+        known: false,
         knownByIp: true,
       };
     }

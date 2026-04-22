@@ -87,6 +87,7 @@ type RawEnvironmentValues = {
   SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
   TOKEN_AUDIENCE?: string;
   TOKEN_ISSUER?: string;
+  TRUST_PROXY_HEADERS?: string;
 };
 
 type EnvironmentVariableName = keyof RawEnvironmentValues;
@@ -314,6 +315,7 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "SQUARE_WEBHOOK_SIGNATURE_KEY",
   "TOKEN_AUDIENCE",
   "TOKEN_ISSUER",
+  "TRUST_PROXY_HEADERS",
 ];
 
 const DEFAULT_FRONTEND_URL = "http://localhost:3040";
@@ -387,14 +389,14 @@ function parseRefreshTokenMode(
   raw: RawEnvironmentValues,
   errors: string[],
 ): RefreshTokenMode {
-  const value = raw.REFRESH_TOKEN_MODE ?? "stateless";
+  const value = raw.REFRESH_TOKEN_MODE ?? "stateful";
 
   if (value === "stateless" || value === "stateful") {
     return value;
   }
 
   errors.push("REFRESH_TOKEN_MODE must be either 'stateless' or 'stateful'.");
-  return "stateless";
+  return "stateful";
 }
 
 function parseRateLimiterStrategy(
