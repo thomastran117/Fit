@@ -76,7 +76,7 @@ export class AuthService {
     );
     const loginAttemptRecord = await this.getLocalLoginAttemptRecord(input.email);
 
-    if (loginAttemptRecord?.lockedAt) {
+    if (loginAttemptRecord?.lockedAt && (!user || !isPasswordValid)) {
       await this.sendLocalLoginUnlockCode(user);
       throw new LockedError("This sign-in is locked. Use the code we emailed you to unlock it.", {
         email: input.email,
@@ -114,15 +114,11 @@ export class AuthService {
     const existingUser = await this.authRepository.findUserByEmail(input.email);
 
     if (existingUser) {
-      if (!existingUser.emailVerified) {
-        return {
-          verificationRequired: true,
-          email: existingUser.email,
-          alreadyPending: true,
-        };
-      }
-
-      throw new ConflictError("An account with this email already exists.");
+      return {
+        verificationRequired: true,
+        email: input.email,
+        alreadyPending: true,
+      };
     }
 
     const passwordHash = await this.hashPassword(input.password);
@@ -207,21 +203,17 @@ export class AuthService {
   }
 
   async verifyEmail(input: VerifyEmailInput): Promise<AuthSessionResult> {
-    const user = await this.authRepository.findUserByEmail(input.email);
-
-    if (!user) {
-      throw new BadRequestError("Account could not be found for email verification.");
-    }
-
-    if (user.emailVerified) {
-      throw new ConflictError("Email address has already been verified.");
-    }
-
     await this.otpService.verify({
       purpose: "email-verification",
-      subject: user.email,
+      subject: input.email,
       code: input.code,
     });
+
+    const user = await this.authRepository.findUserByEmail(input.email);
+
+    if (!user || user.emailVerified) {
+      throw new BadRequestError("Verification code is invalid or has expired.");
+    }
 
     await this.authRepository.markEmailVerified(user.id);
 
@@ -243,19 +235,13 @@ export class AuthService {
   }> {
     const user = await this.authRepository.findUserByEmail(input.email);
 
-    if (!user) {
-      throw new BadRequestError("Account could not be found for email verification.");
+    if (user && !user.emailVerified) {
+      await this.sendVerificationCode(user);
     }
-
-    if (user.emailVerified) {
-      throw new ConflictError("Email address has already been verified.");
-    }
-
-    await this.sendVerificationCode(user);
 
     return {
       resent: true,
-      email: user.email,
+      email: input.email,
     };
   }
 
@@ -376,6 +362,8 @@ export class AuthService {
     const deviceId = claims.deviceId ?? input.client.device.id;
     const deviceStatus = await this.deviceService.registerKnownDevice(user, input.client, deviceId);
 
+    await this.tokenService.revokeRefreshToken(input.refreshToken);
+
     return this.issueTokensForUser(user, deviceStatus, deviceId, Boolean(claims.rememberMe));
   }
 
@@ -388,7 +376,11 @@ export class AuthService {
     client: ClientRequestContext;
   }> {
     if (context.refreshToken) {
-      await this.tokenService.revokeRefreshToken(context.refreshToken);
+      try {
+        await this.tokenService.revokeRefreshToken(context.refreshToken);
+      } catch {
+        // Logout should still invalidate the authenticated session version.
+      }
     }
 
     await this.authRepository.rotateTokenVersion(context.auth.sub);
@@ -531,7 +523,14 @@ export class AuthService {
     }
 
     const existingUser = await this.authRepository.findUserByEmail(profile.email);
-    const user = existingUser ?? (await this.authRepository.createOAuthUser(profile));
+    const user =
+      existingUser ?? (await this.authRepository.createOAuthUser(profile));
+
+    if (existingUser && !this.isMatchingOAuthAccount(existingUser, profile)) {
+      throw new ConflictError(
+        "An account with this email already exists. Sign in with the original method before linking a social provider.",
+      );
+    }
 
     return this.authenticateVerifiedUser(user, input);
   }
@@ -713,6 +712,13 @@ export class AuthService {
 
   private isLocalPasswordAccount(user: AuthUserRecord): boolean {
     return !user.passwordHash.startsWith("oauth:");
+  }
+
+  private isMatchingOAuthAccount(
+    user: AuthUserRecord,
+    profile: VerifiedOAuthProfile,
+  ): boolean {
+    return user.passwordHash === `oauth:${profile.provider}:${profile.providerUserId}`;
   }
 
   private requireEligibleLocalPasswordUser(

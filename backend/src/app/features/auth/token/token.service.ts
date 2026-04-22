@@ -184,13 +184,13 @@ export class TokenService {
     const [version, body, signature] = token.split(".");
 
     if (!version || !body || !signature || version !== REFRESH_TOKEN_VERSION) {
-      throw new Error("Invalid refresh token format.");
+      throw new UnauthorizedError("Invalid refresh token format.");
     }
 
     const expectedSignature = signValue(body, this.getRefreshTokenSecret());
 
     if (!safeEquals(signature, expectedSignature)) {
-      throw new Error("Invalid refresh token signature.");
+      throw new UnauthorizedError("Invalid refresh token signature.");
     }
 
     const claims = JSON.parse(fromBase64Url(body)) as RefreshTokenClaims;
@@ -222,7 +222,7 @@ export class TokenService {
     const [version, body, signature] = token.split(".");
 
     if (!version || !body || !signature || version !== REFRESH_TOKEN_VERSION) {
-      throw new Error("Invalid refresh token format.");
+      throw new UnauthorizedError("Invalid refresh token format.");
     }
 
     const claims = JSON.parse(fromBase64Url(body)) as RefreshTokenClaims;
@@ -233,17 +233,17 @@ export class TokenService {
     );
 
     if (!session) {
-      throw new Error("Refresh token session not found.");
+      throw new UnauthorizedError("Refresh token session not found.");
     }
 
     const expectedSignature = signValue(body, this.getRefreshTokenSecret());
 
     if (!safeEquals(signature, expectedSignature) || !safeEquals(signature, session.signature)) {
-      throw new Error("Invalid refresh token signature.");
+      throw new UnauthorizedError("Invalid refresh token signature.");
     }
 
     if (session.sub !== claims.sub || session.deviceId !== claims.deviceId) {
-      throw new Error("Refresh token session mismatch.");
+      throw new UnauthorizedError("Refresh token session mismatch.");
     }
 
     return claims;
@@ -272,7 +272,7 @@ export class TokenService {
     const [encodedHeader, encodedPayload, signature] = token.split(".");
 
     if (!encodedHeader || !encodedPayload || !signature) {
-      throw new Error("Invalid access token format.");
+      throw new UnauthorizedError("Invalid access token format.");
     }
 
     const expectedSignature = signValue(
@@ -281,28 +281,28 @@ export class TokenService {
     );
 
     if (!safeEquals(signature, expectedSignature)) {
-      throw new Error("Invalid access token signature.");
+      throw new UnauthorizedError("Invalid access token signature.");
     }
 
     const header = JSON.parse(fromBase64Url(encodedHeader)) as { alg?: string; typ?: string };
 
     if (header.alg !== ACCESS_TOKEN_ALGORITHM || header.typ !== "JWT") {
-      throw new Error("Invalid access token header.");
+      throw new UnauthorizedError("Invalid access token header.");
     }
 
     const claims = JSON.parse(fromBase64Url(encodedPayload)) as JwtClaims;
     const now = Math.floor(Date.now() / 1000);
 
     if (claims.exp <= now) {
-      throw new Error("Access token has expired.");
+      throw new UnauthorizedError("Access token has expired.");
     }
 
     if (this.getIssuer() && claims.iss !== this.getIssuer()) {
-      throw new Error("Access token issuer is invalid.");
+      throw new UnauthorizedError("Access token issuer is invalid.");
     }
 
     if (this.getAudience() && claims.aud !== this.getAudience()) {
-      throw new Error("Access token audience is invalid.");
+      throw new UnauthorizedError("Access token audience is invalid.");
     }
 
     return claims;
@@ -326,7 +326,7 @@ export class TokenService {
     const [version, body, signature] = token.split(".");
 
     if (!version || !body || !signature || version !== REFRESH_TOKEN_VERSION) {
-      throw new Error("Invalid refresh token format.");
+      throw new UnauthorizedError("Invalid refresh token format.");
     }
 
     return JSON.parse(fromBase64Url(body)) as RefreshTokenClaims;
@@ -336,7 +336,7 @@ export class TokenService {
     const now = Math.floor(Date.now() / 1000);
 
     if (claims.exp <= now) {
-      throw new Error("Refresh token has expired.");
+      throw new UnauthorizedError("Refresh token has expired.");
     }
   }
 

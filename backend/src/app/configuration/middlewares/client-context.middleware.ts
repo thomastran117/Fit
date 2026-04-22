@@ -1,7 +1,14 @@
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { createMiddleware } from "hono/factory";
 import type { AppBindings, ClientDeviceContext } from "@/configuration/http/bindings";
+import { getOptionalEnvironmentVariable } from "@/configuration/environment";
 
-function readIpAddress(headers: Headers): string | undefined {
+function isTrustedProxyHeaderEnabled(): boolean {
+  const value = getOptionalEnvironmentVariable("TRUST_PROXY_HEADERS");
+  return value === "1" || value?.toLowerCase() === "true";
+}
+
+function readProxyIpAddress(headers: Headers): string | undefined {
   const forwardedFor = headers.get("x-forwarded-for");
 
   if (forwardedFor) {
@@ -29,6 +36,22 @@ function readIpAddress(headers: Headers): string | undefined {
   }
 
   return undefined;
+}
+
+function readIpAddress(headers: Headers, remoteAddress?: string): string | undefined {
+  if (isTrustedProxyHeaderEnabled()) {
+    return readProxyIpAddress(headers) ?? remoteAddress;
+  }
+
+  return remoteAddress;
+}
+
+function readRemoteAddress(context: Parameters<typeof clientContextMiddleware>[0]): string | undefined {
+  try {
+    return getConnInfo(context).remote.address;
+  } catch {
+    return undefined;
+  }
 }
 
 function readPlatform(headers: Headers): string | undefined {
@@ -87,9 +110,10 @@ function readDevice(headers: Headers): ClientDeviceContext {
 
 export const clientContextMiddleware = createMiddleware<AppBindings>(async (context, next) => {
   const headers = context.req.raw.headers;
+  const remoteAddress = readRemoteAddress(context);
 
   context.set("client", {
-    ip: readIpAddress(headers),
+    ip: readIpAddress(headers, remoteAddress),
     device: readDevice(headers),
   });
 

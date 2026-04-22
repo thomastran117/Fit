@@ -33,7 +33,8 @@ describe("MicrosoftOAuthService", () => {
     const tokenVerifier = {
       verifyIdToken: jest.fn(async () => ({
         sub: "microsoft-user-1",
-        preferred_username: "USER@Example.com",
+        email: "USER@Example.com",
+        email_verified: true,
         name: "Microsoft Person",
       })),
     };
@@ -147,6 +148,28 @@ describe("MicrosoftOAuthService", () => {
       service.verify({
         idToken: "broken-id-token",
         nonce: "nonce-4",
+      }),
+    ).rejects.toMatchObject<Partial<UnauthorizedError>>({
+      message: "Microsoft ID token is missing required claims.",
+    });
+  });
+
+  it("does not accept preferred_username as verified email ownership", async () => {
+    setEnvironment({
+      MICROSOFT_OAUTH_CLIENT_ID: "microsoft-client-id",
+    });
+    const service = new MicrosoftOAuthService({
+      verifyIdToken: jest.fn(async () => ({
+        sub: "microsoft-user-3",
+        preferred_username: "alias@example.com",
+        name: "Alias Person",
+      })),
+    } as never);
+
+    await expect(
+      service.verify({
+        idToken: "preferred-username-only-token",
+        nonce: "nonce-5",
       }),
     ).rejects.toMatchObject<Partial<UnauthorizedError>>({
       message: "Microsoft ID token is missing required claims.",

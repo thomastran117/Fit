@@ -162,7 +162,9 @@ describe("TokenService", () => {
 
   it("creates and verifies stateless refresh tokens with remember-me claims", async () => {
     jest.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
-    const { service, authRepository } = createService();
+    const { service, authRepository } = createService({
+      refreshTokenMode: "stateless",
+    });
 
     const token = await service.createRefreshToken(
       {
@@ -191,7 +193,9 @@ describe("TokenService", () => {
   });
 
   it("rejects stateless refresh tokens with invalid signatures", async () => {
-    const { service } = createService();
+    const { service } = createService({
+      refreshTokenMode: "stateless",
+    });
     const token = await service.createRefreshToken({
       sub: "user-1",
       tokenVersion: 2,
