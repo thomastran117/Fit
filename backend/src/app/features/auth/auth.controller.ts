@@ -8,6 +8,10 @@ import { environment } from "@/configuration/environment";
 import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthService } from "@/features/auth/auth.service";
 import { CaptchaService } from "@/features/auth/captcha/captcha.service";
+import {
+  CSRF_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+} from "@/features/auth/auth.cookies";
 import { TokenService } from "@/features/auth/token/token.service";
 import type {
   AuthResponseBody,
@@ -61,8 +65,6 @@ import {
 } from "@/features/auth/auth.model";
 
 export class AuthController {
-  private static readonly REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
-
   constructor(
     private readonly authService: AuthService,
     private readonly captchaService: CaptchaService,
@@ -214,12 +216,17 @@ export class AuthController {
     const result = await this.authService.logout({
       auth: context.get("auth"),
       client: context.get("client"),
-      refreshToken: getCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME),
+      refreshToken: getCookie(context, REFRESH_TOKEN_COOKIE_NAME),
     });
 
-    deleteCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME, {
+    deleteCookie(context, REFRESH_TOKEN_COOKIE_NAME, {
       path: "/",
       httpOnly: true,
+      secure: this.isSecureCookieEnabled(),
+      sameSite: "Lax",
+    });
+    deleteCookie(context, CSRF_TOKEN_COOKIE_NAME, {
+      path: "/",
       secure: this.isSecureCookieEnabled(),
       sameSite: "Lax",
     });
@@ -262,13 +269,7 @@ export class AuthController {
     const responseBody = this.toAuthResponseBody(context, body);
 
     if (this.shouldSetRefreshCookie(context)) {
-      setCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME, body.refreshToken, {
-        path: "/",
-        httpOnly: true,
-        secure: this.isSecureCookieEnabled(),
-        sameSite: "Lax",
-        maxAge: body.refreshTokenExpiresInSeconds,
-      });
+      this.setBrowserSessionCookies(context, body);
     }
 
     return context.json(responseBody, status);
@@ -396,7 +397,7 @@ export class AuthController {
   ): RefreshInput {
     return {
       client: context.get("client"),
-      refreshToken: input.refreshToken ?? getCookie(context, AuthController.REFRESH_TOKEN_COOKIE_NAME),
+      refreshToken: input.refreshToken ?? getCookie(context, REFRESH_TOKEN_COOKIE_NAME),
     };
   }
 
@@ -478,17 +479,44 @@ export class AuthController {
   }
 
   private shouldSetRefreshCookie(context: Context<AppBindings>): boolean {
-    const clientDevice = context.get("client").device;
+    return this.isBrowserRequest(context);
+  }
 
-    if (clientDevice.isMobile) {
-      return false;
-    }
-
-    return clientDevice.type === "desktop";
+  private isBrowserRequest(context: Context<AppBindings>): boolean {
+    return Boolean(
+      context.req.header("origin") ||
+        context.req.header("referer") ||
+        context.req.header("sec-fetch-site"),
+    );
   }
 
   private isSecureCookieEnabled(): boolean {
     return environment.isProduction();
+  }
+
+  private createCsrfToken(): string {
+    return randomUUID();
+  }
+
+  private setBrowserSessionCookies(
+    context: Context<AppBindings>,
+    result: AuthSessionResult,
+  ): void {
+    const secure = this.isSecureCookieEnabled();
+
+    setCookie(context, REFRESH_TOKEN_COOKIE_NAME, result.refreshToken, {
+      path: "/",
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      maxAge: result.refreshTokenExpiresInSeconds,
+    });
+    setCookie(context, CSRF_TOKEN_COOKIE_NAME, this.createCsrfToken(), {
+      path: "/",
+      secure,
+      sameSite: "Lax",
+      maxAge: result.refreshTokenExpiresInSeconds,
+    });
   }
   private async verifyCaptcha(context: Context<AppBindings>, captchaToken: string): Promise<void> {
     const result = await this.captchaService.verify({

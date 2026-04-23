@@ -37,6 +37,7 @@ export function createCorsMiddleware(): MiddlewareHandler<AppBindings> {
       "x-device-id",
       "x-device-platform",
       "x-request-id",
+      "x-csrf-token",
     ],
     exposeHeaders: [
       "content-type",

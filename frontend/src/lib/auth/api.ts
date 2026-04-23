@@ -78,6 +78,25 @@ interface ChangePasswordInput {
 }
 
 let refreshSessionPromise: Promise<AuthResponseBody | null> | null = null;
+const CSRF_COOKIE_NAME = "csrf_token";
+const CSRF_HEADER_NAME = "x-csrf-token";
+
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+
+  return document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+
+function readCsrfToken(): string | undefined {
+  const token = readCookie(CSRF_COOKIE_NAME);
+  return token ? decodeURIComponent(token) : undefined;
+}
 
 async function readJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
@@ -146,12 +165,14 @@ async function authenticatedJsonWithRetry<TResponse, TBody extends object = obje
   const deviceId = getDeviceId();
   const devicePlatform = getDevicePlatform();
   const session = readStoredSession();
+  const csrfToken = readCsrfToken();
   const response = await fetch(`${publicEnv.apiBaseUrl}${path}`, {
     method,
     headers: {
       ...(body ? { "content-type": "application/json" } : {}),
       accept: "application/json",
       ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {}),
+      ...(csrfToken && method !== "GET" ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
       ...(deviceId ? { "x-device-id": deviceId } : {}),
       ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
     },
@@ -191,11 +212,13 @@ async function refreshStoredSession(): Promise<AuthResponseBody | null> {
     const session = readStoredSession();
     const deviceId = getDeviceId();
     const devicePlatform = getDevicePlatform();
+    const csrfToken = readCsrfToken();
     const response = await fetch(`${publicEnv.apiBaseUrl}/auth/refresh`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         accept: "application/json",
+        ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
         ...(deviceId ? { "x-device-id": deviceId } : {}),
         ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
       },
@@ -232,7 +255,7 @@ export const authApi = {
     });
   },
   logout(): Promise<{ loggedOut: true }> {
-    return postJson<{ loggedOut: true }>("/auth/logout", {});
+    return postAuthenticatedJson<{ loggedOut: true }>("/auth/logout", {});
   },
   refresh(): Promise<AuthResponseBody | null> {
     return refreshStoredSession();

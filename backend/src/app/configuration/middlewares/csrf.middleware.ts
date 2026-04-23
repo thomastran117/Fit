@@ -1,7 +1,13 @@
 import { createMiddleware } from "hono/factory";
+import { getCookie } from "hono/cookie";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { getOptionalEnvironmentVariable } from "@/configuration/environment";
 import ForbiddenError from "@/errors/http/forbidden.error";
+import {
+  CSRF_TOKEN_COOKIE_NAME,
+  CSRF_TOKEN_HEADER_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+} from "@/features/auth/auth.cookies";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -50,6 +56,14 @@ function isBrowserRequest(request: Request): boolean {
   );
 }
 
+function requiresCookieBackedCsrf(path: string, request: Request): boolean {
+  if (path === "/auth/refresh" || path === "/auth/logout") {
+    return true;
+  }
+
+  return request.headers.get("cookie")?.includes(`${REFRESH_TOKEN_COOKIE_NAME}=`) ?? false;
+}
+
 export const csrfMiddleware = createMiddleware<AppBindings>(async (context, next) => {
   const request = context.req.raw;
 
@@ -81,6 +95,15 @@ export const csrfMiddleware = createMiddleware<AppBindings>(async (context, next
 
   if (request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site") {
     throw new ForbiddenError("CSRF validation failed.");
+  }
+
+  if (requiresCookieBackedCsrf(path, request)) {
+    const csrfCookie = getCookie(context, CSRF_TOKEN_COOKIE_NAME);
+    const csrfHeader = request.headers.get(CSRF_TOKEN_HEADER_NAME);
+
+    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+      throw new ForbiddenError("CSRF validation failed.");
+    }
   }
 
   await next();

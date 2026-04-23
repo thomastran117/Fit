@@ -223,6 +223,7 @@ describe("AuthController", () => {
       },
       headers: {
         "x-request-id": "request-123",
+        origin: "http://localhost:3040",
       },
     });
 
@@ -247,6 +248,12 @@ describe("AuthController", () => {
       sameSite: "Lax",
       maxAge: 86_400,
     });
+    expect(mockSetCookie).toHaveBeenCalledWith(context, "csrf_token", expect.any(String), {
+      path: "/",
+      secure: false,
+      sameSite: "Lax",
+      maxAge: 86_400,
+    });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       accessToken: "access-token-1",
@@ -265,7 +272,7 @@ describe("AuthController", () => {
     });
   });
 
-  it("localAuthenticate returns the refresh token in the response body for mobile clients instead of setting a cookie", async () => {
+  it("localAuthenticate returns the refresh token in the response body for non-browser clients", async () => {
     const { controller } = createController();
     const context = createContext({
       client: createClient({
@@ -303,6 +310,44 @@ describe("AuthController", () => {
         role: "user",
       },
     });
+  });
+
+  it("localAuthenticate stores refresh tokens in cookies for mobile browser clients", async () => {
+    const { controller } = createController();
+    const context = createContext({
+      client: createClient({
+        device: {
+          id: "mobile-browser-device",
+          type: "mobile",
+          isMobile: true,
+          userAgent: "mobile-agent",
+          platform: "iOS",
+        },
+      }),
+      headers: {
+        origin: "http://localhost:3040",
+      },
+      body: {
+        email: "user@example.com",
+        password: "Password1!",
+        captchaToken: "captcha-token",
+      },
+    });
+
+    const response = await controller.localAuthenticate(context);
+
+    expect(mockSetCookie).toHaveBeenCalledWith(context, "refresh_token", "refresh-token-1", {
+      path: "/",
+      httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+      maxAge: 86_400,
+    });
+    const body = await response.json();
+    expect(body).toMatchObject({
+      accessToken: "access-token-1",
+    });
+    expect(body).not.toHaveProperty("refreshToken");
   });
 
   it("localSignup rejects when captcha verification fails closed or fail-open", async () => {
@@ -460,6 +505,11 @@ describe("AuthController", () => {
     expect(mockDeleteCookie).toHaveBeenCalledWith(context, "refresh_token", {
       path: "/",
       httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+    });
+    expect(mockDeleteCookie).toHaveBeenCalledWith(context, "csrf_token", {
+      path: "/",
       secure: false,
       sameSite: "Lax",
     });

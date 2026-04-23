@@ -214,6 +214,7 @@ describe("Auth integration", () => {
         "x-forwarded-for": "203.0.113.10",
         "x-request-id": "req-123",
         "x-device-id": "header-device-1",
+        origin: "http://localhost:3040",
         "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         "sec-ch-ua-platform": "\"macOS\"",
       },
@@ -248,6 +249,7 @@ describe("Auth integration", () => {
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("refresh_token=refresh-token-1");
+    expect(response.headers.get("set-cookie")).toContain("csrf_token=");
     await expect(response.json()).resolves.toEqual({
       accessToken: "access-token-1",
       device: {
@@ -369,6 +371,7 @@ describe("Auth integration", () => {
         "content-type": "application/json",
         "x-forwarded-for": "203.0.113.88",
         "x-device-id": "oauth-device-1",
+        origin: "http://localhost:3040",
         "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         "sec-ch-ua-platform": "\"macOS\"",
       },
@@ -404,6 +407,7 @@ describe("Auth integration", () => {
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("refresh_token=google-refresh-token");
+    expect(response.headers.get("set-cookie")).toContain("csrf_token=");
     await expect(response.json()).resolves.toEqual({
       accessToken: "google-access-token",
       device: {
