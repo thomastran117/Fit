@@ -14,6 +14,7 @@ function createUser(): AuthUserRecord {
     lastName: "User",
     role: "user",
     emailVerified: true,
+    oauthIdentities: [],
     profile: {
       id: "profile-1",
       userId: "user-1",

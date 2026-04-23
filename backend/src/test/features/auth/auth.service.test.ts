@@ -16,6 +16,7 @@ function createUser(): AuthUserRecord {
     lastName: "User",
     role: "user",
     emailVerified: true,
+    oauthIdentities: [],
     profile: {
       id: "profile-1",
       userId: "user-1",
@@ -61,6 +62,31 @@ function createService(overrides?: {
     firstName?: string;
     lastName?: string;
   }) => Promise<AuthUserRecord>;
+  findUserByOAuthIdentity?: (provider: string, providerUserId: string) => Promise<AuthUserRecord | null>;
+  linkOAuthIdentity?: (
+    userId: string,
+    profile: {
+      email: string;
+      provider: "google" | "microsoft" | "apple";
+      providerUserId: string;
+      emailVerified: boolean;
+      firstName?: string;
+      lastName?: string;
+    },
+  ) => Promise<{
+    id: string;
+    userId: string;
+    provider: "google" | "microsoft" | "apple";
+    providerUserId: string;
+    providerEmail?: string;
+    emailVerified: boolean;
+    displayName?: string;
+    linkedAt: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  listOAuthIdentitiesByUserId?: (userId: string) => Promise<AuthUserRecord["oauthIdentities"]>;
+  unlinkOAuthIdentity?: (userId: string, provider: "google" | "microsoft" | "apple") => Promise<boolean>;
   markEmailVerified?: (userId: string) => Promise<void>;
   updatePasswordHash?: (userId: string, passwordHash: string) => Promise<void>;
   rotateTokenVersion?: (userId: string) => Promise<number>;
@@ -118,6 +144,7 @@ function createService(overrides?: {
   const authRepository = {
     findUserByEmail: overrides?.findUserByEmail ?? (async () => null),
     findUserById: overrides?.findUserById ?? (async () => null),
+    findUserByOAuthIdentity: overrides?.findUserByOAuthIdentity ?? (async () => null),
     createLocalUser:
       overrides?.createLocalUser ??
       (async (input) => ({
@@ -133,7 +160,38 @@ function createService(overrides?: {
         email: profile.email,
         firstName: profile.firstName,
         lastName: profile.lastName,
+        passwordHash: undefined,
+        emailVerified: profile.emailVerified,
+        oauthIdentities: [
+          {
+            id: "oauth-identity-1",
+            userId: "user-1",
+            provider: profile.provider as "google" | "microsoft" | "apple",
+            providerUserId: profile.providerUserId,
+            providerEmail: profile.email,
+            emailVerified: profile.emailVerified,
+            linkedAt: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
       })),
+    linkOAuthIdentity:
+      overrides?.linkOAuthIdentity ??
+      (async (userId, profile) => ({
+        id: "oauth-identity-1",
+        userId,
+        provider: profile.provider,
+        providerUserId: profile.providerUserId,
+        providerEmail: profile.email,
+        emailVerified: profile.emailVerified,
+        linkedAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      })),
+    listOAuthIdentitiesByUserId:
+      overrides?.listOAuthIdentitiesByUserId ?? (async () => []),
+    unlinkOAuthIdentity: overrides?.unlinkOAuthIdentity ?? (async () => true),
     markEmailVerified: overrides?.markEmailVerified ?? (async () => {}),
     updatePasswordHash: overrides?.updatePasswordHash ?? (async () => {}),
     rotateTokenVersion: overrides?.rotateTokenVersion ?? (async () => 3),
@@ -314,7 +372,20 @@ describe("AuthService", () => {
     const service = createService({
       findUserByEmail: async () => ({
         ...createUser(),
-        passwordHash: "oauth:google:provider-user-1",
+        passwordHash: undefined,
+        oauthIdentities: [
+          {
+            id: "oauth-identity-1",
+            userId: "user-1",
+            provider: "google",
+            providerUserId: "provider-user-1",
+            providerEmail: "oauth@example.com",
+            emailVerified: true,
+            linkedAt: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
       }),
       sendPasswordResetEmail: async () => {
         resetEmailSent = true;
@@ -539,7 +610,20 @@ describe("AuthService", () => {
   it("rejects password reset for social login accounts", async () => {
     const oauthUser = {
       ...createUser(),
-      passwordHash: "oauth:google:provider-user-1",
+      passwordHash: undefined,
+      oauthIdentities: [
+        {
+          id: "oauth-identity-1",
+          userId: "user-1",
+          provider: "google" as const,
+          providerUserId: "provider-user-1",
+          providerEmail: "oauth@example.com",
+          emailVerified: true,
+          linkedAt: "2026-01-01T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
     };
     const service = createService({
       findUserByEmail: async () => oauthUser,
@@ -788,6 +872,212 @@ describe("AuthService", () => {
         deviceId: "device-1",
       }),
     ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("authenticates OAuth users by linked provider subject before checking email matches", async () => {
+    const linkedUser = {
+      ...createUser(),
+      email: "renamed@example.com",
+      passwordHash: undefined,
+      oauthIdentities: [
+        {
+          id: "oauth-identity-1",
+          userId: "user-1",
+          provider: "google" as const,
+          providerUserId: "google-user-1",
+          providerEmail: "old-email@example.com",
+          emailVerified: true,
+          linkedAt: "2026-01-01T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    const service = createService({
+      findUserByOAuthIdentity: async () => linkedUser,
+      findUserByEmail: async () => {
+        throw new Error("Email lookup should not be needed for linked providers.");
+      },
+      verifyGoogle: async () => ({
+        email: "provider-email@example.com",
+        provider: "google",
+        providerUserId: "google-user-1",
+        emailVerified: true,
+      }),
+    });
+
+    const result = await service.googleAuthenticate({
+      client: createClient(),
+      nonce: "nonce-1",
+      code: "code-1",
+      codeVerifier: "verifier-1",
+      deviceId: "device-1",
+    });
+
+    expect(result.user.email).toBe("renamed@example.com");
+  });
+
+  it("links a Google provider to an authenticated local account", async () => {
+    const localUser = {
+      ...createUser(),
+      passwordHash: await bcrypt.hash("CorrectHorseBatteryStaple1!", 4),
+    };
+    let linkedUserId: string | undefined;
+    const linkedIdentity = {
+      id: "oauth-identity-1",
+      userId: localUser.id,
+      provider: "google" as const,
+      providerUserId: "google-user-1",
+      providerEmail: "user@example.com",
+      emailVerified: true,
+      linkedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const service = createService({
+      findUserById: async () => localUser,
+      findUserByOAuthIdentity: async () => null,
+      linkOAuthIdentity: async (userId) => {
+        linkedUserId = userId;
+        return linkedIdentity;
+      },
+      listOAuthIdentitiesByUserId: async () => [linkedIdentity],
+      verifyGoogle: async () => ({
+        email: "user@example.com",
+        provider: "google",
+        providerUserId: "google-user-1",
+        emailVerified: true,
+      }),
+    });
+
+    await expect(
+      service.linkOAuthProvider({
+        userId: localUser.id,
+        provider: "google",
+        client: createClient(),
+        nonce: "nonce-1",
+        code: "code-1",
+        codeVerifier: "verifier-1",
+        deviceId: "device-1",
+      }),
+    ).resolves.toEqual({
+      hasPassword: true,
+      providers: [
+        {
+          id: "oauth-identity-1",
+          provider: "google",
+          providerEmail: "user@example.com",
+          emailVerified: true,
+          linkedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(linkedUserId).toBe(localUser.id);
+  });
+
+  it("rejects linking when the provider subject belongs to another user", async () => {
+    const localUser = {
+      ...createUser(),
+      id: "user-1",
+      passwordHash: await bcrypt.hash("CorrectHorseBatteryStaple1!", 4),
+    };
+    const otherUser = {
+      ...createUser(),
+      id: "user-2",
+      email: "other@example.com",
+    };
+    const service = createService({
+      findUserById: async () => localUser,
+      findUserByOAuthIdentity: async () => otherUser,
+      verifyGoogle: async () => ({
+        email: "user@example.com",
+        provider: "google",
+        providerUserId: "google-user-1",
+        emailVerified: true,
+      }),
+    });
+
+    await expect(
+      service.linkOAuthProvider({
+        userId: localUser.id,
+        provider: "google",
+        client: createClient(),
+        nonce: "nonce-1",
+        code: "code-1",
+        codeVerifier: "verifier-1",
+        deviceId: "device-1",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("blocks unlinking the last usable sign-in method", async () => {
+    const oauthOnlyUser = {
+      ...createUser(),
+      passwordHash: undefined,
+      oauthIdentities: [
+        {
+          id: "oauth-identity-1",
+          userId: "user-1",
+          provider: "google" as const,
+          providerUserId: "google-user-1",
+          providerEmail: "user@example.com",
+          emailVerified: true,
+          linkedAt: "2026-01-01T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    const service = createService({
+      findUserById: async () => oauthOnlyUser,
+    });
+
+    await expect(
+      service.unlinkOAuthProvider({
+        userId: oauthOnlyUser.id,
+        provider: "google",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("unlinks a provider when a local password remains available", async () => {
+    const mixedUser = {
+      ...createUser(),
+      passwordHash: await bcrypt.hash("CorrectHorseBatteryStaple1!", 4),
+      oauthIdentities: [
+        {
+          id: "oauth-identity-1",
+          userId: "user-1",
+          provider: "google" as const,
+          providerUserId: "google-user-1",
+          providerEmail: "user@example.com",
+          emailVerified: true,
+          linkedAt: "2026-01-01T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    let unlinkedProvider: string | undefined;
+    const service = createService({
+      findUserById: async () => mixedUser,
+      unlinkOAuthIdentity: async (_userId, provider) => {
+        unlinkedProvider = provider;
+        return true;
+      },
+      listOAuthIdentitiesByUserId: async () => [],
+    });
+
+    await expect(
+      service.unlinkOAuthProvider({
+        userId: mixedUser.id,
+        provider: "google",
+      }),
+    ).resolves.toEqual({
+      hasPassword: true,
+      providers: [],
+    });
+    expect(unlinkedProvider).toBe("google");
   });
 
   it("rejects OAuth authentication when the provider email is not verified", async () => {

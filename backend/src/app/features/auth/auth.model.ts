@@ -108,6 +108,12 @@ export const oauthAuthenticateRequestSchema = z
     }
   });
 
+export const oauthProviderSchema = z.enum(["google", "microsoft", "apple"]);
+
+export const unlinkOAuthProviderRequestSchema = z.object({
+  provider: oauthProviderSchema,
+});
+
 export const verifyEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   code: z.string().trim().regex(/^\d{6}$/, "Verification code must be 6 digits."),
@@ -165,6 +171,10 @@ export type LocalAuthenticateRequestBody = z.infer<typeof localAuthenticateReque
 
 export type OAuthAuthenticateRequestBody = z.infer<typeof oauthAuthenticateRequestSchema>;
 
+export type OAuthProvider = z.infer<typeof oauthProviderSchema>;
+
+export type UnlinkOAuthProviderRequestBody = z.infer<typeof unlinkOAuthProviderRequestSchema>;
+
 export type VerifyEmailRequestBody = z.infer<typeof verifyEmailRequestSchema>;
 
 export type ResendVerificationEmailRequestBody = z.infer<
@@ -216,6 +226,16 @@ export interface OAuthAuthenticateInput {
   deviceId?: string;
   firstName?: string;
   lastName?: string;
+}
+
+export interface LinkOAuthProviderInput extends OAuthAuthenticateInput {
+  userId: string;
+  provider: OAuthProvider;
+}
+
+export interface UnlinkOAuthProviderInput {
+  userId: string;
+  provider: OAuthProvider;
 }
 
 export interface VerifyEmailInput {
@@ -301,16 +321,30 @@ export interface UserProfileRecord {
   updatedAt: string;
 }
 
+export interface OAuthIdentityRecord {
+  id: string;
+  userId: string;
+  provider: OAuthProvider;
+  providerUserId: string;
+  providerEmail?: string;
+  emailVerified: boolean;
+  displayName?: string;
+  linkedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthUserRecord {
   id: string;
   email: string;
-  passwordHash: string;
+  passwordHash?: string;
   tokenVersion: number;
   firstName?: string;
   lastName?: string;
   role: AppRole;
   emailVerified: boolean;
   profile: UserProfileRecord;
+  oauthIdentities: OAuthIdentityRecord[];
   createdAt: string;
   updatedAt: string;
 }
@@ -366,4 +400,16 @@ export interface SignupVerificationPendingResult {
   verificationRequired: true;
   email: string;
   alreadyPending: boolean;
+}
+
+export interface LinkedOAuthProvidersResult {
+  hasPassword: boolean;
+  providers: Array<{
+    id: string;
+    provider: OAuthProvider;
+    providerEmail?: string;
+    emailVerified: boolean;
+    displayName?: string;
+    linkedAt: string;
+  }>;
 }

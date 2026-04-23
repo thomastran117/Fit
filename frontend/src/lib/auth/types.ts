@@ -5,6 +5,8 @@ export interface AuthResponseUser {
   avatarUrl?: string;
 }
 
+export type OAuthProvider = "google" | "microsoft" | "apple";
+
 export interface AuthResponseBody {
   accessToken: string;
   refreshToken?: string;
@@ -27,6 +29,18 @@ export interface ForgotPasswordAcceptedResult {
 }
 
 export type AuthEmailAcceptedResult = ForgotPasswordAcceptedResult;
+
+export interface LinkedOAuthProvidersResult {
+  hasPassword: boolean;
+  providers: Array<{
+    id: string;
+    provider: OAuthProvider;
+    providerEmail?: string;
+    emailVerified: boolean;
+    displayName?: string;
+    linkedAt: string;
+  }>;
+}
 
 export interface ApiErrorResponse {
   error: string;

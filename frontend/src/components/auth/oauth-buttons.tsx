@@ -3,13 +3,16 @@
 import { useState, type ReactNode } from "react";
 import { publicEnv } from "@/lib/env";
 import { authApi } from "@/lib/auth/api";
-import type { AuthResponseBody } from "@/lib/auth/types";
+import type { AuthResponseBody, LinkedOAuthProvidersResult } from "@/lib/auth/types";
 
-type OAuthProvider = "google" | "microsoft";
+export type OAuthProvider = "google" | "microsoft";
 
 interface AuthOAuthButtonsProps {
-  onSuccess: (session: AuthResponseBody) => void;
+  mode?: "authenticate" | "link";
+  onSuccess?: (session: AuthResponseBody) => void;
+  onLinked?: (result: LinkedOAuthProvidersResult) => void;
   onError: (message: string) => void;
+  disabledProviders?: OAuthProvider[];
 }
 
 interface PopupAuthResult {
@@ -207,6 +210,27 @@ async function authenticateWithProvider(
   });
 }
 
+async function linkWithProvider(
+  provider: OAuthProvider,
+  input: { code?: string; codeVerifier?: string; idToken?: string },
+  nonce: string,
+): Promise<LinkedOAuthProvidersResult> {
+  if (provider === "google") {
+    return authApi.linkOAuthProvider("google", {
+      code: input.code ?? "",
+      codeVerifier: input.codeVerifier ?? "",
+      nonce,
+    });
+  }
+
+  return authApi.linkOAuthProvider("microsoft", {
+    idToken: input.idToken,
+    code: input.code,
+    codeVerifier: input.codeVerifier,
+    nonce,
+  });
+}
+
 async function openProviderPopup(
   provider: OAuthProvider,
 ): Promise<{ code: string; codeVerifier: string; nonce: string }> {
@@ -341,22 +365,30 @@ function OAuthProviderButton({
   );
 }
 
-export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) {
+export function AuthOAuthButtons({
+  mode = "authenticate",
+  onSuccess,
+  onLinked,
+  onError,
+  disabledProviders = [],
+}: AuthOAuthButtonsProps) {
   const [pendingProvider, setPendingProvider] = useState<OAuthProvider | null>(null);
+  const isLinkMode = mode === "link";
 
   const providerConfigs = ([
     {
       provider: "google" as const,
-      label: "Continue with Google",
+      label: isLinkMode ? "Link Google" : "Continue with Google",
       pendingLabel: "Connecting to Google...",
-      enabled: Boolean(publicEnv.googleOAuthClientId),
+      enabled: Boolean(publicEnv.googleOAuthClientId) && !disabledProviders.includes("google"),
       icon: <GoogleIcon />,
     },
     {
       provider: "microsoft" as const,
-      label: "Continue with Microsoft",
+      label: isLinkMode ? "Link Microsoft" : "Continue with Microsoft",
       pendingLabel: "Connecting to Microsoft...",
-      enabled: Boolean(publicEnv.microsoftOAuthClientId),
+      enabled:
+        Boolean(publicEnv.microsoftOAuthClientId) && !disabledProviders.includes("microsoft"),
       icon: <MicrosoftIcon />,
     },
   ] satisfies ProviderButtonConfig[]).filter((provider) => provider.enabled);
@@ -380,8 +412,14 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
               codeVerifier: result.codeVerifier,
             };
 
+      if (isLinkMode) {
+        const linkedProviders = await linkWithProvider(provider, providerInput, result.nonce);
+        onLinked?.(linkedProviders);
+        return;
+      }
+
       const session = await authenticateWithProvider(provider, providerInput, result.nonce);
-      onSuccess(session);
+      onSuccess?.(session);
     } catch (error) {
       onError(error instanceof Error ? error.message : "OAuth sign-in could not be completed.");
     } finally {
@@ -401,7 +439,7 @@ export function AuthOAuthButtons({ onSuccess, onError }: AuthOAuthButtonsProps) 
         </div>
         <div className="relative flex justify-center">
           <span className="bg-white px-3 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-            Or continue with
+            {isLinkMode ? "Connect another provider" : "Or continue with"}
           </span>
         </div>
       </div>

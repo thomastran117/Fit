@@ -15,15 +15,19 @@ import {
   type AuthUserRecord,
   type ChangePasswordInput,
   type ForgotPasswordInput,
+  type LinkedOAuthProvidersResult,
+  type LinkOAuthProviderInput,
   type LocalAuthenticateInput,
   type LocalSignupInput,
   type OAuthAuthenticateInput,
+  type OAuthProvider,
   type RefreshInput,
   type ResetPasswordInput,
   type RemoveKnownDeviceInput,
   type ResendForgotPasswordInput,
   type ResendUnlockLocalLoginInput,
   type ResendVerificationEmailInput,
+  type UnlinkOAuthProviderInput,
   type VerifyEmailInput,
   type UnlockLocalLoginInput,
   isStrongPassword,
@@ -71,6 +75,10 @@ type PublicOtpRateLimitResult = {
   subject: string;
   reason?: string;
   scope?: "email" | "ip" | "device";
+};
+
+type LocalPasswordAuthUserRecord = AuthUserRecord & {
+  passwordHash: string;
 };
 
 export class AuthService {
@@ -425,6 +433,62 @@ export class AuthService {
     return this.authenticateOAuthProfile(profile, input);
   }
 
+  async linkOAuthProvider(input: LinkOAuthProviderInput): Promise<LinkedOAuthProvidersResult> {
+    const user = await this.requireExistingUser(input.userId);
+    const profile = await this.verifyOAuthInput(input.provider, input);
+
+    this.requireVerifiedOAuthProfile(profile);
+
+    const existingProviderUser = await this.authRepository.findUserByOAuthIdentity(
+      profile.provider,
+      profile.providerUserId,
+    );
+
+    if (existingProviderUser && existingProviderUser.id !== user.id) {
+      throw new ConflictError("This OAuth provider is already linked to another account.");
+    }
+
+    if (
+      existingProviderUser?.id === user.id ||
+      user.oauthIdentities.some((identity) => identity.provider === profile.provider)
+    ) {
+      return this.listLinkedOAuthProvidersForUser(user);
+    }
+
+    await this.authRepository.linkOAuthIdentity(user.id, profile);
+    return this.linkedOAuthProviders({
+      ...user,
+      oauthIdentities: await this.authRepository.listOAuthIdentitiesByUserId(user.id),
+    });
+  }
+
+  async linkedOAuthProviders(context: { userId: string }): Promise<LinkedOAuthProvidersResult>;
+  async linkedOAuthProviders(user: AuthUserRecord): Promise<LinkedOAuthProvidersResult>;
+  async linkedOAuthProviders(
+    input: { userId: string } | AuthUserRecord,
+  ): Promise<LinkedOAuthProvidersResult> {
+    const user = "email" in input ? input : await this.requireExistingUser(input.userId);
+    return this.listLinkedOAuthProvidersForUser(user);
+  }
+
+  async unlinkOAuthProvider(input: UnlinkOAuthProviderInput): Promise<LinkedOAuthProvidersResult> {
+    const user = await this.requireExistingUser(input.userId);
+
+    if (!user.oauthIdentities.some((identity) => identity.provider === input.provider)) {
+      return this.listLinkedOAuthProvidersForUser(user);
+    }
+
+    if (!this.isLocalPasswordAccount(user) && user.oauthIdentities.length <= 1) {
+      throw new ConflictError("Add another sign-in method before unlinking this provider.");
+    }
+
+    await this.authRepository.unlinkOAuthIdentity(user.id, input.provider);
+    return this.linkedOAuthProviders({
+      ...user,
+      oauthIdentities: await this.authRepository.listOAuthIdentitiesByUserId(user.id),
+    });
+  }
+
   async refresh(input: RefreshInput): Promise<AuthSessionResult> {
     if (!input.refreshToken) {
       throw new UnauthorizedError("Refresh token is required.");
@@ -591,21 +655,46 @@ export class AuthService {
     profile: VerifiedOAuthProfile,
     input: OAuthAuthenticateInput,
   ): Promise<AuthSessionResult> {
-    if (!profile.emailVerified) {
-      throw new Error("OAuth account email must be verified.");
+    this.requireVerifiedOAuthProfile(profile);
+
+    const linkedUser = await this.authRepository.findUserByOAuthIdentity(
+      profile.provider,
+      profile.providerUserId,
+    );
+
+    if (linkedUser) {
+      return this.authenticateVerifiedUser(linkedUser, input);
     }
 
-    const existingUser = await this.authRepository.findUserByEmail(profile.email);
-    const user =
-      existingUser ?? (await this.authRepository.createOAuthUser(profile));
-
-    if (existingUser && !this.isMatchingOAuthAccount(existingUser, profile)) {
+    if (await this.authRepository.findUserByEmail(profile.email)) {
       throw new ConflictError(
         "An account with this email already exists. Sign in with the original method before linking a social provider.",
       );
     }
 
+    const user = await this.authRepository.createOAuthUser(profile);
     return this.authenticateVerifiedUser(user, input);
+  }
+
+  private async verifyOAuthInput(
+    provider: OAuthProvider,
+    input: OAuthAuthenticateInput,
+  ): Promise<VerifiedOAuthProfile> {
+    if (provider === "google") {
+      return this.googleOAuthService.verify(input);
+    }
+
+    if (provider === "microsoft") {
+      return this.microsoftOAuthService.verify(input);
+    }
+
+    return this.appleOAuthService.verify(input);
+  }
+
+  private requireVerifiedOAuthProfile(profile: VerifiedOAuthProfile): void {
+    if (!profile.emailVerified) {
+      throw new Error("OAuth account email must be verified.");
+    }
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -927,21 +1016,14 @@ export class AuthService {
     return user.emailVerified && this.isLocalPasswordAccount(user);
   }
 
-  private isLocalPasswordAccount(user: AuthUserRecord): boolean {
-    return !user.passwordHash.startsWith("oauth:");
-  }
-
-  private isMatchingOAuthAccount(
-    user: AuthUserRecord,
-    profile: VerifiedOAuthProfile,
-  ): boolean {
-    return user.passwordHash === `oauth:${profile.provider}:${profile.providerUserId}`;
+  private isLocalPasswordAccount(user: AuthUserRecord): user is LocalPasswordAuthUserRecord {
+    return Boolean(user.passwordHash && this.isBcryptHash(user.passwordHash));
   }
 
   private requireEligibleLocalPasswordUser(
     user: AuthUserRecord | null,
     defaultMessage: string,
-  ): AuthUserRecord {
+  ): LocalPasswordAuthUserRecord {
     if (!user) {
       throw new BadRequestError(defaultMessage);
     }
@@ -957,6 +1039,20 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  private listLinkedOAuthProvidersForUser(user: AuthUserRecord): LinkedOAuthProvidersResult {
+    return {
+      hasPassword: this.isLocalPasswordAccount(user),
+      providers: user.oauthIdentities.map((identity) => ({
+        id: identity.id,
+        provider: identity.provider,
+        providerEmail: identity.providerEmail,
+        emailVerified: identity.emailVerified,
+        displayName: identity.displayName,
+        linkedAt: identity.linkedAt,
+      })),
+    };
   }
 
   private async requireExistingUser(userId: string): Promise<AuthUserRecord> {
