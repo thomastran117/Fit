@@ -232,6 +232,10 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     "/postings/:id/booking-requests",
     resolveHandler<BookingsController>(containerTokens.bookingsController, "createForPosting"),
   );
+  app.post(
+    "/postings/:id/booking-quote",
+    resolveHandler<BookingsController>(containerTokens.bookingsController, "quoteForPosting"),
+  );
   app.get(
     "/postings/:id/booking-requests",
     resolveHandler<BookingsController>(containerTokens.bookingsController, "listForOwnerPosting"),

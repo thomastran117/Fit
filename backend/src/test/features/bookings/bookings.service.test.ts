@@ -7,7 +7,7 @@ import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 
-function createPostingRecord(): PostingRecord {
+function createPostingRecord(overrides: Partial<PostingRecord> = {}): PostingRecord {
   return {
     id: "posting-1",
     ownerId: "owner-1",
@@ -40,6 +40,7 @@ function createPostingRecord(): PostingRecord {
     },
     createdAt: "2026-04-20T00:00:00.000Z",
     updatedAt: "2026-04-20T00:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -80,9 +81,12 @@ function createBookingRequestRecord(overrides: Partial<BookingRequestRecord> = {
 
 function createService(options?: {
   activeRequestCount?: number;
+  availabilityOverlap?: boolean;
   createdBooking?: BookingRequestRecord;
+  posting?: PostingRecord;
+  rentingOverlap?: boolean;
 }) {
-  const posting = createPostingRecord();
+  const posting = options?.posting ?? createPostingRecord();
   const createdBooking = options?.createdBooking ?? createBookingRequestRecord();
 
   const bookingsRepository = {
@@ -96,7 +100,7 @@ function createService(options?: {
       ...createdBooking,
       status: "awaiting_payment",
     })),
-    hasBlockingAvailabilityOverlap: jest.fn(async () => false),
+    hasBlockingAvailabilityOverlap: jest.fn(async () => options?.availabilityOverlap ?? false),
   } as unknown as BookingsRepository;
 
   const postingsRepository = {
@@ -109,7 +113,7 @@ function createService(options?: {
   } as unknown as PostingsAnalyticsRepository;
 
   const rentingsRepository = {
-    hasOverlap: jest.fn(async () => false),
+    hasOverlap: jest.fn(async () => options?.rentingOverlap ?? false),
   } as unknown as RentingsRepository;
 
   const service = new BookingsService(
@@ -133,6 +137,9 @@ function createService(options?: {
     postingsRepository: postingsRepository as unknown as {
       findById: jest.Mock;
       enqueueSearchSync: jest.Mock;
+    },
+    rentingsRepository: rentingsRepository as unknown as {
+      hasOverlap: jest.Mock;
     },
   };
 }
@@ -184,6 +191,90 @@ describe("BookingsService", () => {
       message:
         "You can only keep 2 active booking requests for this posting at a time. Please update or complete an existing request before creating another.",
     });
+  });
+
+  it("returns a bookable quote using the same pricing and duration calculation as booking creation", async () => {
+    const { service, bookingsRepository, rentingsRepository } = createService();
+
+    const result = await service.quote({
+      postingId: "posting-1",
+      renterId: "renter-1",
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      guestCount: 2,
+    });
+
+    expect(result).toMatchObject({
+      postingId: "posting-1",
+      bookable: true,
+      durationDays: 3,
+      pricingCurrency: "CAD",
+      dailyPriceAmount: 120,
+      estimatedTotal: 360,
+      maxBookingDurationDays: 30,
+      failureReasons: [],
+    });
+    expect(rentingsRepository.hasOverlap).toHaveBeenCalledTimes(1);
+    expect(bookingsRepository.hasBlockingAvailabilityOverlap).toHaveBeenCalledTimes(1);
+    expect(bookingsRepository.countActiveRequestsForRenterPosting).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns quote failure reasons from heavyweight booking validation", async () => {
+    const { service } = createService({
+      activeRequestCount: 2,
+      availabilityOverlap: true,
+      rentingOverlap: true,
+      posting: createPostingRecord({
+        maxBookingDurationDays: 2,
+        effectiveMaxBookingDurationDays: 2,
+      }),
+    });
+
+    const result = await service.quote({
+      postingId: "posting-1",
+      renterId: "renter-1",
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      guestCount: 2,
+    });
+
+    expect(result.bookable).toBe(false);
+    expect(result.durationDays).toBe(3);
+    expect(result.estimatedTotal).toBe(360);
+    expect(result.failureReasons.map((reason) => reason.code)).toEqual([
+      "max_duration_exceeded",
+      "renting_overlap",
+      "availability_block_overlap",
+      "active_request_limit_exceeded",
+    ]);
+  });
+
+  it("runs heavyweight validation before rejecting booking creation", async () => {
+    const { service, bookingsRepository, rentingsRepository } = createService({
+      posting: createPostingRecord({
+        maxBookingDurationDays: 2,
+        effectiveMaxBookingDurationDays: 2,
+      }),
+    });
+
+    await expect(
+      service.create({
+        postingId: "posting-1",
+        renterId: "renter-1",
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+        guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+      }),
+    ).rejects.toMatchObject<Partial<BadRequestError>>({
+      message: "Booking duration cannot exceed 2 days.",
+    });
+
+    expect(rentingsRepository.hasOverlap).toHaveBeenCalledTimes(1);
+    expect(bookingsRepository.hasBlockingAvailabilityOverlap).toHaveBeenCalledTimes(1);
+    expect(bookingsRepository.countActiveRequestsForRenterPosting).toHaveBeenCalledTimes(1);
+    expect(bookingsRepository.create).not.toHaveBeenCalled();
   });
 
   it("persists booking contact info as part of the request snapshot", async () => {

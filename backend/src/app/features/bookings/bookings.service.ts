@@ -2,6 +2,9 @@ import BadRequestError from "@/errors/http/bad-request.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type {
+  BookingQuoteFailureReason,
+  BookingQuoteInput,
+  BookingQuoteResult,
   BookingRequestRecord,
   BookingRequestsListResult,
   CreateBookingRequestInput,
@@ -26,6 +29,27 @@ import type { RentingsRepository } from "@/features/rentings/rentings.repository
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
+interface NormalizedBookingRequestInput {
+  startAt: Date;
+  endAt: Date;
+  durationDays: number;
+  guestCount: number;
+  note: string | null;
+}
+
+interface NormalizedCreateBookingRequestInput extends NormalizedBookingRequestInput {
+  contactName: string;
+  contactEmail: string;
+  contactPhoneNumber: string | null;
+}
+
+interface BookingRequestValidationResult {
+  posting: PostingRecord;
+  normalized: NormalizedBookingRequestInput | null;
+  maxBookingDurationDays: number;
+  failureReasons: BookingQuoteFailureReason[];
+}
+
 export class BookingsService {
   constructor(
     private readonly bookingsRepository: BookingsRepository,
@@ -35,16 +59,10 @@ export class BookingsService {
   ) {}
 
   async create(input: CreateBookingRequestInput): Promise<BookingRequestRecord> {
-    const posting = await this.requireBookablePosting(input.postingId);
+    const validation = await this.validateBookingRequest(input);
+    this.assertBookingRequestValidationPassed(validation);
 
-    if (posting.ownerId === input.renterId) {
-      throw new ForbiddenError("You cannot create a booking request for your own posting.");
-    }
-
-    const normalized = this.normalizeCreateInput(input, posting);
-    await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
-    await this.assertNoBlockingAvailabilityOverlap(posting.id, normalized.startAt, normalized.endAt);
-    await this.assertWithinPostingRequestCap(posting.id, input.renterId);
+    const { posting, normalized } = validation;
 
     const created = await this.bookingsRepository.create({
       postingId: posting.id,
@@ -54,9 +72,9 @@ export class BookingsService {
       endAt: normalized.endAt,
       durationDays: normalized.durationDays,
       guestCount: normalized.guestCount,
-      contactName: normalized.contactName,
-      contactEmail: normalized.contactEmail,
-      contactPhoneNumber: normalized.contactPhoneNumber,
+      contactName: input.contactName.trim(),
+      contactEmail: input.contactEmail.trim().toLowerCase(),
+      contactPhoneNumber: input.contactPhoneNumber?.trim() || null,
       note: normalized.note,
       pricingCurrency: posting.pricing.currency,
       pricingSnapshot: posting.pricing,
@@ -74,6 +92,25 @@ export class BookingsService {
     await this.postingsRepository.enqueueSearchSync(created.postingId);
 
     return created;
+  }
+
+  async quote(input: BookingQuoteInput): Promise<BookingQuoteResult> {
+    const validation = await this.validateBookingRequest(input);
+    const { posting, normalized } = validation;
+    const estimatedTotal = normalized
+      ? posting.pricing.daily.amount * normalized.durationDays
+      : null;
+
+    return {
+      postingId: posting.id,
+      bookable: validation.failureReasons.length === 0,
+      durationDays: normalized?.durationDays ?? null,
+      pricingCurrency: posting.pricing.currency,
+      dailyPriceAmount: posting.pricing.daily.amount,
+      estimatedTotal,
+      maxBookingDurationDays: validation.maxBookingDurationDays,
+      failureReasons: validation.failureReasons,
+    };
   }
 
   async listMine(input: ListRenterBookingRequestsInput): Promise<BookingRequestsListResult> {
@@ -240,6 +277,16 @@ export class BookingsService {
     return posting;
   }
 
+  private async requirePosting(postingId: string): Promise<PostingRecord> {
+    const posting = await this.postingsRepository.findById(postingId);
+
+    if (!posting) {
+      throw new ResourceNotFoundError("Posting could not be found.");
+    }
+
+    return posting;
+  }
+
   private async requireOwnerBookingRequest(
     bookingRequestId: string,
     ownerId: string,
@@ -257,7 +304,10 @@ export class BookingsService {
     return bookingRequest;
   }
 
-  private normalizeCreateInput(input: CreateBookingRequestInput, posting: PostingRecord) {
+  private normalizeCreateInput(
+    input: CreateBookingRequestInput,
+    posting: PostingRecord,
+  ): NormalizedCreateBookingRequestInput {
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
 
@@ -312,6 +362,190 @@ export class BookingsService {
       note,
       durationDays,
     };
+  }
+
+  private normalizeCreateInputForQuote(
+    input: BookingQuoteInput,
+    maxBookingDurationDays: number,
+  ): {
+    normalized: NormalizedBookingRequestInput | null;
+    failureReasons: BookingQuoteFailureReason[];
+  } {
+    const failureReasons: BookingQuoteFailureReason[] = [];
+    const startAt = new Date(input.startAt);
+    const endAt = new Date(input.endAt);
+
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || startAt >= endAt) {
+      failureReasons.push({
+        code: "invalid_dates",
+        field: "startAt",
+        message: "Booking request dates must define a valid, non-empty range.",
+      });
+      return {
+        normalized: null,
+        failureReasons,
+      };
+    }
+
+    const durationDays = Math.ceil((endAt.getTime() - startAt.getTime()) / MILLISECONDS_PER_DAY);
+
+    if (durationDays < 1) {
+      failureReasons.push({
+        code: "invalid_dates",
+        field: "startAt",
+        message: "Booking requests must be at least one day long.",
+      });
+    }
+
+    if (durationDays > maxBookingDurationDays) {
+      failureReasons.push({
+        code: "max_duration_exceeded",
+        field: "endAt",
+        message: `Booking duration cannot exceed ${maxBookingDurationDays} day${maxBookingDurationDays === 1 ? "" : "s"}.`,
+        details: {
+          durationDays,
+          maxBookingDurationDays,
+        },
+      });
+    }
+
+    if (!Number.isInteger(input.guestCount) || input.guestCount < 1) {
+      failureReasons.push({
+        code: "invalid_guest_count",
+        field: "guestCount",
+        message: "Guest count must be a positive integer.",
+      });
+    } else if (input.guestCount > MAX_BOOKING_GUEST_COUNT) {
+      failureReasons.push({
+        code: "guest_count_exceeded",
+        field: "guestCount",
+        message: `Guest count cannot exceed ${MAX_BOOKING_GUEST_COUNT}.`,
+        details: {
+          maxGuestCount: MAX_BOOKING_GUEST_COUNT,
+        },
+      });
+    }
+
+    const note = input.note?.trim() || null;
+
+    if (note && note.length > MAX_BOOKING_NOTE_LENGTH) {
+      failureReasons.push({
+        code: "note_too_long",
+        field: "note",
+        message: `Booking note cannot exceed ${MAX_BOOKING_NOTE_LENGTH} characters.`,
+        details: {
+          maxLength: MAX_BOOKING_NOTE_LENGTH,
+        },
+      });
+    }
+
+    return {
+      normalized: {
+        startAt,
+        endAt,
+        guestCount: input.guestCount,
+        note,
+        durationDays,
+      },
+      failureReasons,
+    };
+  }
+
+  private async validateBookingRequest(
+    input: BookingQuoteInput,
+  ): Promise<BookingRequestValidationResult> {
+    const posting = await this.requirePosting(input.postingId);
+    const maxBookingDurationDays =
+      posting.maxBookingDurationDays ?? BOOKING_DEFAULTS.defaultMaxBookingDurationDays;
+    const failureReasons: BookingQuoteFailureReason[] = [];
+
+    if (posting.status !== "published" || posting.archivedAt) {
+      failureReasons.push({
+        code: "posting_unavailable",
+        message: "Booking requests are only allowed for published postings.",
+      });
+    }
+
+    if (posting.ownerId === input.renterId) {
+      failureReasons.push({
+        code: "own_posting",
+        message: "You cannot create a booking request for your own posting.",
+      });
+    }
+
+    const normalizedResult = this.normalizeCreateInputForQuote(input, maxBookingDurationDays);
+    failureReasons.push(...normalizedResult.failureReasons);
+
+    if (normalizedResult.normalized) {
+      const [rentingOverlap, availabilityOverlap, activeRequestCount] = await Promise.all([
+        this.rentingsRepository.hasOverlap(
+          posting.id,
+          normalizedResult.normalized.startAt,
+          normalizedResult.normalized.endAt,
+        ),
+        this.bookingsRepository.hasBlockingAvailabilityOverlap({
+          postingId: posting.id,
+          startAt: normalizedResult.normalized.startAt,
+          endAt: normalizedResult.normalized.endAt,
+          excludeBookingRequestId: undefined,
+        }),
+        this.bookingsRepository.countActiveRequestsForRenterPosting({
+          postingId: posting.id,
+          renterId: input.renterId,
+          excludeBookingRequestId: undefined,
+        }),
+      ]);
+
+      if (rentingOverlap) {
+        failureReasons.push({
+          code: "renting_overlap",
+          message: "The requested dates are already reserved by an existing renting.",
+        });
+      }
+
+      if (availabilityOverlap) {
+        failureReasons.push({
+          code: "availability_block_overlap",
+          message: "The requested dates overlap with existing availability blocks.",
+        });
+      }
+
+      if (activeRequestCount >= MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING) {
+        failureReasons.push({
+          code: "active_request_limit_exceeded",
+          message: `You can only keep ${MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING} active booking requests for this posting at a time. Please update or complete an existing request before creating another.`,
+          details: {
+            activeRequestCount,
+            maxActiveRequests: MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING,
+          },
+        });
+      }
+    }
+
+    return {
+      posting,
+      normalized: normalizedResult.normalized,
+      maxBookingDurationDays,
+      failureReasons,
+    };
+  }
+
+  private assertBookingRequestValidationPassed(
+    validation: BookingRequestValidationResult,
+  ): asserts validation is BookingRequestValidationResult & {
+    normalized: NormalizedBookingRequestInput;
+  } {
+    const firstFailure = validation.failureReasons[0];
+
+    if (!firstFailure || !validation.normalized) {
+      return;
+    }
+
+    if (firstFailure.code === "own_posting") {
+      throw new ForbiddenError(firstFailure.message);
+    }
+
+    throw new BadRequestError(firstFailure.message);
   }
 
   private assertCanDecide(

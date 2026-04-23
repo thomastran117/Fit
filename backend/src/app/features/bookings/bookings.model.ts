@@ -79,6 +79,13 @@ export const createBookingRequestSchema = z.object({
 
 export const updateBookingRequestSchema = createBookingRequestSchema;
 
+export const bookingQuoteSchema = createBookingRequestSchema.pick({
+  startAt: true,
+  endAt: true,
+  guestCount: true,
+  note: true,
+});
+
 export const decideBookingRequestSchema = z.object({
   note: nullableTrimmedStringSchema.pipe(
     z.string().trim().max(MAX_BOOKING_DECISION_NOTE_LENGTH).nullable().optional(),
@@ -93,6 +100,7 @@ export const listBookingRequestsQuerySchema = z.object({
 
 export type BookingRequestStatus = z.infer<typeof bookingRequestStatusSchema>;
 export type CreateBookingRequestBody = z.infer<typeof createBookingRequestSchema>;
+export type BookingQuoteBody = z.infer<typeof bookingQuoteSchema>;
 export type UpdateBookingRequestBody = z.infer<typeof updateBookingRequestSchema>;
 export type DecideBookingRequestBody = z.infer<typeof decideBookingRequestSchema>;
 export type ListBookingRequestsQuery = z.infer<typeof listBookingRequestsQuerySchema>;
@@ -165,6 +173,45 @@ export interface CreateBookingRequestInput {
   contactEmail: string;
   contactPhoneNumber?: string | null;
   note?: string | null;
+}
+
+export interface BookingQuoteInput {
+  postingId: string;
+  renterId: string;
+  startAt: string;
+  endAt: string;
+  guestCount: number;
+  note?: string | null;
+}
+
+export type BookingQuoteFailureCode =
+  | "own_posting"
+  | "posting_unavailable"
+  | "invalid_dates"
+  | "max_duration_exceeded"
+  | "invalid_guest_count"
+  | "guest_count_exceeded"
+  | "note_too_long"
+  | "renting_overlap"
+  | "availability_block_overlap"
+  | "active_request_limit_exceeded";
+
+export interface BookingQuoteFailureReason {
+  code: BookingQuoteFailureCode;
+  message: string;
+  field?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface BookingQuoteResult {
+  postingId: string;
+  bookable: boolean;
+  durationDays: number | null;
+  pricingCurrency: string;
+  dailyPriceAmount: number;
+  estimatedTotal: number | null;
+  maxBookingDurationDays: number;
+  failureReasons: BookingQuoteFailureReason[];
 }
 
 export interface DecideBookingRequestInput {
