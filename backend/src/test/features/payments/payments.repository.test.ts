@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { PaymentsRepository } from "@/features/payments/payments.repository";
 
+const FUTURE_HOLD_EXPIRES_AT = new Date("2099-04-21T00:00:00.000Z");
+
 function createBookingPersistence(overrides?: Partial<Record<string, unknown>>) {
   return {
     id: "booking-1",
@@ -21,7 +23,7 @@ function createBookingPersistence(overrides?: Partial<Record<string, unknown>>) 
     },
     dailyPriceAmount: new Prisma.Decimal(120),
     estimatedTotal: new Prisma.Decimal(400),
-    holdExpiresAt: new Date("2026-04-21T00:00:00.000Z"),
+    holdExpiresAt: FUTURE_HOLD_EXPIRES_AT,
     paymentReconciliationRequired: false,
     convertedAt: null,
     holdBlockId: null,
@@ -61,7 +63,7 @@ function createPaymentPersistence(overrides?: Partial<Record<string, unknown>>) 
       status: "awaiting_payment",
       startAt: new Date("2026-05-01T00:00:00.000Z"),
       endAt: new Date("2026-05-04T00:00:00.000Z"),
-      holdExpiresAt: new Date("2026-04-21T00:00:00.000Z"),
+      holdExpiresAt: FUTURE_HOLD_EXPIRES_AT,
       paymentReconciliationRequired: false,
       holdBlockId: null,
     },

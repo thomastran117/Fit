@@ -127,6 +127,18 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     "/auth/oauth/apple",
     resolveHandler<AuthController>(containerTokens.authController, "appleAuthenticate"),
   );
+  app.get(
+    "/auth/oauth/providers",
+    resolveHandler<AuthController>(containerTokens.authController, "linkedOAuthProviders"),
+  );
+  app.post(
+    "/auth/oauth/:provider/link",
+    resolveHandler<AuthController>(containerTokens.authController, "linkOAuthProvider"),
+  );
+  app.delete(
+    "/auth/oauth/:provider",
+    resolveHandler<AuthController>(containerTokens.authController, "unlinkOAuthProvider"),
+  );
   app.post(
     "/auth/refresh",
     resolveHandler<AuthController>(containerTokens.authController, "refresh"),

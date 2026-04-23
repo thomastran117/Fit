@@ -7,6 +7,8 @@ import {
   type AuthEmailAcceptedResult,
   type AuthResponseBody,
   type ForgotPasswordAcceptedResult,
+  type LinkedOAuthProvidersResult,
+  type OAuthProvider,
   type SignupVerificationPendingResult,
 } from "@/lib/auth/types";
 
@@ -124,28 +126,37 @@ async function postAuthenticatedJson<TResponse, TBody extends object = object>(
   path: string,
   body: TBody,
 ): Promise<TResponse> {
-  return postAuthenticatedJsonWithRetry(path, body, true);
+  return authenticatedJsonWithRetry(path, "POST", body, true);
 }
 
-async function postAuthenticatedJsonWithRetry<TResponse, TBody extends object = object>(
+async function getAuthenticatedJson<TResponse>(path: string): Promise<TResponse> {
+  return authenticatedJsonWithRetry<TResponse>(path, "GET", undefined, true);
+}
+
+async function deleteAuthenticatedJson<TResponse>(path: string): Promise<TResponse> {
+  return authenticatedJsonWithRetry<TResponse>(path, "DELETE", undefined, true);
+}
+
+async function authenticatedJsonWithRetry<TResponse, TBody extends object = object>(
   path: string,
-  body: TBody,
+  method: "GET" | "POST" | "DELETE",
+  body: TBody | undefined,
   allowRefreshRetry: boolean,
 ): Promise<TResponse> {
   const deviceId = getDeviceId();
   const devicePlatform = getDevicePlatform();
   const session = readStoredSession();
   const response = await fetch(`${publicEnv.apiBaseUrl}${path}`, {
-    method: "POST",
+    method,
     headers: {
-      "content-type": "application/json",
+      ...(body ? { "content-type": "application/json" } : {}),
       accept: "application/json",
       ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {}),
       ...(deviceId ? { "x-device-id": deviceId } : {}),
       ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
     },
     credentials: "include",
-    body: JSON.stringify(body),
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
   const payload = await readJson(response);
@@ -154,7 +165,7 @@ async function postAuthenticatedJsonWithRetry<TResponse, TBody extends object = 
     const refreshedSession = await refreshStoredSession();
 
     if (refreshedSession) {
-      return postAuthenticatedJsonWithRetry(path, body, false);
+      return authenticatedJsonWithRetry(path, method, body, false);
     }
   }
 
@@ -237,6 +248,21 @@ export const authApi = {
       ...input,
       deviceId: input.deviceId ?? getDeviceId(),
     });
+  },
+  linkOAuthProvider(
+    provider: Exclude<OAuthProvider, "apple">,
+    input: OAuthAuthenticateInput,
+  ): Promise<LinkedOAuthProvidersResult> {
+    return postAuthenticatedJson<LinkedOAuthProvidersResult>(`/auth/oauth/${provider}/link`, {
+      ...input,
+      deviceId: input.deviceId ?? getDeviceId(),
+    });
+  },
+  linkedOAuthProviders(): Promise<LinkedOAuthProvidersResult> {
+    return getAuthenticatedJson<LinkedOAuthProvidersResult>("/auth/oauth/providers");
+  },
+  unlinkOAuthProvider(provider: OAuthProvider): Promise<LinkedOAuthProvidersResult> {
+    return deleteAuthenticatedJson<LinkedOAuthProvidersResult>(`/auth/oauth/${provider}`);
   },
   signup(input: SignupInput): Promise<SignupVerificationPendingResult> {
     return postJson<SignupVerificationPendingResult>("/auth/local/signup", {

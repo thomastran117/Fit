@@ -16,12 +16,14 @@ import type {
   ChangePasswordRequestBody,
   ForgotPasswordInput,
   ForgotPasswordRequestBody,
+  LinkOAuthProviderInput,
   LocalAuthenticateInput,
   LocalAuthenticateRequestBody,
   LocalSignupInput,
   LocalSignupRequestBody,
   OAuthAuthenticateInput,
   OAuthAuthenticateRequestBody,
+  OAuthProvider,
   RefreshInput,
   RefreshRequestBody,
   ResetPasswordInput,
@@ -35,6 +37,7 @@ import type {
   ResendVerificationEmailInput,
   ResendVerificationEmailRequestBody,
   SignupVerificationPendingResult,
+  UnlinkOAuthProviderInput,
   UnlockLocalLoginInput,
   UnlockLocalLoginRequestBody,
   VerifyEmailInput,
@@ -46,6 +49,7 @@ import {
   localAuthenticateRequestSchema,
   localSignupRequestSchema,
   oauthAuthenticateRequestSchema,
+  oauthProviderSchema,
   refreshRequestSchema,
   removeKnownDeviceRequestSchema,
   resendForgotPasswordRequestSchema,
@@ -174,6 +178,31 @@ export class AuthController {
     return this.json(context, result);
   };
 
+  linkOAuthProvider = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
+    const input = await parseRequestBody(context, oauthAuthenticateRequestSchema);
+    const result = await this.authService.linkOAuthProvider(
+      this.toLinkOAuthProviderInput(context, input),
+    );
+    return context.json(result);
+  };
+
+  linkedOAuthProviders = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
+    const result = await this.authService.linkedOAuthProviders({
+      userId: context.get("auth").sub,
+    });
+    return context.json(result);
+  };
+
+  unlinkOAuthProvider = async (context: Context<AppBindings>): Promise<Response> => {
+    await requireJwtAuth(context);
+    const result = await this.authService.unlinkOAuthProvider(
+      this.toUnlinkOAuthProviderInput(context),
+    );
+    return context.json(result);
+  };
+
   refresh = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, refreshRequestSchema);
     const result = await this.authService.refresh(this.toRefreshInput(context, input));
@@ -287,6 +316,29 @@ export class AuthController {
       lastName: input.lastName,
       deviceId: this.resolveDeviceId(context, input.deviceId),
     };
+  }
+
+  private toLinkOAuthProviderInput(
+    context: Context<AppBindings>,
+    input: OAuthAuthenticateRequestBody,
+  ): LinkOAuthProviderInput {
+    return {
+      ...this.toOAuthAuthenticateInput(context, input),
+      provider: this.requireOAuthProviderParam(context),
+      userId: context.get("auth").sub,
+    };
+  }
+
+  private toUnlinkOAuthProviderInput(context: Context<AppBindings>): UnlinkOAuthProviderInput {
+    return {
+      provider: this.requireOAuthProviderParam(context),
+      userId: context.get("auth").sub,
+    };
+  }
+
+  private requireOAuthProviderParam(context: Context<AppBindings>): OAuthProvider {
+    const provider = context.req.param("provider");
+    return oauthProviderSchema.parse(provider);
   }
 
   private resolveDeviceId(context: Context<AppBindings>, deviceId?: string): string | undefined {
