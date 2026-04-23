@@ -1,7 +1,12 @@
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
-import type { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";
 import { ElasticsearchUnavailableError } from "@/configuration/resources/elasticsearch";
+
+interface CapturedSql {
+  sql: string;
+  values: unknown[];
+}
 
 function createDocument(
   overrides: Partial<PostingSearchDocument> = {},
@@ -50,6 +55,69 @@ function createDocument(
   };
 }
 
+function createElasticsearchSearchService() {
+  const batchFindPublic = jest.fn(async () => ({
+    postings: [],
+    missingIds: [],
+  }));
+  const repository = {
+    batchFindPublic,
+    searchPublicFallback: jest.fn(),
+  } as unknown as PostingsRepository;
+  const requestJson = jest.fn(async () => ({
+    hits: {
+      total: {
+        value: 0,
+      },
+      hits: [],
+    },
+  }));
+  const service = new PostingsSearchService(repository, {
+    getPostingsIndexName: () => "postings-test",
+    requestJson,
+    isEnabled: () => true,
+  } as never);
+
+  return {
+    batchFindPublic,
+    requestJson,
+    service,
+  };
+}
+
+function readSearchRequest(requestJson: jest.Mock): {
+  query: {
+    bool: {
+      filter: unknown[];
+      must_not?: unknown[];
+    };
+  };
+  sort: unknown[];
+} {
+  return JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string);
+}
+
+function createFallbackRepository() {
+  const queries: CapturedSql[] = [];
+  let callCount = 0;
+  const $queryRaw = jest.fn(async (query: { sql: string; values: unknown[] }) => {
+    queries.push({
+      sql: query.sql,
+      values: query.values,
+    });
+    callCount += 1;
+    return callCount === 1 ? [{ total: 0 }] : [];
+  });
+  const repository = new PostingsRepository({
+    $queryRaw,
+  } as never);
+
+  return {
+    queries,
+    repository,
+  };
+}
+
 describe("PostingsSearchService", () => {
   it("indexes family, subtype, and searchable attributes into Elasticsearch documents", async () => {
     const repository = {} as PostingsRepository;
@@ -82,27 +150,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds family and subtype filters to Elasticsearch search requests", async () => {
-    const batchFindPublic = jest.fn(async () => ({
-      postings: [],
-      missingIds: [],
-    }));
-    const repository = {
-      batchFindPublic,
-      searchPublicFallback: jest.fn(),
-    } as unknown as PostingsRepository;
-    const requestJson = jest.fn(async () => ({
-      hits: {
-        total: {
-          value: 0,
-        },
-        hits: [],
-      },
-    }));
-    const service = new PostingsSearchService(repository, {
-      getPostingsIndexName: () => "postings-test",
-      requestJson,
-      isEnabled: () => true,
-    } as never);
+    const { batchFindPublic, requestJson, service } = createElasticsearchSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -113,13 +161,7 @@ describe("PostingsSearchService", () => {
       sort: "relevance",
     });
 
-    const body = JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string) as {
-      query: {
-        bool: {
-          filter: unknown[];
-        };
-      };
-    };
+    const body = readSearchRequest(requestJson);
 
     expect(body.query.bool.filter).toEqual(
       expect.arrayContaining([
@@ -140,27 +182,100 @@ describe("PostingsSearchService", () => {
     });
   });
 
-  it("excludes overlapping blocked ranges when availability search is provided", async () => {
-    const repository = {
-      batchFindPublic: jest.fn(async () => ({
-        postings: [],
-        missingIds: [],
-      })),
-      searchPublicFallback: jest.fn(),
-    } as unknown as PostingsRepository;
-    const requestJson = jest.fn(async () => ({
-      hits: {
-        total: {
-          value: 0,
+  it("requires every requested tag in Elasticsearch search requests", async () => {
+    const { requestJson, service } = createElasticsearchSearchService();
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 20,
+      tags: ["loft", "workspace"],
+      sort: "relevance",
+    });
+
+    const body = readSearchRequest(requestJson);
+
+    expect(body.query.bool.filter).toEqual(
+      expect.arrayContaining([
+        {
+          bool: {
+            filter: [
+              {
+                term: {
+                  tags: "loft",
+                },
+              },
+              {
+                term: {
+                  tags: "workspace",
+                },
+              },
+            ],
+          },
         },
-        hits: [],
+      ]),
+    );
+  });
+
+  it("adds price, geo radius, and nearest sort clauses to Elasticsearch search requests", async () => {
+    const { requestJson, service } = createElasticsearchSearchService();
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 20,
+      minDailyPrice: 100,
+      maxDailyPrice: 200,
+      geo: {
+        latitude: 43.6532,
+        longitude: -79.3832,
+        radiusKm: 12,
       },
-    }));
-    const service = new PostingsSearchService(repository, {
-      getPostingsIndexName: () => "postings-test",
-      requestJson,
-      isEnabled: () => true,
-    } as never);
+      sort: "nearest",
+    });
+
+    const body = readSearchRequest(requestJson);
+
+    expect(body.query.bool.filter).toEqual(
+      expect.arrayContaining([
+        {
+          range: {
+            dailyPriceAmount: {
+              gte: 100,
+              lte: 200,
+            },
+          },
+        },
+        {
+          geo_distance: {
+            distance: "12km",
+            geoPoint: {
+              lat: 43.6532,
+              lon: -79.3832,
+            },
+          },
+        },
+      ]),
+    );
+    expect(body.sort).toEqual([
+      {
+        _geo_distance: {
+          geoPoint: {
+            lat: 43.6532,
+            lon: -79.3832,
+          },
+          order: "asc",
+          unit: "km",
+        },
+      },
+      {
+        publishedAt: {
+          order: "desc",
+        },
+      },
+    ]);
+  });
+
+  it("excludes overlapping blocked ranges when availability search is provided", async () => {
+    const { requestJson, service } = createElasticsearchSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -172,13 +287,7 @@ describe("PostingsSearchService", () => {
       },
     });
 
-    const body = JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string) as {
-      query: {
-        bool: {
-          must_not: unknown[];
-        };
-      };
-    };
+    const body = readSearchRequest(requestJson);
 
     expect(body.query.bool.must_not).toEqual(
       expect.arrayContaining([
@@ -250,5 +359,74 @@ describe("PostingsSearchService", () => {
     expect(batchFindPublic).toHaveBeenCalledWith({
       ids: ["posting-1"],
     });
+  });
+});
+
+describe("PostingsRepository.searchPublicFallback", () => {
+  it("applies equivalent filters for tags, price, geo radius, availability, and nearest sorting", async () => {
+    const { queries, repository } = createFallbackRepository();
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      family: "place",
+      subtype: "entire_place",
+      tags: ["loft", "workspace"],
+      availabilityStatus: "available",
+      minDailyPrice: 100,
+      maxDailyPrice: 200,
+      geo: {
+        latitude: 43.6532,
+        longitude: -79.3832,
+        radiusKm: 12,
+      },
+      availabilityWindow: {
+        startAt: "2026-04-21T00:00:00.000Z",
+        endAt: "2026-04-24T00:00:00.000Z",
+      },
+      sort: "nearest",
+    });
+
+    const idQuery = queries[1]!;
+
+    expect((idQuery.sql.match(/JSON_SEARCH\(tags, 'one', \?\) IS NOT NULL/g) ?? []).length).toBe(2);
+    expect(idQuery.sql).toContain("family = ?");
+    expect(idQuery.sql).toContain("subtype = ?");
+    expect(idQuery.sql).toContain("availability_status = ?");
+    expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) >= ?");
+    expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) <= ?");
+    expect(idQuery.sql).toContain("pab.start_at < ?");
+    expect(idQuery.sql).toContain("br.start_at < ?");
+    expect(idQuery.sql).toContain("r.start_at < ?");
+    expect(idQuery.sql).toContain("6371 * ACOS");
+    expect(idQuery.sql).toContain("<= ?");
+    expect(idQuery.sql).toContain("ORDER BY (");
+    expect(idQuery.sql).toContain("ASC, published_at DESC, created_at DESC");
+    expect(idQuery.values).toEqual(
+      expect.arrayContaining(["place", "entire_place", "loft", "workspace", "available", 100, 200, 12]),
+    );
+  });
+
+  it("uses field-priority relevance ordering for keyword fallback searches", async () => {
+    const { queries, repository } = createFallbackRepository();
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      query: "loft",
+      sort: "relevance",
+    });
+
+    const idQuery = queries[1]!;
+
+    expect(idQuery.sql).toContain("ORDER BY (");
+    expect(idQuery.sql).toContain("CASE WHEN name LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN CAST(tags AS CHAR) LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN description LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN city LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN region LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN country LIKE ?");
+    expect(idQuery.sql).toContain(") DESC, published_at DESC, created_at DESC");
+    expect(idQuery.values.filter((value) => value === "%loft%")).toHaveLength(12);
   });
 });
