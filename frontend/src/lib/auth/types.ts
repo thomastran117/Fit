@@ -26,6 +26,8 @@ export interface ForgotPasswordAcceptedResult {
   accepted: true;
 }
 
+export type AuthEmailAcceptedResult = ForgotPasswordAcceptedResult;
+
 export interface ApiErrorResponse {
   error: string;
   code: string;

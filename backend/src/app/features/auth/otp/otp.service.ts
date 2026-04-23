@@ -95,6 +95,7 @@ export class OtpService {
     const record = await this.cache.getJson<CachedOtpRecord>(otpKey);
 
     if (!record) {
+      this.logSuspiciousVerificationAttempt(input, "missing-or-expired");
       throw new BadRequestError("Verification code is invalid or has expired.");
     }
 
@@ -106,6 +107,7 @@ export class OtpService {
 
       if (attemptsRemaining <= 0 || ttl <= 0) {
         await this.cache.delete(otpKey);
+        this.logSuspiciousVerificationAttempt(input, "attempts-exhausted");
       } else {
         await this.cache.setJson(
           otpKey,
@@ -137,5 +139,23 @@ export class OtpService {
 
   private getCooldownKey(input: { purpose: string; subject: string }): string {
     return `${this.getOtpKey(input)}:cooldown`;
+  }
+
+  private logSuspiciousVerificationAttempt(input: VerifyOtpInput, reason: string): void {
+    console.warn("Suspicious OTP verification activity", {
+      purpose: input.purpose,
+      subject: this.redactSubject(input.subject),
+      reason,
+    });
+  }
+
+  private redactSubject(subject: string): string {
+    const [localPart, domain] = subject.toLowerCase().split("@");
+
+    if (!localPart || !domain) {
+      return "redacted";
+    }
+
+    return `${localPart.slice(0, 1)}***@${domain}`;
   }
 }

@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
+import TooManyRequestError from "@/errors/http/too-many-request.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { AuthService } from "@/features/auth/auth.service";
 import type { AuthUserRecord } from "@/features/auth/auth.model";
@@ -113,6 +114,7 @@ function createService(overrides?: {
     lastName?: string;
   }>;
 }) {
+  const cacheJsonStore = new Map<string, { value: unknown; ttlSeconds?: number }>();
   const authRepository = {
     findUserByEmail: overrides?.findUserByEmail ?? (async () => null),
     findUserById: overrides?.findUserById ?? (async () => null),
@@ -210,12 +212,19 @@ function createService(overrides?: {
   const microsoftOAuthService = {};
   const appleOAuthService = {};
   const cacheService = {
-    getJson: async () => null,
-    delete: async () => true,
-    setJson: async () => {},
+    getJson: jest.fn(async <TValue>(key: string) => {
+      return (cacheJsonStore.get(key)?.value as TValue | undefined) ?? null;
+    }),
+    delete: jest.fn(async (key: string) => cacheJsonStore.delete(key)),
+    setJson: jest.fn(async (key: string, value: unknown, ttlSeconds?: number) => {
+      cacheJsonStore.set(key, {
+        value,
+        ttlSeconds,
+      });
+    }),
   };
 
-  return new AuthService(
+  const service = new AuthService(
     authRepository as never,
     tokenService as never,
     otpService as never,
@@ -226,6 +235,8 @@ function createService(overrides?: {
     appleOAuthService as never,
     cacheService as never,
   );
+
+  return service;
 }
 
 describe("AuthService", () => {
@@ -251,7 +262,7 @@ describe("AuthService", () => {
     expect(result).toEqual({
       verificationRequired: true,
       email: existingUser.email,
-      alreadyPending: true,
+      alreadyPending: false,
     });
   });
 
@@ -272,7 +283,7 @@ describe("AuthService", () => {
     ).resolves.toEqual({
       verificationRequired: true,
       email: "user@example.com",
-      alreadyPending: true,
+      alreadyPending: false,
     });
   });
 
@@ -287,13 +298,146 @@ describe("AuthService", () => {
 
     await expect(
       service.forgotPassword({
+        client: createClient(),
         email: "missing@example.com",
+        deviceId: "device-1",
       }),
     ).resolves.toEqual({
       accepted: true,
     });
 
     expect(resetEmailSent).toBe(false);
+  });
+
+  it("accepts forgot password requests without revealing OAuth-only accounts", async () => {
+    let resetEmailSent = false;
+    const service = createService({
+      findUserByEmail: async () => ({
+        ...createUser(),
+        passwordHash: "oauth:google:provider-user-1",
+      }),
+      sendPasswordResetEmail: async () => {
+        resetEmailSent = true;
+      },
+    });
+
+    await expect(
+      service.forgotPassword({
+        client: createClient(),
+        email: "oauth@example.com",
+        deviceId: "device-1",
+      }),
+    ).resolves.toEqual({
+      accepted: true,
+    });
+
+    expect(resetEmailSent).toBe(false);
+  });
+
+  it("accepts unknown verification resend requests without sending email", async () => {
+    let verificationEmailSent = false;
+    const service = createService({
+      findUserByEmail: async () => null,
+      sendVerificationEmail: async () => {
+        verificationEmailSent = true;
+      },
+    });
+
+    await expect(
+      service.resendVerificationEmail({
+        client: createClient(),
+        email: "missing@example.com",
+        deviceId: "device-1",
+      }),
+    ).resolves.toEqual({
+      accepted: true,
+    });
+
+    expect(verificationEmailSent).toBe(false);
+  });
+
+  it("accepts verification resend cooldowns without exposing account state", async () => {
+    let verificationEmailSent = false;
+    const service = createService({
+      findUserByEmail: async () => ({
+        ...createUser(),
+        emailVerified: false,
+      }),
+      issueOtp: async () => {
+        throw new TooManyRequestError("A verification code was sent recently.", {
+          retryAfterSeconds: 60,
+        });
+      },
+      sendVerificationEmail: async () => {
+        verificationEmailSent = true;
+      },
+    });
+
+    await expect(
+      service.resendVerificationEmail({
+        client: createClient(),
+        email: "user@example.com",
+        deviceId: "device-1",
+      }),
+    ).resolves.toEqual({
+      accepted: true,
+    });
+
+    expect(verificationEmailSent).toBe(false);
+  });
+
+  it("rate-limits public OTP requests by email before user lookup", async () => {
+    let lookupCount = 0;
+    const service = createService({
+      findUserByEmail: async () => {
+        lookupCount += 1;
+        return null;
+      },
+    });
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await expect(
+        service.resendForgotPassword({
+          client: createClient(),
+          email: "target@example.com",
+          deviceId: "device-1",
+        }),
+      ).resolves.toEqual({
+        accepted: true,
+      });
+    }
+
+    expect(lookupCount).toBe(5);
+  });
+
+  it("rate-limits public OTP requests by IP and device before user lookup", async () => {
+    let lookupCount = 0;
+    const service = createService({
+      findUserByEmail: async () => {
+        lookupCount += 1;
+        return null;
+      },
+    });
+
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      await service.resendForgotPassword({
+        client: createClient(),
+        email: `device-${attempt}@example.com`,
+        deviceId: "shared-device",
+      });
+    }
+
+    expect(lookupCount).toBe(10);
+
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      await service.resendForgotPassword({
+        client: createClient(),
+        email: `ip-${attempt}@example.com`,
+        deviceId: `device-${attempt}`,
+      });
+    }
+
+    expect(lookupCount).toBe(20);
   });
 
   it("rejects refresh when no refresh token is provided", async () => {
@@ -674,11 +818,12 @@ describe("AuthService", () => {
 
     await expect(
       service.resendVerificationEmail({
+        client: createClient(),
         email: "user@example.com",
+        deviceId: "device-1",
       }),
     ).resolves.toEqual({
-      resent: true,
-      email: "user@example.com",
+      accepted: true,
     });
   });
 

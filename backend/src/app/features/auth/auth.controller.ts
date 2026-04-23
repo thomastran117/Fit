@@ -86,14 +86,14 @@ export class AuthController {
   forgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, forgotPasswordRequestSchema);
     await this.verifyCaptcha(context, input.captchaToken);
-    const result = await this.authService.forgotPassword(this.toForgotPasswordInput(input));
+    const result = await this.authService.forgotPassword(this.toForgotPasswordInput(context, input));
     return context.json(result, 202);
   };
 
   resendForgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resendForgotPasswordRequestSchema);
     const result = await this.authService.resendForgotPassword(
-      this.toResendForgotPasswordInput(input),
+      this.toResendForgotPasswordInput(context, input),
     );
     return context.json(result, 202);
   };
@@ -113,7 +113,7 @@ export class AuthController {
   resendVerificationEmail = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resendVerificationEmailRequestSchema);
     const result = await this.authService.resendVerificationEmail(
-      this.toResendVerificationEmailInput(input),
+      this.toResendVerificationEmailInput(context, input),
     );
     return context.json(result, 202);
   };
@@ -136,7 +136,7 @@ export class AuthController {
   resendUnlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resendUnlockLocalLoginRequestSchema);
     const result = await this.authService.resendUnlockLocalLogin(
-      this.toResendUnlockLocalLoginInput(input),
+      this.toResendUnlockLocalLoginInput(context, input),
     );
     return context.json(result, 202);
   };
@@ -306,24 +306,35 @@ export class AuthController {
   }
 
   private toResendVerificationEmailInput(
+    context: Context<AppBindings>,
     input: ResendVerificationEmailRequestBody,
   ): ResendVerificationEmailInput {
     return {
+      client: context.get("client"),
       email: input.email,
+      deviceId: this.resolveDeviceId(context),
     };
   }
 
-  private toForgotPasswordInput(input: ForgotPasswordRequestBody): ForgotPasswordInput {
+  private toForgotPasswordInput(
+    context: Context<AppBindings>,
+    input: ForgotPasswordRequestBody,
+  ): ForgotPasswordInput {
     return {
+      client: context.get("client"),
       email: input.email,
+      deviceId: this.resolveDeviceId(context),
     };
   }
 
   private toResendForgotPasswordInput(
+    context: Context<AppBindings>,
     input: ResendForgotPasswordRequestBody,
   ): ResendForgotPasswordInput {
     return {
+      client: context.get("client"),
       email: input.email,
+      deviceId: this.resolveDeviceId(context),
     };
   }
 
@@ -368,10 +379,13 @@ export class AuthController {
   }
 
   private toResendUnlockLocalLoginInput(
+    context: Context<AppBindings>,
     input: ResendUnlockLocalLoginRequestBody,
   ): ResendUnlockLocalLoginInput {
     return {
+      client: context.get("client"),
       email: input.email,
+      deviceId: this.resolveDeviceId(context),
     };
   }
 

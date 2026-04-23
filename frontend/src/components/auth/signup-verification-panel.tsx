@@ -124,7 +124,7 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
         email: result.email,
       });
 
-      setResentMessage(`A new verification code was sent to ${result.email}.`);
+      setResentMessage("If this email needs verification, a new code is on the way.");
     } catch (error) {
       const failure = getVerificationFailureResult(error);
       setGeneralError(failure.generalError);
@@ -137,13 +137,9 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
   return (
     <div className="space-y-5">
       <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-emerald-900">
-        <p className="text-sm font-semibold">
-          {result.alreadyPending ? "Verification still pending" : "Check your inbox"}
-        </p>
+        <p className="text-sm font-semibold">Check your inbox</p>
         <p className="mt-2 text-sm leading-6">
-          {result.alreadyPending
-            ? `An account for ${result.email} is already waiting for email verification.`
-            : `We sent a verification code to ${result.email}.`}
+          If {result.email} needs verification, we sent a 6-digit code.
         </p>
         <p className="mt-2 text-sm leading-6">
           Verify your email before signing in to your Rentify workspace.
