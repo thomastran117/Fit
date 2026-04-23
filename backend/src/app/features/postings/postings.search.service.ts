@@ -310,8 +310,12 @@ export class PostingsSearchService {
 
     if (input.tags && input.tags.length > 0) {
       filter.push({
-        terms: {
-          tags: input.tags,
+        bool: {
+          filter: input.tags.map((tag) => ({
+            term: {
+              tags: tag,
+            },
+          })),
         },
       });
     }

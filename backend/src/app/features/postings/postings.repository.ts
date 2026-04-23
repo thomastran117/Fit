@@ -454,7 +454,7 @@ export class PostingsRepository extends BaseRepository {
       whereClauses.push(Prisma.sql`${distanceExpression} <= ${input.geo.radiusKm}`);
     }
 
-    const orderBy = this.createFallbackOrderBy(input.sort, distanceExpression);
+    const orderBy = this.createFallbackOrderBy(input, distanceExpression);
 
     const whereSql = Prisma.join(whereClauses, " AND ");
     const [countRows, idRows] = await this.executeAsync(() =>
@@ -987,10 +987,10 @@ export class PostingsRepository extends BaseRepository {
   }
 
   private createFallbackOrderBy(
-    sort: PostingSort,
+    input: SearchPostingsInput,
     distanceExpression: Prisma.Sql | null,
   ): Prisma.Sql {
-    switch (sort) {
+    switch (input.sort) {
       case "dailyPrice":
         return Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) ASC, published_at DESC, created_at DESC`;
       case "nearest":
@@ -1000,8 +1000,22 @@ export class PostingsRepository extends BaseRepository {
 
         return Prisma.sql`published_at DESC, created_at DESC`;
       case "newest":
+        return Prisma.sql`published_at DESC, created_at DESC`;
       case "relevance":
       default:
+        if (input.query) {
+          const likeValue = `%${input.query}%`;
+
+          return Prisma.sql`(
+            CASE WHEN name LIKE ${likeValue} THEN 6 ELSE 0 END
+            + CASE WHEN CAST(tags AS CHAR) LIKE ${likeValue} THEN 3 ELSE 0 END
+            + CASE WHEN description LIKE ${likeValue} THEN 2 ELSE 0 END
+            + CASE WHEN city LIKE ${likeValue} THEN 2 ELSE 0 END
+            + CASE WHEN region LIKE ${likeValue} THEN 1 ELSE 0 END
+            + CASE WHEN country LIKE ${likeValue} THEN 1 ELSE 0 END
+          ) DESC, published_at DESC, created_at DESC`;
+        }
+
         return Prisma.sql`published_at DESC, created_at DESC`;
     }
   }

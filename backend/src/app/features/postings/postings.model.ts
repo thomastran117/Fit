@@ -305,6 +305,9 @@ export interface SearchPostingsInput {
   query?: string;
   family?: PostingFamily;
   subtype?: PostingSubtype;
+  /**
+   * Multi-tag search is conjunctive: a posting must contain every requested tag.
+   */
   tags?: string[];
   availabilityStatus?: PostingAvailabilityStatus;
   minDailyPrice?: number;
