@@ -20,6 +20,10 @@ type RawEnvironmentValues = {
   CLOUDFLARE_TURNSTILE_SECRET_KEY?: string;
   CORS_ALLOWED_ORIGINS?: string;
   CSRF_ALLOWED_ORIGINS?: string;
+  DATABASE_OPERATION_LOGGING_ENABLED?: string;
+  DATABASE_QUERY_LOGGING_ENABLED?: string;
+  DATABASE_SLOW_OPERATION_THRESHOLD_MS?: string;
+  DATABASE_SLOW_QUERY_THRESHOLD_MS?: string;
   DATABASE_URL?: string;
   ELASTICSEARCH_ENABLED?: string;
   ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS?: string;
@@ -101,6 +105,10 @@ export interface AppEnvironment {
   };
   database: {
     url: string;
+    operationLoggingEnabled: boolean;
+    queryLoggingEnabled: boolean;
+    slowOperationThresholdMs: number;
+    slowQueryThresholdMs: number;
   };
   auth: {
     accessTokenSecret: string;
@@ -248,6 +256,10 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "CLOUDFLARE_TURNSTILE_SECRET_KEY",
   "CORS_ALLOWED_ORIGINS",
   "CSRF_ALLOWED_ORIGINS",
+  "DATABASE_OPERATION_LOGGING_ENABLED",
+  "DATABASE_QUERY_LOGGING_ENABLED",
+  "DATABASE_SLOW_OPERATION_THRESHOLD_MS",
+  "DATABASE_SLOW_QUERY_THRESHOLD_MS",
   "DATABASE_URL",
   "ELASTICSEARCH_ENABLED",
   "ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS",
@@ -586,6 +598,28 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
     },
     database: {
       url: databaseUrl,
+      operationLoggingEnabled: parseBoolean(raw.DATABASE_OPERATION_LOGGING_ENABLED, false),
+      queryLoggingEnabled: parseBoolean(raw.DATABASE_QUERY_LOGGING_ENABLED, false),
+      slowOperationThresholdMs: parseNumber(
+        raw,
+        "DATABASE_SLOW_OPERATION_THRESHOLD_MS",
+        nodeEnv === "production" ? 1_000 : 500,
+        errors,
+        {
+          integer: true,
+          min: 0,
+        },
+      ),
+      slowQueryThresholdMs: parseNumber(
+        raw,
+        "DATABASE_SLOW_QUERY_THRESHOLD_MS",
+        nodeEnv === "production" ? 750 : 250,
+        errors,
+        {
+          integer: true,
+          min: 0,
+        },
+      ),
     },
     auth: {
       accessTokenSecret,
@@ -948,6 +982,10 @@ class EnvironmentManager {
 
   getTokenConfig(): AppEnvironment["auth"] {
     return this.get().auth;
+  }
+
+  getDatabaseConfig(): AppEnvironment["database"] {
+    return this.get().database;
   }
 
   getEmailConfig(): AppEnvironment["email"] {

@@ -15,9 +15,20 @@ const captchaConfig = {
   allowedHosts: ["challenges.cloudflare.com"],
 };
 
+const databaseConfig = {
+  operationLoggingEnabled: false,
+  queryLoggingEnabled: false,
+  slowOperationThresholdMs: 500,
+  slowQueryThresholdMs: 250,
+  url: "mysql://user:password@localhost:3306/rent_test",
+};
+
 export const environment = {
   isProduction(): boolean {
     return false;
+  },
+  getDatabaseConfig() {
+    return databaseConfig;
   },
   getTokenConfig() {
     return tokenConfig;
@@ -29,6 +40,7 @@ export const environment = {
     return {
       auth: tokenConfig,
       captcha: captchaConfig,
+      database: databaseConfig,
       server: {
         isProduction: false,
       },
