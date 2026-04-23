@@ -1,9 +1,66 @@
 import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
 
-function getPathWithQuery(request: Request): string {
+const REDACTED_QUERY_VALUE = "[REDACTED]";
+const SENSITIVE_EXACT_QUERY_KEYS = new Set([
+  "access_token",
+  "api_key",
+  "assertion",
+  "auth_code",
+  "authorization",
+  "authorization_code",
+  "client_secret",
+  "code",
+  "code_verifier",
+  "id_token",
+  "jwt",
+  "nonce",
+  "otp",
+  "password",
+  "passcode",
+  "private_key",
+  "public_key",
+  "refresh_token",
+  "saml_request",
+  "saml_response",
+  "session",
+  "session_id",
+  "sig",
+  "signature",
+  "state",
+  "token",
+]);
+const SENSITIVE_QUERY_KEY_PATTERN = /(token|secret|password|passwd|signature|assertion|nonce|otp|jwt|saml)/i;
+
+function normalizeQueryKey(key: string): string {
+  return key
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
+function isSensitiveQueryKey(key: string): boolean {
+  const normalized = normalizeQueryKey(key);
+
+  return SENSITIVE_EXACT_QUERY_KEYS.has(normalized) || SENSITIVE_QUERY_KEY_PATTERN.test(normalized);
+}
+
+function getSanitizedPathWithQuery(request: Request): string {
   const url = new URL(request.url);
-  return `${url.pathname}${url.search}`;
+
+  for (const key of new Set(url.searchParams.keys())) {
+    if (!isSensitiveQueryKey(key)) {
+      continue;
+    }
+
+    url.searchParams.delete(key);
+    url.searchParams.append(key, REDACTED_QUERY_VALUE);
+  }
+
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}`;
 }
 
 const colors = {
@@ -57,7 +114,7 @@ export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (contex
     const outputFormat = context.get("outputFormat");
 
     const method = context.req.method;
-    const path = getPathWithQuery(context.req.raw);
+    const path = getSanitizedPathWithQuery(context.req.raw);
     const status = context.res.status;
 
     const methodColor = getMethodColor(method);
