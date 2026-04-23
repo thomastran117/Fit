@@ -12,6 +12,7 @@ import type {
   ListOwnerPostingsResult,
   PublicPostingRecord,
   PostingAttributeValue,
+  PostingAvailabilityBlockInput,
   PostingAvailabilityBlockRecord,
   PostingAvailabilityStatus,
   PostingPhotoRecord,
@@ -174,6 +175,226 @@ export class PostingsRepository extends BaseRepository {
         throw error;
       }
     });
+  }
+
+  async listOwnerAvailabilityBlocks(postingId: string): Promise<PostingAvailabilityBlockRecord[]> {
+    const blocks = await this.executeAsync(() =>
+      this.prisma.postingAvailabilityBlock.findMany({
+        where: {
+          postingId,
+          source: "owner",
+        },
+        orderBy: {
+          startAt: "asc",
+        },
+      }),
+    );
+
+    return blocks.map((block) => this.mapAvailabilityBlock(block));
+  }
+
+  async findOwnerAvailabilityBlock(
+    postingId: string,
+    blockId: string,
+  ): Promise<PostingAvailabilityBlockRecord | null> {
+    const block = await this.executeAsync(() =>
+      this.prisma.postingAvailabilityBlock.findFirst({
+        where: {
+          id: blockId,
+          postingId,
+          source: "owner",
+        },
+      }),
+    );
+
+    return block ? this.mapAvailabilityBlock(block) : null;
+  }
+
+  async createOwnerAvailabilityBlock(
+    postingId: string,
+    input: PostingAvailabilityBlockInput,
+  ): Promise<PostingAvailabilityBlockRecord> {
+    const block = await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        const created = await transaction.postingAvailabilityBlock.create({
+          data: {
+            id: randomUUID(),
+            postingId,
+            startAt: new Date(input.startAt),
+            endAt: new Date(input.endAt),
+            note: input.note ?? null,
+            source: "owner",
+          },
+        });
+
+        await this.enqueueOutbox(transaction, postingId, "upsert");
+
+        return created;
+      }),
+    );
+
+    return this.mapAvailabilityBlock(block);
+  }
+
+  async updateOwnerAvailabilityBlock(
+    postingId: string,
+    blockId: string,
+    input: PostingAvailabilityBlockInput,
+  ): Promise<PostingAvailabilityBlockRecord | null> {
+    return this.executeAsync(async () =>
+      this.prisma.$transaction(async (transaction) => {
+        const result = await transaction.postingAvailabilityBlock.updateMany({
+          where: {
+            id: blockId,
+            postingId,
+            source: "owner",
+          },
+          data: {
+            startAt: new Date(input.startAt),
+            endAt: new Date(input.endAt),
+            note: input.note ?? null,
+          },
+        });
+
+        if (result.count !== 1) {
+          return null;
+        }
+
+        const updated = await transaction.postingAvailabilityBlock.findUniqueOrThrow({
+          where: {
+            id: blockId,
+          },
+        });
+
+        await this.enqueueOutbox(transaction, postingId, "upsert");
+
+        return this.mapAvailabilityBlock(updated);
+      }),
+    );
+  }
+
+  async deleteOwnerAvailabilityBlock(postingId: string, blockId: string): Promise<boolean> {
+    return this.executeAsync(async () =>
+      this.prisma.$transaction(async (transaction) => {
+        const result = await transaction.postingAvailabilityBlock.deleteMany({
+          where: {
+            id: blockId,
+            postingId,
+            source: "owner",
+          },
+        });
+
+        if (result.count !== 1) {
+          return false;
+        }
+
+        await this.enqueueOutbox(transaction, postingId, "upsert");
+
+        return true;
+      }),
+    );
+  }
+
+  async hasOwnerAvailabilityBlockOverlap(input: {
+    postingId: string;
+    startAt: Date;
+    endAt: Date;
+    excludeBlockId?: string;
+  }): Promise<boolean> {
+    const block = await this.executeAsync(() =>
+      this.prisma.postingAvailabilityBlock.findFirst({
+        where: {
+          postingId: input.postingId,
+          source: "owner",
+          ...(input.excludeBlockId
+            ? {
+                id: {
+                  not: input.excludeBlockId,
+                },
+              }
+            : {}),
+          startAt: {
+            lt: input.endAt,
+          },
+          endAt: {
+            gt: input.startAt,
+          },
+        },
+        select: {
+          id: true,
+        },
+      }),
+    );
+
+    return Boolean(block);
+  }
+
+  async hasActiveBookingAvailabilityConflict(input: {
+    postingId: string;
+    startAt: Date;
+    endAt: Date;
+  }): Promise<boolean> {
+    const now = new Date();
+    const bookingRequest = await this.executeAsync(() =>
+      this.prisma.bookingRequest.findFirst({
+        where: {
+          postingId: input.postingId,
+          status: {
+            in: ["pending", "awaiting_payment", "payment_processing", "paid"],
+          },
+          convertedAt: null,
+          holdExpiresAt: {
+            gt: now,
+          },
+          OR: [
+            {
+              conversionReservationExpiresAt: null,
+            },
+            {
+              conversionReservationExpiresAt: {
+                lte: now,
+              },
+            },
+          ],
+          startAt: {
+            lt: input.endAt,
+          },
+          endAt: {
+            gt: input.startAt,
+          },
+        },
+        select: {
+          id: true,
+        },
+      }),
+    );
+
+    return Boolean(bookingRequest);
+  }
+
+  async hasRentingAvailabilityConflict(input: {
+    postingId: string;
+    startAt: Date;
+    endAt: Date;
+  }): Promise<boolean> {
+    const renting = await this.executeAsync(() =>
+      this.prisma.renting.findFirst({
+        where: {
+          postingId: input.postingId,
+          startAt: {
+            lt: input.endAt,
+          },
+          endAt: {
+            gt: input.startAt,
+          },
+        },
+        select: {
+          id: true,
+        },
+      }),
+    );
+
+    return Boolean(renting);
   }
 
   async publish(id: string, ownerId: string): Promise<PostingRecord | null> {
@@ -1144,6 +1365,7 @@ export class PostingsRepository extends BaseRepository {
           startAt: new Date(block.startAt),
           endAt: new Date(block.endAt),
           note: block.note ?? null,
+          source: "owner",
         })),
       },
     };
@@ -1177,15 +1399,24 @@ export class PostingsRepository extends BaseRepository {
           position: photo.position,
         })),
       },
-      availabilityBlocks: {
-        deleteMany: {},
-        create: input.availabilityBlocks.map((block) => ({
-          id: randomUUID(),
-          startAt: new Date(block.startAt),
-          endAt: new Date(block.endAt),
-          note: block.note ?? null,
-        })),
-      },
+    };
+  }
+
+  private mapAvailabilityBlock(block: {
+    id: string;
+    startAt: Date;
+    endAt: Date;
+    note: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): PostingAvailabilityBlockRecord {
+    return {
+      id: block.id,
+      startAt: block.startAt.toISOString(),
+      endAt: block.endAt.toISOString(),
+      note: block.note ?? undefined,
+      createdAt: block.createdAt.toISOString(),
+      updatedAt: block.updatedAt.toISOString(),
     };
   }
 
@@ -1208,16 +1439,7 @@ export class PostingsRepository extends BaseRepository {
           block.bookingRequestHold.holdExpiresAt.getTime() > now
         );
       })
-      .map(
-        (block): PostingAvailabilityBlockRecord => ({
-          id: block.id,
-          startAt: block.startAt.toISOString(),
-          endAt: block.endAt.toISOString(),
-          note: block.note ?? undefined,
-          createdAt: block.createdAt.toISOString(),
-          updatedAt: block.updatedAt.toISOString(),
-        }),
-      );
+      .map((block): PostingAvailabilityBlockRecord => this.mapAvailabilityBlock(block));
 
     return {
       id: posting.id,

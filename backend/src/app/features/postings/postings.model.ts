@@ -95,7 +95,7 @@ export const postingAvailabilityBlockSchema = z.object({
   note: nullableTrimmedStringSchema.pipe(z.string().trim().max(255).nullable().optional()),
 });
 
-export const upsertPostingRequestSchema = z.object({
+const upsertPostingRequestShape = {
   variant: postingVariantSchema,
   name: trimmedStringSchema.max(150),
   description: trimmedStringSchema.max(5000),
@@ -125,7 +125,23 @@ export const upsertPostingRequestSchema = z.object({
       z.string().trim().max(32).nullable().optional(),
     ),
   }),
-});
+};
+
+export const upsertPostingRequestSchema = z.object(upsertPostingRequestShape);
+
+export const updatePostingRequestSchema = z
+  .object({
+    ...upsertPostingRequestShape,
+    availabilityBlocks: z.any().optional(),
+  })
+  .refine((body) => !Object.prototype.hasOwnProperty.call(body, "availabilityBlocks"), {
+    path: ["availabilityBlocks"],
+    message:
+      "Availability blocks must be managed with the dedicated availability-blocks endpoints.",
+  })
+  .transform(({ availabilityBlocks: _availabilityBlocks, ...body }) => body);
+
+export const ownerAvailabilityBlockRequestSchema = postingAvailabilityBlockSchema;
 
 export const listOwnerPostingsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -163,6 +179,10 @@ export type PostingAttributeValue = VariantPostingAttributeValue;
 export type PostingPhotoInput = z.infer<typeof postingPhotoSchema>;
 export type PostingAvailabilityBlockInput = z.infer<typeof postingAvailabilityBlockSchema>;
 export type UpsertPostingRequestBody = z.infer<typeof upsertPostingRequestSchema>;
+export type UpdatePostingRequestBody = z.infer<typeof updatePostingRequestSchema>;
+export type OwnerAvailabilityBlockRequestBody = z.infer<
+  typeof ownerAvailabilityBlockRequestSchema
+>;
 export type ListOwnerPostingsQuery = z.infer<typeof listOwnerPostingsQuerySchema>;
 export type PublicSearchPostingsQuery = z.infer<typeof publicSearchPostingsQuerySchema>;
 

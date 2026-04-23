@@ -30,13 +30,17 @@ import {
 import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
 import {
   listOwnerPostingsQuerySchema,
+  ownerAvailabilityBlockRequestSchema,
   publicSearchPostingsQuerySchema,
   type ListOwnerPostingsInput,
   type ListOwnerPostingsQuery,
+  type OwnerAvailabilityBlockRequestBody,
   type PublicSearchPostingsQuery,
   type SearchPostingsInput,
+  type UpdatePostingRequestBody,
   type UpsertPostingInput,
   type UpsertPostingRequestBody,
+  updatePostingRequestSchema,
   upsertPostingRequestSchema,
 } from "@/features/postings/postings.model";
 import { PostingsService } from "@/features/postings/postings.service";
@@ -60,12 +64,58 @@ export class PostingsController {
   update = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");
-    const body = await parseRequestBody(context, upsertPostingRequestSchema);
+    const body = await parseRequestBody(context, updatePostingRequestSchema);
     const result = await this.postingsService.update(
       this.requireRouteId(context),
       this.toUpsertInput(auth.sub, body),
     );
     return context.json(result);
+  };
+
+  listAvailabilityBlocks = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    const result = await this.postingsService.listOwnerAvailabilityBlocks(
+      this.requireRouteId(context),
+      auth.sub,
+    );
+    return context.json(result);
+  };
+
+  createAvailabilityBlock = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    const body = await parseRequestBody(context, ownerAvailabilityBlockRequestSchema);
+    const result = await this.postingsService.createOwnerAvailabilityBlock(
+      this.requireRouteId(context),
+      auth.sub,
+      this.toAvailabilityBlockInput(body),
+    );
+    return context.json(result, 201);
+  };
+
+  updateAvailabilityBlock = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    const body = await parseRequestBody(context, ownerAvailabilityBlockRequestSchema);
+    const result = await this.postingsService.updateOwnerAvailabilityBlock(
+      this.requireRouteId(context),
+      auth.sub,
+      this.requireRouteParam(context, "blockId"),
+      this.toAvailabilityBlockInput(body),
+    );
+    return context.json(result);
+  };
+
+  deleteAvailabilityBlock = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    await this.postingsService.deleteOwnerAvailabilityBlock(
+      this.requireRouteId(context),
+      auth.sub,
+      this.requireRouteParam(context, "blockId"),
+    );
+    return new Response(null, { status: 204 });
   };
 
   publish = async (context: Context<AppBindings>): Promise<Response> => {
@@ -188,7 +238,13 @@ export class PostingsController {
     return context.json(result);
   };
 
-  private toUpsertInput(userId: string, body: UpsertPostingRequestBody): UpsertPostingInput {
+  private toUpsertInput(
+    userId: string,
+    body: UpsertPostingRequestBody | UpdatePostingRequestBody,
+  ): UpsertPostingInput {
+    const availabilityBlocks =
+      "availabilityBlocks" in body ? body.availabilityBlocks : [];
+
     return {
       ownerId: userId,
       variant: body.variant,
@@ -201,7 +257,7 @@ export class PostingsController {
       availabilityStatus: body.availabilityStatus,
       availabilityNotes: body.availabilityNotes ?? null,
       maxBookingDurationDays: body.maxBookingDurationDays ?? null,
-      availabilityBlocks: body.availabilityBlocks,
+      availabilityBlocks,
       location: {
         latitude: body.location.latitude,
         longitude: body.location.longitude,
@@ -210,6 +266,14 @@ export class PostingsController {
         country: body.location.country,
         postalCode: body.location.postalCode ?? undefined,
       },
+    };
+  }
+
+  private toAvailabilityBlockInput(body: OwnerAvailabilityBlockRequestBody) {
+    return {
+      startAt: body.startAt,
+      endAt: body.endAt,
+      note: body.note ?? undefined,
     };
   }
 
@@ -426,18 +490,22 @@ export class PostingsController {
   }
 
   private requireRouteId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
+    return this.requireRouteParam(context, "id");
+  }
 
-    if (!id) {
+  private requireRouteParam(context: Context<AppBindings>, name: string): string {
+    const value = context.req.param(name);
+
+    if (!value) {
       throw new RequestValidationError("Route parameter validation failed.", [
         {
-          path: "id",
-          message: "Route parameter id is required.",
+          path: name,
+          message: `Route parameter ${name} is required.`,
         },
       ]);
     }
 
-    return id;
+    return value;
   }
 
   private async requireAuth(context: Context<AppBindings>): Promise<JwtClaims> {

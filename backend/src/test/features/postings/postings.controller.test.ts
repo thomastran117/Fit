@@ -145,4 +145,159 @@ describe("PostingsController", () => {
     });
     expect(createDraft).not.toHaveBeenCalled();
   });
+
+  it("rejects update requests that include availability blocks", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const update = jest.fn();
+    const controller = new PostingsController(
+      {
+        update,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+      body: {
+        variant: {
+          family: "place",
+          subtype: "entire_place",
+        },
+        name: "Test posting",
+        description: "Nice place",
+        pricing: {
+          currency: "cad",
+          daily: {
+            amount: 100,
+          },
+        },
+        photos: [
+          {
+            blobUrl: "https://example.blob.core.windows.net/postings/photo-1.jpg",
+            blobName: "postings/photo-1.jpg",
+            position: 0,
+          },
+        ],
+        tags: [],
+        attributes: {},
+        availabilityStatus: "available",
+        availabilityBlocks: [],
+        location: {
+          latitude: 43.7,
+          longitude: -79.4,
+          city: "Toronto",
+          region: "Ontario",
+          country: "Canada",
+        },
+      },
+    });
+
+    await expect(controller.update(context)).rejects.toMatchObject<
+      Partial<RequestValidationError>
+    >({
+      message: "Request body validation failed.",
+      details: [
+        {
+          path: "availabilityBlocks",
+        },
+      ],
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("routes availability block creation with posting id and owner id", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const createOwnerAvailabilityBlock = jest.fn(async () => ({
+      id: "block-1",
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-03T00:00:00.000Z",
+      createdAt: "2026-04-18T00:00:00.000Z",
+      updatedAt: "2026-04-18T00:00:00.000Z",
+    }));
+    const controller = new PostingsController(
+      {
+        createOwnerAvailabilityBlock,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+      body: {
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-03T00:00:00.000Z",
+        note: "Maintenance",
+      },
+    });
+
+    const response = await controller.createAvailabilityBlock(context);
+
+    expect(createOwnerAvailabilityBlock).toHaveBeenCalledWith("posting-1", "owner-1", {
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-03T00:00:00.000Z",
+      note: "Maintenance",
+    });
+    expect(response.status).toBe(201);
+  });
+
+  it("routes availability block update with block id", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const updateOwnerAvailabilityBlock = jest.fn(async () => ({
+      id: "block-1",
+      startAt: "2026-05-02T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      createdAt: "2026-04-18T00:00:00.000Z",
+      updatedAt: "2026-04-18T00:00:00.000Z",
+    }));
+    const controller = new PostingsController(
+      {
+        updateOwnerAvailabilityBlock,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+        blockId: "block-1",
+      },
+      body: {
+        startAt: "2026-05-02T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+      },
+    });
+
+    const response = await controller.updateAvailabilityBlock(context);
+
+    expect(updateOwnerAvailabilityBlock).toHaveBeenCalledWith("posting-1", "owner-1", "block-1", {
+      startAt: "2026-05-02T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      note: undefined,
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("requires owner auth for listing availability blocks", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims({ role: "renter" }));
+    const listOwnerAvailabilityBlocks = jest.fn();
+    const controller = new PostingsController(
+      {
+        listOwnerAvailabilityBlocks,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+    });
+
+    await expect(controller.listAvailabilityBlocks(context)).rejects.toThrow();
+    expect(listOwnerAvailabilityBlocks).not.toHaveBeenCalled();
+  });
 });

@@ -779,6 +779,7 @@ export class PaymentsRepository extends BaseRepository {
               startAt: booking.startAt,
               endAt: booking.endAt,
               note: `Booking paid reservation: ${booking.id}`,
+              source: "booking_hold",
             },
           });
           holdBlockId = holdBlock.id;
