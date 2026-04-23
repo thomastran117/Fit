@@ -49,11 +49,29 @@ const LOCAL_LOGIN_ATTEMPT_TTL_IN_SECONDS = 15 * 60;
 const LOCAL_LOGIN_LOCK_TTL_IN_SECONDS = 30 * 60;
 const LOCAL_LOGIN_UNLOCK_OTP_PURPOSE = "local-login-unlock";
 const LOCAL_PASSWORD_RESET_OTP_PURPOSE = "local-password-reset";
+const EMAIL_VERIFICATION_OTP_PURPOSE = "email-verification";
+const PUBLIC_OTP_RATE_LIMIT_WINDOW_IN_SECONDS = 60 * 60;
+const PUBLIC_OTP_EMAIL_LIMIT = 5;
+const PUBLIC_OTP_IP_LIMIT = 20;
+const PUBLIC_OTP_DEVICE_LIMIT = 10;
 
 interface LocalLoginAttemptRecord {
   failedAttempts: number;
   lockedAt?: string;
 }
+
+interface PublicOtpRateLimitRecord {
+  count: number;
+}
+
+type PublicOtpRateLimitResult = {
+  allowed: boolean;
+  flow: string;
+  purpose: string;
+  subject: string;
+  reason?: string;
+  scope?: "email" | "ip" | "device";
+};
 
 export class AuthService {
   constructor(
@@ -117,7 +135,7 @@ export class AuthService {
       return {
         verificationRequired: true,
         email: input.email,
-        alreadyPending: true,
+        alreadyPending: false,
       };
     }
 
@@ -144,6 +162,21 @@ export class AuthService {
   async forgotPassword(input: ForgotPasswordInput): Promise<{
     accepted: true;
   }> {
+    const rateLimitResult = await this.consumePublicOtpRateLimit({
+      purpose: LOCAL_PASSWORD_RESET_OTP_PURPOSE,
+      subject: input.email,
+      client: input.client,
+      deviceId: input.deviceId,
+      flow: "forgot-password",
+    });
+
+    if (!rateLimitResult.allowed) {
+      this.logSuspiciousOtpPattern(rateLimitResult);
+      return {
+        accepted: true,
+      };
+    }
+
     const user = await this.authRepository.findUserByEmail(input.email);
 
     if (user && this.isEligibleForLocalPasswordManagement(user)) {
@@ -158,6 +191,21 @@ export class AuthService {
   async resendForgotPassword(input: ResendForgotPasswordInput): Promise<{
     accepted: true;
   }> {
+    const rateLimitResult = await this.consumePublicOtpRateLimit({
+      purpose: LOCAL_PASSWORD_RESET_OTP_PURPOSE,
+      subject: input.email,
+      client: input.client,
+      deviceId: input.deviceId,
+      flow: "resend-forgot-password",
+    });
+
+    if (!rateLimitResult.allowed) {
+      this.logSuspiciousOtpPattern(rateLimitResult);
+      return {
+        accepted: true,
+      };
+    }
+
     const user = await this.authRepository.findUserByEmail(input.email);
 
     if (user && this.isEligibleForLocalPasswordManagement(user)) {
@@ -204,7 +252,7 @@ export class AuthService {
 
   async verifyEmail(input: VerifyEmailInput): Promise<AuthSessionResult> {
     await this.otpService.verify({
-      purpose: "email-verification",
+      purpose: EMAIL_VERIFICATION_OTP_PURPOSE,
       subject: input.email,
       code: input.code,
     });
@@ -230,18 +278,31 @@ export class AuthService {
   }
 
   async resendVerificationEmail(input: ResendVerificationEmailInput): Promise<{
-    resent: true;
-    email: string;
+    accepted: true;
   }> {
+    const rateLimitResult = await this.consumePublicOtpRateLimit({
+      purpose: EMAIL_VERIFICATION_OTP_PURPOSE,
+      subject: input.email,
+      client: input.client,
+      deviceId: input.deviceId,
+      flow: "resend-verification-email",
+    });
+
+    if (!rateLimitResult.allowed) {
+      this.logSuspiciousOtpPattern(rateLimitResult);
+      return {
+        accepted: true,
+      };
+    }
+
     const user = await this.authRepository.findUserByEmail(input.email);
 
     if (user && !user.emailVerified) {
-      await this.sendVerificationCode(user);
+      await this.sendPublicVerificationCode(user);
     }
 
     return {
-      resent: true,
-      email: input.email,
+      accepted: true,
     };
   }
 
@@ -296,15 +357,28 @@ export class AuthService {
   }
 
   async resendUnlockLocalLogin(input: ResendUnlockLocalLoginInput): Promise<{
-    resent: true;
-    email: string;
+    accepted: true;
   }> {
+    const rateLimitResult = await this.consumePublicOtpRateLimit({
+      purpose: LOCAL_LOGIN_UNLOCK_OTP_PURPOSE,
+      subject: input.email,
+      client: input.client,
+      deviceId: input.deviceId,
+      flow: "resend-unlock-local-login",
+    });
+
+    if (!rateLimitResult.allowed) {
+      this.logSuspiciousOtpPattern(rateLimitResult);
+      return {
+        accepted: true,
+      };
+    }
+
     const isLocked = await this.isLocalLoginLocked(input.email);
 
     if (!isLocked) {
       return {
-        resent: true,
-        email: input.email,
+        accepted: true,
       };
     }
 
@@ -312,8 +386,7 @@ export class AuthService {
     await this.sendLocalLoginUnlockCode(user);
 
     return {
-      resent: true,
-      email: input.email,
+      accepted: true,
     };
   }
 
@@ -593,7 +666,7 @@ export class AuthService {
 
   private async sendVerificationCode(user: AuthUserRecord): Promise<void> {
     const issuedOtp = await this.otpService.issue({
-      purpose: "email-verification",
+      purpose: EMAIL_VERIFICATION_OTP_PURPOSE,
       subject: user.email,
     });
 
@@ -602,6 +675,25 @@ export class AuthService {
       verificationCode: issuedOtp.code,
       firstName: user.firstName,
     });
+  }
+
+  private async sendPublicVerificationCode(user: AuthUserRecord): Promise<void> {
+    try {
+      await this.sendVerificationCode(user);
+    } catch (error) {
+      if (error instanceof Error && error.name === "TooManyRequestError") {
+        this.logSuspiciousOtpPattern({
+          allowed: false,
+          flow: "resend-verification-email",
+          purpose: EMAIL_VERIFICATION_OTP_PURPOSE,
+          subject: user.email,
+          reason: "otp-cooldown",
+        });
+        return;
+      }
+
+      throw error;
+    }
   }
 
   private async sendPasswordResetCode(user: AuthUserRecord): Promise<void> {
@@ -618,6 +710,13 @@ export class AuthService {
       });
     } catch (error) {
       if (error instanceof Error && error.name === "TooManyRequestError") {
+        this.logSuspiciousOtpPattern({
+          allowed: false,
+          flow: "password-reset",
+          purpose: LOCAL_PASSWORD_RESET_OTP_PURPOSE,
+          subject: user.email,
+          reason: "otp-cooldown",
+        });
         return;
       }
 
@@ -681,6 +780,117 @@ export class AuthService {
     return Boolean(record?.lockedAt);
   }
 
+  private async consumePublicOtpRateLimit(input: {
+    purpose: string;
+    subject: string;
+    client: ClientRequestContext;
+    deviceId?: string;
+    flow: string;
+  }): Promise<PublicOtpRateLimitResult> {
+    const checks: Array<{
+      scope: "email" | "ip" | "device";
+      value?: string;
+      limit: number;
+    }> = [
+      {
+        scope: "email",
+        value: input.subject.toLowerCase(),
+        limit: PUBLIC_OTP_EMAIL_LIMIT,
+      },
+      {
+        scope: "ip",
+        value: input.client.ip,
+        limit: PUBLIC_OTP_IP_LIMIT,
+      },
+      {
+        scope: "device",
+        value: input.deviceId ?? input.client.device.id,
+        limit: PUBLIC_OTP_DEVICE_LIMIT,
+      },
+    ];
+    const records: Array<{
+      key: string;
+      scope: "email" | "ip" | "device";
+      count: number;
+      limit: number;
+    }> = [];
+
+    for (const check of checks) {
+      if (!check.value) {
+        continue;
+      }
+
+      const key = this.getPublicOtpRateLimitKey(input.purpose, check.scope, check.value);
+      const record = await this.cacheService.getJson<PublicOtpRateLimitRecord>(key);
+      const count = record?.count ?? 0;
+
+      if (count >= check.limit) {
+        return {
+          allowed: false,
+          flow: input.flow,
+          purpose: input.purpose,
+          subject: input.subject,
+          reason: `${check.scope}-rate-limit`,
+          scope: check.scope,
+        };
+      }
+
+      records.push({
+        key,
+        scope: check.scope,
+        count,
+        limit: check.limit,
+      });
+    }
+
+    await Promise.all(
+      records.map((record) =>
+        this.cacheService.setJson(
+          record.key,
+          {
+            count: record.count + 1,
+          } satisfies PublicOtpRateLimitRecord,
+          PUBLIC_OTP_RATE_LIMIT_WINDOW_IN_SECONDS,
+        ),
+      ),
+    );
+
+    return {
+      allowed: true,
+      flow: input.flow,
+      purpose: input.purpose,
+      subject: input.subject,
+    };
+  }
+
+  private getPublicOtpRateLimitKey(
+    purpose: string,
+    scope: "email" | "ip" | "device",
+    value: string,
+  ): string {
+    return `auth:otp-rate:${purpose}:${scope}:${value.toLowerCase()}`;
+  }
+
+  private logSuspiciousOtpPattern(result: PublicOtpRateLimitResult): void {
+    console.warn("Suspicious public OTP activity", {
+      flow: result.flow,
+      purpose: result.purpose,
+      subject: this.redactEmail(result.subject),
+      reason: result.reason,
+      scope: result.scope,
+    });
+  }
+
+  private redactEmail(email: string): string {
+    const [localPart, domain] = email.toLowerCase().split("@");
+
+    if (!localPart || !domain) {
+      return "redacted";
+    }
+
+    return `${localPart.slice(0, 1)}***@${domain}`;
+  }
+
   private async sendLocalLoginUnlockCode(user: AuthUserRecord | null): Promise<void> {
     if (!user) {
       return;
@@ -699,6 +909,13 @@ export class AuthService {
       });
     } catch (error) {
       if (error instanceof Error && error.name === "TooManyRequestError") {
+        this.logSuspiciousOtpPattern({
+          allowed: false,
+          flow: "local-login-unlock",
+          purpose: LOCAL_LOGIN_UNLOCK_OTP_PURPOSE,
+          subject: user.email,
+          reason: "otp-cooldown",
+        });
         return;
       }
 

@@ -106,7 +106,7 @@ export function LoginUnlockPanel({ email, onUnlocked, onCancel }: LoginUnlockPan
 
     try {
       await authApi.resendUnlockLocalLogin({ email });
-      setResentMessage(`A new unlock code was sent to ${email}.`);
+      setResentMessage("If sign-in is locked for this email, a new unlock code is on the way.");
     } catch (error) {
       const failure = getUnlockFailureResult(error);
       setGeneralError(failure.generalError);

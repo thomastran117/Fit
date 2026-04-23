@@ -4,6 +4,7 @@ import { clearStoredSession, readStoredSession, writeStoredSession } from "@/lib
 import {
   ApiError,
   type ApiErrorResponse,
+  type AuthEmailAcceptedResult,
   type AuthResponseBody,
   type ForgotPasswordAcceptedResult,
   type SignupVerificationPendingResult,
@@ -251,8 +252,8 @@ export const authApi = {
   },
   resendVerificationEmail(
     input: ResendVerificationEmailInput,
-  ): Promise<{ resent: true; email: string }> {
-    return postJson<{ resent: true; email: string }>("/auth/local/email/resend", input);
+  ): Promise<AuthEmailAcceptedResult> {
+    return postJson<AuthEmailAcceptedResult>("/auth/local/email/resend", input);
   },
   forgotPassword(input: ForgotPasswordInput): Promise<ForgotPasswordAcceptedResult> {
     return postJson<ForgotPasswordAcceptedResult>("/auth/local/password/forgot", input);
@@ -276,8 +277,8 @@ export const authApi = {
   },
   resendUnlockLocalLogin(
     input: ResendUnlockLocalLoginInput,
-  ): Promise<{ resent: true; email: string }> {
-    return postJson<{ resent: true; email: string }>("/auth/local/unlock/resend", input);
+  ): Promise<AuthEmailAcceptedResult> {
+    return postJson<AuthEmailAcceptedResult>("/auth/local/unlock/resend", input);
   },
   changePassword(input: ChangePasswordInput): Promise<AuthResponseBody> {
     return postAuthenticatedJson<AuthResponseBody>("/auth/local/password/change", {

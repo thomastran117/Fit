@@ -226,7 +226,9 @@ export interface VerifyEmailInput {
 }
 
 export interface ResendVerificationEmailInput {
+  client: ClientRequestContext;
   email: string;
+  deviceId?: string;
 }
 
 export interface UnlockLocalLoginInput {
@@ -235,7 +237,9 @@ export interface UnlockLocalLoginInput {
 }
 
 export interface ResendUnlockLocalLoginInput {
+  client: ClientRequestContext;
   email: string;
+  deviceId?: string;
 }
 
 export interface RefreshInput {
@@ -249,11 +253,15 @@ export interface RemoveKnownDeviceInput {
 }
 
 export interface ForgotPasswordInput {
+  client: ClientRequestContext;
   email: string;
+  deviceId?: string;
 }
 
 export interface ResendForgotPasswordInput {
+  client: ClientRequestContext;
   email: string;
+  deviceId?: string;
 }
 
 export interface ResetPasswordInput {
