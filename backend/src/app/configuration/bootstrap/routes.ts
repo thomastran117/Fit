@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { pingDatabase } from "@/configuration/resources/database";
 import {
   containerTokens,
   getRequestContainer,
@@ -42,11 +43,32 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     });
   });
 
-  app.get("/health", (context) => {
-    return context.json({
-      ok: true,
-      uptime: process.uptime(),
-    });
+  app.get("/health", async (context) => {
+    try {
+      const database = await pingDatabase();
+
+      return context.json({
+        ok: true,
+        uptime: process.uptime(),
+        checks: {
+          database,
+        },
+      });
+    } catch (error) {
+      return context.json(
+        {
+          ok: false,
+          uptime: process.uptime(),
+          checks: {
+            database: {
+              ok: false,
+              message: error instanceof Error ? error.message : "Database health check failed.",
+            },
+          },
+        },
+        503,
+      );
+    }
   });
 
   app.post(

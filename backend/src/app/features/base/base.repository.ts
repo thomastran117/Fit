@@ -6,8 +6,10 @@ import {
   getDatabaseClient,
   type databaseClient,
 } from "@/configuration/resources/database";
+import { environment } from "@/configuration/environment/index";
 
 type DatabaseClient = NonNullable<typeof databaseClient>;
+type TransactionClient = Prisma.TransactionClient;
 
 export interface RetryOptions {
   backoffMultiplier?: number;
@@ -17,6 +19,10 @@ export interface RetryOptions {
   maxDelayMs?: number;
   maxRetries?: number;
   retryableCodes?: string[];
+}
+
+export interface RepositoryOperationOptions extends RetryOptions {
+  operationName?: string;
 }
 
 const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
@@ -55,47 +61,140 @@ export abstract class BaseRepository {
 
   protected async executeAsync<T>(
     operation: () => Promise<T>,
-    options: RetryOptions = {},
+    options: RepositoryOperationOptions = {},
   ): Promise<T> {
     const settings = {
       ...DEFAULT_RETRY_OPTIONS,
       ...options,
     };
-    const startedAt = Date.now();
+    const operationName = this.createOperationName(options.operationName);
+    const startedAt = performance.now();
+    const deadlineStartedAt = Date.now();
 
     let attempt = 0;
     let lastError: unknown;
+    let succeeded = false;
 
-    while (attempt <= settings.maxRetries) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error;
+    try {
+      while (attempt <= settings.maxRetries) {
+        try {
+          const result = await operation();
+          succeeded = true;
+          return result;
+        } catch (error) {
+          lastError = error;
 
-        if (
-          attempt === settings.maxRetries ||
-          !this.isTransientError(error, settings) ||
-          this.hasReachedDeadline(startedAt, settings)
-        ) {
-          throw error;
+          if (
+            attempt === settings.maxRetries ||
+            !this.isTransientError(error, settings) ||
+            this.hasReachedDeadline(deadlineStartedAt, settings)
+          ) {
+            throw error;
+          }
+
+          const delayMs = this.calculateDelay(attempt, settings);
+
+          if (this.willExceedDeadline(deadlineStartedAt, delayMs, settings)) {
+            throw error;
+          }
+
+          this.logRetry(operationName, attempt + 1, delayMs, error);
+          await this.sleep(delayMs);
+          attempt += 1;
         }
-
-        const delayMs = this.calculateDelay(attempt, settings);
-
-        if (this.willExceedDeadline(startedAt, delayMs, settings)) {
-          throw error;
-        }
-
-        await this.sleep(delayMs);
-        attempt += 1;
       }
+    } finally {
+      this.logOperationDuration(operationName, startedAt, succeeded, attempt, lastError);
     }
 
     throw lastError;
   }
 
+  protected async executeTransaction<T>(
+    operation: (transaction: TransactionClient) => Promise<T>,
+    options: RepositoryOperationOptions = {},
+  ): Promise<T> {
+    return this.executeAsync(
+      () => this.prisma.$transaction((transaction) => operation(transaction)),
+      {
+        ...options,
+        operationName: options.operationName ?? "transaction",
+      },
+    );
+  }
+
   protected get prisma(): PrismaClient {
     return this.database;
+  }
+
+  private createOperationName(operationName?: string): string {
+    const repositoryName = this.constructor.name || "Repository";
+
+    if (!operationName) {
+      return `${repositoryName}.operation`;
+    }
+
+    if (operationName.includes(".")) {
+      return operationName;
+    }
+
+    return `${repositoryName}.${operationName}`;
+  }
+
+  private logRetry(
+    operationName: string,
+    attempt: number,
+    delayMs: number,
+    error: unknown,
+  ): void {
+    console.warn(
+      [
+        "[DATABASE RETRY]",
+        `operation=${operationName}`,
+        `attempt=${attempt}`,
+        `delayMs=${delayMs}`,
+        `errorName=${this.readErrorName(error)}`,
+        `errorCode=${this.readErrorCode(error) ?? "unknown"}`,
+        `message=${this.readErrorMessage(error)}`,
+      ].join(" "),
+    );
+  }
+
+  private logOperationDuration(
+    operationName: string,
+    startedAt: number,
+    succeeded: boolean,
+    attempts: number,
+    error: unknown,
+  ): void {
+    const config = environment.getDatabaseConfig();
+    const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+    const shouldLogOperation = config.operationLoggingEnabled;
+    const shouldLogSlowOperation =
+      config.slowOperationThresholdMs > 0 && durationMs >= config.slowOperationThresholdMs;
+
+    if (!shouldLogOperation && !shouldLogSlowOperation && succeeded) {
+      return;
+    }
+
+    const logger = succeeded && !shouldLogSlowOperation ? console.info : console.warn;
+
+    logger(
+      [
+        shouldLogSlowOperation ? "[DATABASE SLOW OPERATION]" : "[DATABASE OPERATION]",
+        `operation=${operationName}`,
+        `durationMs=${durationMs}`,
+        `status=${succeeded ? "success" : "failure"}`,
+        `attempts=${attempts + 1}`,
+        ...(succeeded
+          ? []
+          : [
+              `errorName=${this.readErrorName(error)}`,
+              `errorCode=${this.readErrorCode(error) ?? "unknown"}`,
+              `message=${this.readErrorMessage(error)}`,
+            ]),
+      ].join(" "),
+    );
   }
 
   private isTransientError(
@@ -134,6 +233,14 @@ export abstract class BaseRepository {
 
     const { code } = error as { code?: unknown };
     return typeof code === "string" ? code : undefined;
+  }
+
+  private readErrorName(error: unknown): string {
+    return error instanceof Error ? error.name : "UnknownError";
+  }
+
+  private readErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : "Unknown database error.";
   }
 
   private calculateDelay(attempt: number, options: Required<RetryOptions>): number {
