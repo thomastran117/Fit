@@ -7,6 +7,9 @@ import {
   parseRequestBody,
 } from "@/configuration/validation/request";
 import type {
+  BookingQuoteBody,
+  BookingQuoteInput,
+  CreateBookingRequestBody,
   CreateBookingRequestInput,
   DecideBookingRequestInput,
   ListBookingRequestsQuery,
@@ -15,6 +18,7 @@ import type {
   UpdateBookingRequestInput,
 } from "@/features/bookings/bookings.model";
 import {
+  bookingQuoteSchema,
   createBookingRequestSchema,
   decideBookingRequestSchema,
   listBookingRequestsQuerySchema,
@@ -32,6 +36,15 @@ export class BookingsController {
       this.toCreateInput(this.requirePostingId(context), auth.sub, body),
     );
     return context.json(result, 201);
+  };
+
+  quoteForPosting = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    const body = await parseRequestBody(context, bookingQuoteSchema);
+    const result = await this.bookingsService.quote(
+      this.toQuoteInput(this.requirePostingId(context), auth.sub, body),
+    );
+    return context.json(result);
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
@@ -106,15 +119,7 @@ export class BookingsController {
   private toCreateInput(
     postingId: string,
     renterId: string,
-    body: {
-      startAt: string;
-      endAt: string;
-      guestCount: number;
-      note?: string | null;
-      contactName: string;
-      contactEmail: string;
-      contactPhoneNumber?: string | null;
-    },
+    body: CreateBookingRequestBody,
   ): CreateBookingRequestInput {
     return {
       postingId,
@@ -126,6 +131,21 @@ export class BookingsController {
       contactName: body.contactName,
       contactEmail: body.contactEmail,
       contactPhoneNumber: body.contactPhoneNumber ?? null,
+    };
+  }
+
+  private toQuoteInput(
+    postingId: string,
+    renterId: string,
+    body: BookingQuoteBody,
+  ): BookingQuoteInput {
+    return {
+      postingId,
+      renterId,
+      startAt: body.startAt,
+      endAt: body.endAt,
+      guestCount: body.guestCount,
+      note: body.note ?? null,
     };
   }
 
