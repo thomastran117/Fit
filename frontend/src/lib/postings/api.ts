@@ -38,6 +38,21 @@ export interface BookingQuoteResult {
   failureReasons: BookingQuoteFailureReason[];
 }
 
+export interface PostingAvailabilityBlock {
+  id: string;
+  startAt: string;
+  endAt: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AvailabilityBlockInput {
+  startAt: string;
+  endAt: string;
+  note?: string | null;
+}
+
 const CSRF_COOKIE_NAME = "csrf_token";
 const CSRF_HEADER_NAME = "x-csrf-token";
 
@@ -68,26 +83,27 @@ async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
 
-async function postAuthenticatedJson<TResponse, TBody extends object>(
+async function authenticatedJson<TResponse, TBody extends object | undefined = undefined>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
-  body: TBody,
+  body?: TBody,
 ): Promise<TResponse> {
   const deviceId = getDeviceId();
   const devicePlatform = getDevicePlatform();
   const session = readStoredSession();
   const csrfToken = readCsrfToken();
   const response = await fetch(`${publicEnv.apiBaseUrl}${path}`, {
-    method: "POST",
+    method,
     headers: {
-      "content-type": "application/json",
       accept: "application/json",
+      ...(body ? { "content-type": "application/json" } : {}),
       ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {}),
       ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
       ...(deviceId ? { "x-device-id": deviceId } : {}),
       ...(devicePlatform ? { "x-device-platform": devicePlatform } : {}),
     },
     credentials: "include",
-    body: JSON.stringify(body),
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
   const payload = await readJson(response);
@@ -107,9 +123,49 @@ async function postAuthenticatedJson<TResponse, TBody extends object>(
 
 export const postingsApi = {
   quoteBooking(postingId: string, input: BookingQuoteInput): Promise<BookingQuoteResult> {
-    return postAuthenticatedJson<BookingQuoteResult, BookingQuoteInput>(
+    return authenticatedJson<BookingQuoteResult, BookingQuoteInput>(
+      "POST",
       `/postings/${encodeURIComponent(postingId)}/booking-quote`,
       input,
+    );
+  },
+
+  listAvailabilityBlocks(
+    postingId: string,
+  ): Promise<{ availabilityBlocks: PostingAvailabilityBlock[] }> {
+    return authenticatedJson<{ availabilityBlocks: PostingAvailabilityBlock[] }>(
+      "GET",
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks`,
+    );
+  },
+
+  createAvailabilityBlock(
+    postingId: string,
+    input: AvailabilityBlockInput,
+  ): Promise<PostingAvailabilityBlock> {
+    return authenticatedJson<PostingAvailabilityBlock, AvailabilityBlockInput>(
+      "POST",
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks`,
+      input,
+    );
+  },
+
+  updateAvailabilityBlock(
+    postingId: string,
+    blockId: string,
+    input: AvailabilityBlockInput,
+  ): Promise<PostingAvailabilityBlock> {
+    return authenticatedJson<PostingAvailabilityBlock, AvailabilityBlockInput>(
+      "PUT",
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks/${encodeURIComponent(blockId)}`,
+      input,
+    );
+  },
+
+  async deleteAvailabilityBlock(postingId: string, blockId: string): Promise<void> {
+    await authenticatedJson<null>(
+      "DELETE",
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks/${encodeURIComponent(blockId)}`,
     );
   },
 };

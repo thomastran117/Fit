@@ -1,4 +1,5 @@
 import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { BlobService } from "@/features/blob/blob.service";
@@ -11,6 +12,7 @@ import {
   type ListOwnerPostingsInput,
   type ListOwnerPostingsResult,
   type PublicPostingRecord,
+  type PostingAvailabilityBlockRecord,
   type PostingAvailabilityBlockInput,
   type PostingAttributeValue,
   type PostingFamily,
@@ -59,6 +61,74 @@ export class PostingsService {
     }
 
     return updated;
+  }
+
+  async listOwnerAvailabilityBlocks(
+    id: string,
+    ownerId: string,
+  ): Promise<{ availabilityBlocks: PostingAvailabilityBlockRecord[] }> {
+    const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
+    const availabilityBlocks = await this.postingsRepository.listOwnerAvailabilityBlocks(
+      posting.id,
+    );
+
+    return {
+      availabilityBlocks,
+    };
+  }
+
+  async createOwnerAvailabilityBlock(
+    id: string,
+    ownerId: string,
+    input: PostingAvailabilityBlockInput,
+  ): Promise<PostingAvailabilityBlockRecord> {
+    const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
+    const normalized = this.normalizeSingleAvailabilityBlock(input);
+    this.assertSafeAvailabilityBlockContent(normalized);
+    await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized);
+
+    return this.postingsRepository.createOwnerAvailabilityBlock(posting.id, normalized);
+  }
+
+  async updateOwnerAvailabilityBlock(
+    id: string,
+    ownerId: string,
+    blockId: string,
+    input: PostingAvailabilityBlockInput,
+  ): Promise<PostingAvailabilityBlockRecord> {
+    const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
+    const normalized = this.normalizeSingleAvailabilityBlock(input);
+    this.assertSafeAvailabilityBlockContent(normalized);
+    await this.assertExistingOwnerAvailabilityBlock(posting.id, blockId);
+    await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized, blockId);
+
+    const updated = await this.postingsRepository.updateOwnerAvailabilityBlock(
+      posting.id,
+      blockId,
+      normalized,
+    );
+
+    if (!updated) {
+      throw new ResourceNotFoundError("Availability block could not be found.");
+    }
+
+    return updated;
+  }
+
+  async deleteOwnerAvailabilityBlock(
+    id: string,
+    ownerId: string,
+    blockId: string,
+  ): Promise<void> {
+    const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
+    const deleted = await this.postingsRepository.deleteOwnerAvailabilityBlock(
+      posting.id,
+      blockId,
+    );
+
+    if (!deleted) {
+      throw new ResourceNotFoundError("Availability block could not be found.");
+    }
   }
 
   async publish(id: string, ownerId: string): Promise<PostingRecord> {
@@ -240,6 +310,12 @@ export class PostingsService {
     return normalized;
   }
 
+  private normalizeSingleAvailabilityBlock(
+    block: PostingAvailabilityBlockInput,
+  ): PostingAvailabilityBlockInput {
+    return this.normalizeAvailabilityBlocks([block])[0]!;
+  }
+
   private normalizePricing(pricing: PostingPricing): PostingPricing {
     return {
       currency: pricing.currency.trim().toUpperCase(),
@@ -297,6 +373,81 @@ export class PostingsService {
 
     if (violations.length > 0) {
       throw new BadRequestError("Request body validation failed.", violations);
+    }
+  }
+
+  private assertSafeAvailabilityBlockContent(input: PostingAvailabilityBlockInput): void {
+    if (!input.note) {
+      return;
+    }
+
+    const violations = this.contentSanitizationService
+      .inspect([
+        {
+          path: "note",
+          value: input.note,
+        },
+      ])
+      .map((violation) => ({
+        path: violation.path,
+        message: violation.message,
+      }));
+
+    if (violations.length > 0) {
+      throw new BadRequestError("Request body validation failed.", violations);
+    }
+  }
+
+  private async assertExistingOwnerAvailabilityBlock(
+    postingId: string,
+    blockId: string,
+  ): Promise<void> {
+    const block = await this.postingsRepository.findOwnerAvailabilityBlock(postingId, blockId);
+
+    if (!block) {
+      throw new ResourceNotFoundError("Availability block could not be found.");
+    }
+  }
+
+  private async assertAvailabilityBlockCanBeWritten(
+    postingId: string,
+    block: PostingAvailabilityBlockInput,
+    excludeBlockId?: string,
+  ): Promise<void> {
+    const startAt = new Date(block.startAt);
+    const endAt = new Date(block.endAt);
+
+    const ownerOverlap = await this.postingsRepository.hasOwnerAvailabilityBlockOverlap({
+      postingId,
+      startAt,
+      endAt,
+      excludeBlockId,
+    });
+
+    if (ownerOverlap) {
+      throw new BadRequestError("Availability blocks may not overlap.");
+    }
+
+    const bookingConflict = await this.postingsRepository.hasActiveBookingAvailabilityConflict({
+      postingId,
+      startAt,
+      endAt,
+    });
+
+    if (bookingConflict) {
+      throw new ConflictError(
+        "Availability block conflicts with an active booking request or hold.",
+      );
+    }
+
+    const rentingConflict = await this.postingsRepository.hasRentingAvailabilityConflict({
+      postingId,
+      startAt,
+      endAt,
+    });
+
+    if (rentingConflict) {
+      throw new ConflictError("Availability block conflicts with a confirmed renting.");
     }
   }
 
@@ -478,6 +629,19 @@ export class PostingsService {
 
     if (posting.ownerId !== ownerId) {
       throw new ForbiddenError("You do not have access to this posting.");
+    }
+
+    return posting;
+  }
+
+  private async requireOwnerPostingForAvailability(
+    id: string,
+    ownerId: string,
+  ): Promise<PostingRecord> {
+    const posting = await this.postingsRepository.findById(id);
+
+    if (!posting || posting.ownerId !== ownerId) {
+      throw new ResourceNotFoundError("Posting could not be found.");
     }
 
     return posting;

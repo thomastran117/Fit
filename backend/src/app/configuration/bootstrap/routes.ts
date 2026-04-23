@@ -241,6 +241,22 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<BookingsController>(containerTokens.bookingsController, "listForOwnerPosting"),
   );
   app.get(
+    "/postings/:id/availability-blocks",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "listAvailabilityBlocks"),
+  );
+  app.post(
+    "/postings/:id/availability-blocks",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "createAvailabilityBlock"),
+  );
+  app.put(
+    "/postings/:id/availability-blocks/:blockId",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "updateAvailabilityBlock"),
+  );
+  app.delete(
+    "/postings/:id/availability-blocks/:blockId",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "deleteAvailabilityBlock"),
+  );
+  app.get(
     "/postings/:id",
     resolveHandler<PostingsController>(containerTokens.postingsController, "getById"),
   );

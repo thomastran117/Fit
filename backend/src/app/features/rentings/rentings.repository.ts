@@ -108,6 +108,7 @@ export class RentingsRepository extends BaseRepository {
             startAt: bookingRequest.startAt,
             endAt: bookingRequest.endAt,
             note: `Renting confirmed from booking request: ${bookingRequest.id}`,
+            source: "renting",
           },
         });
 

@@ -159,11 +159,13 @@ model PostingAvailabilityBlock {
   startAt    DateTime @map("start_at") @db.DateTime(6)
   endAt      DateTime @map("end_at") @db.DateTime(6)
   note       String?  @db.VarChar(255)
+  source     PostingAvailabilityBlockSource @default(owner)
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   posting    Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
   bookingRequestHold BookingRequest? @relation("BookingRequestHold")
 
+  @@index([postingId, source, startAt, endAt])
   @@index([postingId, startAt, endAt])
   @@map("posting_availability_blocks")
 }
@@ -552,6 +554,12 @@ enum PostingAvailabilityStatus {
   available
   limited
   unavailable
+}
+
+enum PostingAvailabilityBlockSource {
+  owner
+  booking_hold
+  renting
 }
 
 enum PostingFamily {
