@@ -3,42 +3,25 @@
 import type { StoredAuthSession } from "@/lib/auth/types";
 
 const SESSION_STORAGE_KEY = "rentify.auth.session";
+const AUTH_STORAGE_SIGNAL_KEY = "rentify.auth.signal";
 const AUTH_STORAGE_EVENT = "rentify-auth-storage";
-let cachedRawSession: string | null | undefined;
-let cachedParsedSession: StoredAuthSession | null | undefined;
+let memorySession: StoredAuthSession | null = null;
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined";
 }
 
-export function readStoredSession(): StoredAuthSession | null {
+function clearLegacyLocalStorageSession(): void {
   if (!canUseStorage()) {
-    return null;
+    return;
   }
 
-  const rawValue = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+}
 
-  if (rawValue === cachedRawSession && cachedParsedSession !== undefined) {
-    return cachedParsedSession;
-  }
-
-  if (!rawValue) {
-    cachedRawSession = null;
-    cachedParsedSession = null;
-    return null;
-  }
-
-  try {
-    const parsedSession = JSON.parse(rawValue) as StoredAuthSession;
-    cachedRawSession = rawValue;
-    cachedParsedSession = parsedSession;
-    return parsedSession;
-  } catch {
-    window.localStorage.removeItem(SESSION_STORAGE_KEY);
-    cachedRawSession = null;
-    cachedParsedSession = null;
-    return null;
-  }
+export function readStoredSession(): StoredAuthSession | null {
+  clearLegacyLocalStorageSession();
+  return memorySession;
 }
 
 function emitStorageChange(): void {
@@ -46,6 +29,7 @@ function emitStorageChange(): void {
     return;
   }
 
+  window.localStorage.setItem(AUTH_STORAGE_SIGNAL_KEY, String(Date.now()));
   window.dispatchEvent(new Event(AUTH_STORAGE_EVENT));
 }
 
@@ -65,22 +49,29 @@ export function subscribeToStoredSession(onStoreChange: () => void): () => void 
   const handleChange = () => {
     onStoreChange();
   };
+  const handleStorageChange = (event: StorageEvent) => {
+    if (event.key === AUTH_STORAGE_SIGNAL_KEY || event.key === SESSION_STORAGE_KEY) {
+      handleChange();
+    }
+  };
 
-  window.addEventListener("storage", handleChange);
+  window.addEventListener("storage", handleStorageChange);
   window.addEventListener(AUTH_STORAGE_EVENT, handleChange);
 
   return () => {
-    window.removeEventListener("storage", handleChange);
+    window.removeEventListener("storage", handleStorageChange);
     window.removeEventListener(AUTH_STORAGE_EVENT, handleChange);
   };
 }
 
 export function writeStoredSession(session: StoredAuthSession): void {
-  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  memorySession = session;
+  clearLegacyLocalStorageSession();
   emitStorageChange();
 }
 
 export function clearStoredSession(): void {
-  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  memorySession = null;
+  clearLegacyLocalStorageSession();
   emitStorageChange();
 }
