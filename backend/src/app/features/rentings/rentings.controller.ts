@@ -3,6 +3,7 @@ import type { AppBindings } from "@/configuration/http/bindings";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError } from "@/configuration/validation/request";
+import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import type { ListMyRentingsInput, ListRentingsQuery } from "@/features/rentings/rentings.model";
 import { listRentingsQuerySchema } from "@/features/rentings/rentings.model";
 import type { RentingsService } from "@/features/rentings/rentings.service";
@@ -69,33 +70,11 @@ export class RentingsController {
   }
 
   private requireBookingRequestId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private requireRentingId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private async requireAuth(context: Context<AppBindings>) {

@@ -4,6 +4,7 @@ import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { parseRequestBody } from "@/configuration/validation/request";
+import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import { environment } from "@/configuration/environment";
 import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthService } from "@/features/auth/auth.service";
@@ -338,7 +339,7 @@ export class AuthController {
   }
 
   private requireOAuthProviderParam(context: Context<AppBindings>): OAuthProvider {
-    const provider = context.req.param("provider");
+    const provider = requireSafeRouteParam(context, "provider");
     return oauthProviderSchema.parse(provider);
   }
 
