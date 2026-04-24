@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
 import type {
   ListMyRentingsInput,
   ListRentingsResult,
@@ -29,135 +30,143 @@ export class RentingsRepository extends BaseRepository {
     bookingRequestId: string,
     ownerId: string,
   ): Promise<RentingRecord | null> {
-    return this.executeAsync(async () =>
-      this.prisma.$transaction(async (transaction) => {
-        const bookingRequest = await transaction.bookingRequest.findUnique({
-          where: {
-            id: bookingRequestId,
-          },
-          include: {
-            posting: {
-              include: {
-                photos: {
-                  orderBy: {
-                    position: "asc",
+    return this.executeAsync(async () => {
+      try {
+        return await this.prisma.$transaction(async (transaction) => {
+          const bookingRequest = await transaction.bookingRequest.findUnique({
+            where: {
+              id: bookingRequestId,
+            },
+            include: {
+              posting: {
+                include: {
+                  photos: {
+                    orderBy: {
+                      position: "asc",
+                    },
                   },
                 },
               },
-            },
-            renting: {
-              select: {
-                id: true,
+              renting: {
+                select: {
+                  id: true,
+                },
               },
-            },
-          },
-        });
-
-        if (!bookingRequest || bookingRequest.ownerId !== ownerId) {
-          return null;
-        }
-
-        const now = new Date();
-
-        if (bookingRequest.status !== "paid") {
-          throw new BadRequestError("Only paid booking requests can be converted into rentings.");
-        }
-
-        if (bookingRequest.convertedAt || bookingRequest.renting) {
-          throw new BadRequestError("This booking request has already been converted into a renting.");
-        }
-
-        if (
-          !bookingRequest.conversionReservationExpiresAt ||
-          bookingRequest.conversionReservationExpiresAt.getTime() <= now.getTime()
-        ) {
-          throw new BadRequestError("This booking request is not currently reserved for conversion.");
-        }
-
-        const overlapWithRenting = await transaction.renting.findFirst({
-          where: {
-            postingId: bookingRequest.postingId,
-            startAt: {
-              lt: bookingRequest.endAt,
-            },
-            endAt: {
-              gt: bookingRequest.startAt,
-            },
-          },
-          select: {
-            id: true,
-          },
-        });
-
-        if (overlapWithRenting) {
-          throw new BadRequestError("The requested dates are no longer available.");
-        }
-
-        if (bookingRequest.holdBlockId) {
-          await transaction.postingAvailabilityBlock.deleteMany({
-            where: {
-              id: bookingRequest.holdBlockId,
             },
           });
-        }
 
-        await transaction.postingAvailabilityBlock.create({
-          data: {
-            id: randomUUID(),
-            postingId: bookingRequest.postingId,
-            startAt: bookingRequest.startAt,
-            endAt: bookingRequest.endAt,
-            note: `Renting confirmed from booking request: ${bookingRequest.id}`,
-            source: "renting",
-          },
-        });
+          if (!bookingRequest || bookingRequest.ownerId !== ownerId) {
+            return null;
+          }
 
-        const renting = await transaction.renting.create({
-          data: {
-            id: randomUUID(),
-            postingId: bookingRequest.postingId,
-            bookingRequestId: bookingRequest.id,
-            renterId: bookingRequest.renterId,
-            ownerId: bookingRequest.ownerId,
-            status: "confirmed",
-            startAt: bookingRequest.startAt,
-            endAt: bookingRequest.endAt,
-            durationDays: bookingRequest.durationDays,
-            guestCount: bookingRequest.guestCount,
-            pricingCurrency: bookingRequest.pricingCurrency,
-            pricingSnapshot: bookingRequest.pricingSnapshot as Prisma.InputJsonValue,
-            dailyPriceAmount: bookingRequest.dailyPriceAmount,
-            estimatedTotal: bookingRequest.estimatedTotal,
-            confirmedAt: now,
-          },
-          include: {
-            posting: {
-              include: {
-                photos: {
-                  orderBy: {
-                    position: "asc",
+          const now = new Date();
+
+          if (bookingRequest.status !== "paid") {
+            throw new BadRequestError("Only paid booking requests can be converted into rentings.");
+          }
+
+          if (bookingRequest.convertedAt || bookingRequest.renting) {
+            throw new BadRequestError("This booking request has already been converted into a renting.");
+          }
+
+          if (
+            !bookingRequest.conversionReservationExpiresAt ||
+            bookingRequest.conversionReservationExpiresAt.getTime() <= now.getTime()
+          ) {
+            throw new BadRequestError("This booking request is not currently reserved for conversion.");
+          }
+
+          const overlapWithRenting = await transaction.renting.findFirst({
+            where: {
+              postingId: bookingRequest.postingId,
+              startAt: {
+                lt: bookingRequest.endAt,
+              },
+              endAt: {
+                gt: bookingRequest.startAt,
+              },
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          if (overlapWithRenting) {
+            throw new BadRequestError("The requested dates are no longer available.");
+          }
+
+          if (bookingRequest.holdBlockId) {
+            await transaction.postingAvailabilityBlock.deleteMany({
+              where: {
+                id: bookingRequest.holdBlockId,
+              },
+            });
+          }
+
+          await transaction.postingAvailabilityBlock.create({
+            data: {
+              id: randomUUID(),
+              postingId: bookingRequest.postingId,
+              startAt: bookingRequest.startAt,
+              endAt: bookingRequest.endAt,
+              note: `Renting confirmed from booking request: ${bookingRequest.id}`,
+              source: "renting",
+            },
+          });
+
+          const renting = await transaction.renting.create({
+            data: {
+              id: randomUUID(),
+              postingId: bookingRequest.postingId,
+              bookingRequestId: bookingRequest.id,
+              renterId: bookingRequest.renterId,
+              ownerId: bookingRequest.ownerId,
+              status: "confirmed",
+              startAt: bookingRequest.startAt,
+              endAt: bookingRequest.endAt,
+              durationDays: bookingRequest.durationDays,
+              guestCount: bookingRequest.guestCount,
+              pricingCurrency: bookingRequest.pricingCurrency,
+              pricingSnapshot: bookingRequest.pricingSnapshot as Prisma.InputJsonValue,
+              dailyPriceAmount: bookingRequest.dailyPriceAmount,
+              estimatedTotal: bookingRequest.estimatedTotal,
+              confirmedAt: now,
+            },
+            include: {
+              posting: {
+                include: {
+                  photos: {
+                    orderBy: {
+                      position: "asc",
+                    },
                   },
                 },
               },
             },
-          },
-        });
+          });
 
-        await transaction.bookingRequest.update({
-          where: {
-            id: bookingRequest.id,
-          },
-          data: {
-            convertedAt: now,
-            conversionReservedAt: null,
-            conversionReservationExpiresAt: null,
-            holdBlockId: null,
-          },
-        });
+          await transaction.bookingRequest.update({
+            where: {
+              id: bookingRequest.id,
+            },
+            data: {
+              convertedAt: now,
+              conversionReservedAt: null,
+              conversionReservationExpiresAt: null,
+              holdBlockId: null,
+            },
+          });
 
-        return this.mapRenting(renting);
-      }),
-    );
+          return this.mapRenting(renting);
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new ConflictError("This booking request has already been converted into a renting.");
+        }
+
+        throw error;
+      }
+    });
   }
 
   async findById(id: string): Promise<RentingRecord | null> {

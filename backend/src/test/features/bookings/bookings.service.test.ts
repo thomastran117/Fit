@@ -1,7 +1,9 @@
 import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
 import type { BookingRequestRecord } from "@/features/bookings/bookings.model";
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import { BookingsService } from "@/features/bookings/bookings.service";
+import type { CacheService } from "@/features/cache/cache.service";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
@@ -93,12 +95,16 @@ function createService(options?: {
     countActiveRequestsForRenterPosting: jest.fn(
       async () => options?.activeRequestCount ?? 0,
     ),
-    create: jest.fn(async () => createdBooking),
+    createIfWithinActiveRequestLimit: jest.fn(async () => createdBooking),
     findById: jest.fn(async () => createdBooking),
     updatePending: jest.fn(async () => createdBooking),
     approve: jest.fn(async () => ({
       ...createdBooking,
       status: "awaiting_payment",
+    })),
+    decline: jest.fn(async () => ({
+      ...createdBooking,
+      status: "declined",
     })),
     hasBlockingAvailabilityOverlap: jest.fn(async () => options?.availabilityOverlap ?? false),
   } as unknown as BookingsRepository;
@@ -115,20 +121,32 @@ function createService(options?: {
   const rentingsRepository = {
     hasOverlap: jest.fn(async () => options?.rentingOverlap ?? false),
   } as unknown as RentingsRepository;
+  const cacheService = {
+    acquireLock: jest.fn(async (key: string) => ({
+      key,
+      token: `${key}-token`,
+      release: jest.fn(async () => true),
+      extend: jest.fn(async () => true),
+    })),
+  } as unknown as CacheService;
 
   const service = new BookingsService(
     bookingsRepository,
     postingsRepository,
     analyticsRepository,
     rentingsRepository,
+    cacheService,
   );
 
   return {
     service,
     bookingsRepository: bookingsRepository as unknown as {
       countActiveRequestsForRenterPosting: jest.Mock;
-      create: jest.Mock;
+      createIfWithinActiveRequestLimit: jest.Mock;
+      findById: jest.Mock;
+      updatePending: jest.Mock;
       approve: jest.Mock;
+      decline: jest.Mock;
       hasBlockingAvailabilityOverlap: jest.Mock;
     },
     analyticsRepository: analyticsRepository as unknown as {
@@ -140,6 +158,9 @@ function createService(options?: {
     },
     rentingsRepository: rentingsRepository as unknown as {
       hasOverlap: jest.Mock;
+    },
+    cacheService: cacheService as unknown as {
+      acquireLock: jest.Mock;
     },
   };
 }
@@ -165,7 +186,7 @@ describe("BookingsService", () => {
       renterId: "renter-1",
       excludeBookingRequestId: undefined,
     });
-    expect(bookingsRepository.create).toHaveBeenCalledTimes(1);
+    expect(bookingsRepository.createIfWithinActiveRequestLimit).toHaveBeenCalledTimes(1);
     expect(analyticsRepository.enqueueBookingRequestedEvent).toHaveBeenCalledTimes(1);
     expect(postingsRepository.enqueueSearchSync).toHaveBeenCalledWith("posting-1");
     expect(result.id).toBe("booking-1");
@@ -274,7 +295,7 @@ describe("BookingsService", () => {
     expect(rentingsRepository.hasOverlap).toHaveBeenCalledTimes(1);
     expect(bookingsRepository.hasBlockingAvailabilityOverlap).toHaveBeenCalledTimes(1);
     expect(bookingsRepository.countActiveRequestsForRenterPosting).toHaveBeenCalledTimes(1);
-    expect(bookingsRepository.create).not.toHaveBeenCalled();
+    expect(bookingsRepository.createIfWithinActiveRequestLimit).not.toHaveBeenCalled();
   });
 
   it("persists booking contact info as part of the request snapshot", async () => {
@@ -292,12 +313,81 @@ describe("BookingsService", () => {
       note: null,
     });
 
-    expect(bookingsRepository.create).toHaveBeenCalledWith(
+    expect(bookingsRepository.createIfWithinActiveRequestLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         contactName: "Jordan Lee",
         contactEmail: "jordan@example.com",
         contactPhoneNumber: "+1 416 555 0100",
       }),
+      2,
     );
+  });
+
+  it("returns a conflict when the booking-request cap lock is busy", async () => {
+    const { service, cacheService, bookingsRepository } = createService();
+    cacheService.acquireLock.mockResolvedValueOnce(null);
+
+    await expect(
+      service.create({
+        postingId: "posting-1",
+        renterId: "renter-1",
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+        guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    expect(bookingsRepository.createIfWithinActiveRequestLimit).not.toHaveBeenCalled();
+  });
+
+  it("returns a conflict when a pending update loses its conditional write", async () => {
+    const booking = createBookingRequestRecord({
+      holdExpiresAt: "2099-04-21T00:00:00.000Z",
+    });
+    const { service, bookingsRepository, cacheService } = createService({
+      createdBooking: booking,
+    });
+    bookingsRepository.findById.mockResolvedValue(booking);
+    bookingsRepository.updatePending.mockResolvedValue(null);
+
+    await expect(
+      service.updateOwnPending({
+        bookingRequestId: "booking-1",
+        renterId: "renter-1",
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+        guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    expect(cacheService.acquireLock.mock.calls.map(([key]) => key)).toEqual([
+      "booking-request:booking-1:state",
+      "posting:posting-1:booking-window",
+    ]);
+  });
+
+  it("serializes approve with decision, state, and posting locks", async () => {
+    const booking = createBookingRequestRecord({
+      holdExpiresAt: "2099-04-21T00:00:00.000Z",
+    });
+    const { service, cacheService } = createService({
+      createdBooking: booking,
+    });
+
+    await service.approve({
+      bookingRequestId: "booking-1",
+      ownerId: "owner-1",
+      note: "approved",
+    });
+
+    expect(cacheService.acquireLock.mock.calls.map(([key]) => key)).toEqual([
+      "booking-request:booking-1:decision",
+      "booking-request:booking-1:state",
+      "posting:posting-1:booking-window",
+    ]);
   });
 });

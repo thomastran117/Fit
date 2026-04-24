@@ -691,9 +691,15 @@ export class PaymentsRepository extends BaseRepository {
     return payment ? this.mapPayment(payment) : null;
   }
 
-  async markPaymentSucceeded(input: ProviderPaymentStatus): Promise<PaymentRecord | null> {
+  async markPaymentSucceeded(input: ProviderPaymentStatus): Promise<{
+    payment: PaymentRecord | null;
+    reconciliationRequired: boolean;
+  }> {
     if (!input.providerPaymentId && !input.providerOrderId) {
-      return null;
+      return {
+        payment: null,
+        reconciliationRequired: false,
+      };
     }
 
     return this.executeAsync(() =>
@@ -722,8 +728,13 @@ export class PaymentsRepository extends BaseRepository {
         });
 
         if (!payment) {
-          return null;
+          return {
+            payment: null,
+            reconciliationRequired: false,
+          };
         }
+
+        const paymentJustSucceeded = payment.status !== "succeeded";
 
         await transaction.payment.update({
           where: {
@@ -733,7 +744,7 @@ export class PaymentsRepository extends BaseRepository {
             status: "succeeded",
             squarePaymentId: input.providerPaymentId ?? payment.squarePaymentId,
             squareOrderId: input.providerOrderId ?? payment.squareOrderId,
-            succeededAt: new Date(),
+            succeededAt: payment.succeededAt ?? new Date(),
             failedAt: null,
           },
         });
@@ -769,46 +780,104 @@ export class PaymentsRepository extends BaseRepository {
           },
         });
 
+        const bookingAlreadyConverted = Boolean(booking.renting || booking.convertedAt);
+        let reconciliationRequired = false;
         let holdBlockId = booking.holdBlockId;
 
-        if (!booking.renting && !holdBlockId) {
-          const holdBlock = await transaction.postingAvailabilityBlock.create({
-            data: {
-              id: randomUUID(),
-              postingId: booking.postingId,
-              startAt: booking.startAt,
-              endAt: booking.endAt,
-              note: `Booking paid reservation: ${booking.id}`,
-              source: "booking_hold",
-            },
-          });
-          holdBlockId = holdBlock.id;
+        if (!bookingAlreadyConverted && !holdBlockId) {
+          const [availabilityConflict, rentingConflict] = await Promise.all([
+            transaction.postingAvailabilityBlock.findFirst({
+              where: {
+                postingId: booking.postingId,
+                startAt: {
+                  lt: booking.endAt,
+                },
+                endAt: {
+                  gt: booking.startAt,
+                },
+                OR: [
+                  {
+                    bookingRequestHold: null,
+                  },
+                  {
+                    bookingRequestHold: {
+                      status: "paid",
+                      convertedAt: null,
+                      id: {
+                        not: booking.id,
+                      },
+                    },
+                  },
+                ],
+              },
+              select: {
+                id: true,
+              },
+            }),
+            transaction.renting.findFirst({
+              where: {
+                postingId: booking.postingId,
+                startAt: {
+                  lt: booking.endAt,
+                },
+                endAt: {
+                  gt: booking.startAt,
+                },
+              },
+              select: {
+                id: true,
+              },
+            }),
+          ]);
+
+          reconciliationRequired = Boolean(availabilityConflict || rentingConflict);
+
+          if (!reconciliationRequired) {
+            const holdBlock = await transaction.postingAvailabilityBlock.create({
+              data: {
+                id: randomUUID(),
+                postingId: booking.postingId,
+                startAt: booking.startAt,
+                endAt: booking.endAt,
+                note: `Booking paid reservation: ${booking.id}`,
+                source: "booking_hold",
+              },
+            });
+            holdBlockId = holdBlock.id;
+          }
         }
 
-        await transaction.bookingRequest.update({
-          where: {
-            id: booking.id,
-          },
-          data: {
-            status: "paid",
-            convertedAt: null,
-            holdBlockId: holdBlockId ?? null,
-            conversionReservedAt: null,
-            conversionReservationExpiresAt: null,
-            paymentReconciliationRequired: false,
-          },
-        });
+        if (!bookingAlreadyConverted) {
+          await transaction.bookingRequest.update({
+            where: {
+              id: booking.id,
+            },
+            data: reconciliationRequired
+              ? {
+                  paymentReconciliationRequired: true,
+                }
+              : {
+                  status: "paid",
+                  holdBlockId: holdBlockId ?? null,
+                  conversionReservedAt: null,
+                  conversionReservationExpiresAt: null,
+                  paymentReconciliationRequired: false,
+                },
+          });
+        }
 
-        await transaction.paymentLedgerEntry.create({
-          data: {
-            id: randomUUID(),
-            paymentId: payment.id,
-            type: "charge_succeeded",
-            amount: payment.totalAmount,
-            currency: payment.pricingCurrency,
-            metadata: input.raw as Prisma.InputJsonValue,
-          },
-        });
+        if (paymentJustSucceeded) {
+          await transaction.paymentLedgerEntry.create({
+            data: {
+              id: randomUUID(),
+              paymentId: payment.id,
+              type: "charge_succeeded",
+              amount: payment.totalAmount,
+              currency: payment.pricingCurrency,
+              metadata: input.raw as Prisma.InputJsonValue,
+            },
+          });
+        }
 
         if (!payment.payout) {
           await transaction.payout.create({
@@ -856,7 +925,10 @@ export class PaymentsRepository extends BaseRepository {
           },
         });
 
-        return this.mapPayment(refreshed);
+        return {
+          payment: this.mapPayment(refreshed),
+          reconciliationRequired,
+        };
       }),
     );
   }

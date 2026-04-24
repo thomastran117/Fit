@@ -11,6 +11,7 @@ import type { PostingsRepository } from "@/features/postings/postings.repository
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
+import type { CacheService } from "@/features/cache/cache.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 class FakePostingsRepository {
@@ -107,12 +108,21 @@ function createService(repository: FakePostingsRepository): PostingsService {
     isConfigured: () => true,
     isManagedBlobUrl: () => true,
   } as unknown as BlobService;
+  const cacheService = {
+    acquireLock: jest.fn(async (key: string) => ({
+      key,
+      token: `${key}-token`,
+      release: jest.fn(async () => true),
+      extend: jest.fn(async () => true),
+    })),
+  } as unknown as CacheService;
 
   return new PostingsService(
     repository as unknown as PostingsRepository,
     searchService,
     blobService,
     new ContentSanitizationService(),
+    cacheService,
   );
 }
 
@@ -443,5 +453,31 @@ describe("PostingsService", () => {
     await expect(
       service.deleteOwnerAvailabilityBlock("posting-1", "owner-1", "booking-hold-1"),
     ).rejects.toBeInstanceOf(ResourceNotFoundError);
+  });
+
+  it("returns a conflict when the posting availability lock is busy", async () => {
+    const repository = new FakePostingsRepository();
+    const searchService = {} as PostingsSearchService;
+    const blobService = {
+      isConfigured: () => true,
+      isManagedBlobUrl: () => true,
+    } as unknown as BlobService;
+    const cacheService = {
+      acquireLock: jest.fn(async () => null),
+    } as unknown as CacheService;
+    const service = new PostingsService(
+      repository as unknown as PostingsRepository,
+      searchService,
+      blobService,
+      new ContentSanitizationService(),
+      cacheService,
+    );
+
+    await expect(
+      service.createOwnerAvailabilityBlock("posting-1", "owner-1", {
+        startAt: "2026-06-01T00:00:00.000Z",
+        endAt: "2026-06-03T00:00:00.000Z",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
   });
 });

@@ -91,6 +91,71 @@ export class BookingsRepository extends BaseRepository {
     return this.mapBookingRequest(created);
   }
 
+  async createIfWithinActiveRequestLimit(
+    input: CreateBookingRequestPersistenceInput,
+    maxActiveRequests: number,
+  ): Promise<BookingRequestRecord | null> {
+    const created = await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        const activeRequestCount = await transaction.bookingRequest.count({
+          where: {
+            postingId: input.postingId,
+            renterId: input.renterId,
+            status: {
+              in: this.activeBookingStatuses,
+            },
+            convertedAt: null,
+          },
+        });
+
+        if (activeRequestCount >= maxActiveRequests) {
+          return null;
+        }
+
+        return transaction.bookingRequest.create({
+          data: {
+            id: randomUUID(),
+            postingId: input.postingId,
+            renterId: input.renterId,
+            ownerId: input.ownerId,
+            status: "pending",
+            startAt: input.startAt,
+            endAt: input.endAt,
+            durationDays: input.durationDays,
+            guestCount: input.guestCount,
+            contactName: input.contactName,
+            contactEmail: input.contactEmail,
+            contactPhoneNumber: input.contactPhoneNumber ?? null,
+            note: input.note ?? null,
+            pricingCurrency: input.pricingCurrency,
+            pricingSnapshot: input.pricingSnapshot as Prisma.InputJsonValue,
+            dailyPriceAmount: new Prisma.Decimal(input.dailyPriceAmount),
+            estimatedTotal: new Prisma.Decimal(input.estimatedTotal),
+            holdExpiresAt: input.holdExpiresAt,
+          },
+          include: {
+            renting: {
+              select: {
+                id: true,
+              },
+            },
+            posting: {
+              include: {
+                photos: {
+                  orderBy: {
+                    position: "asc",
+                  },
+                },
+              },
+            },
+          },
+        });
+      }),
+    );
+
+    return created ? this.mapBookingRequest(created) : null;
+  }
+
   async findById(id: string): Promise<BookingRequestRecord | null> {
     const bookingRequest = await this.executeAsync(() =>
       this.prisma.bookingRequest.findUnique({
@@ -159,9 +224,14 @@ export class BookingsRepository extends BaseRepository {
           return null;
         }
 
-        return transaction.bookingRequest.update({
+        const result = await transaction.bookingRequest.updateMany({
           where: {
             id: bookingRequestId,
+            renterId,
+            status: "pending",
+            holdExpiresAt: {
+              gt: new Date(),
+            },
           },
           data: {
             startAt: input.startAt,
@@ -176,6 +246,16 @@ export class BookingsRepository extends BaseRepository {
             pricingSnapshot: input.pricingSnapshot as Prisma.InputJsonValue,
             dailyPriceAmount: new Prisma.Decimal(input.dailyPriceAmount),
             estimatedTotal: new Prisma.Decimal(input.estimatedTotal),
+          },
+        });
+
+        if (result.count !== 1) {
+          return null;
+        }
+
+        return transaction.bookingRequest.findUniqueOrThrow({
+          where: {
+            id: bookingRequestId,
           },
           include: {
             renting: {
@@ -420,9 +500,14 @@ export class BookingsRepository extends BaseRepository {
             throw new BadRequestError("The requested dates are no longer available.");
           }
 
-          const updated = await transaction.bookingRequest.update({
+          const result = await transaction.bookingRequest.updateMany({
             where: {
               id: existing.id,
+              ownerId,
+              status: "pending",
+              holdExpiresAt: {
+                gt: new Date(),
+              },
             },
             data: {
               status: "awaiting_payment",
@@ -432,6 +517,16 @@ export class BookingsRepository extends BaseRepository {
               decisionNote: note ?? null,
               holdExpiresAt,
               holdBlockId: null,
+            },
+          });
+
+          if (result.count !== 1) {
+            return null;
+          }
+
+          return transaction.bookingRequest.findUniqueOrThrow({
+            where: {
+              id: existing.id,
             },
             include: {
               renting: {
@@ -450,8 +545,6 @@ export class BookingsRepository extends BaseRepository {
               },
             },
           });
-
-          return updated;
         });
 
         return approved ? this.mapBookingRequest(approved) : null;
@@ -479,6 +572,7 @@ export class BookingsRepository extends BaseRepository {
           select: {
             id: true,
             ownerId: true,
+            status: true,
           },
         });
 
@@ -486,14 +580,33 @@ export class BookingsRepository extends BaseRepository {
           return null;
         }
 
-        return transaction.bookingRequest.update({
+        if (existing.status !== "pending") {
+          return null;
+        }
+
+        const result = await transaction.bookingRequest.updateMany({
           where: {
             id: bookingRequestId,
+            ownerId,
+            status: "pending",
+            holdExpiresAt: {
+              gt: new Date(),
+            },
           },
           data: {
             status: "declined",
             declinedAt: new Date(),
             decisionNote: note ?? null,
+          },
+        });
+
+        if (result.count !== 1) {
+          return null;
+        }
+
+        return transaction.bookingRequest.findUniqueOrThrow({
+          where: {
+            id: bookingRequestId,
           },
           include: {
             renting: {
@@ -697,7 +810,10 @@ export class BookingsRepository extends BaseRepository {
     bookingRequestId: string,
     ownerId: string,
     reservationExpiresAt: Date,
-  ): Promise<void> {
+  ): Promise<{
+    reservedAt: Date;
+    reservationExpiresAt: Date;
+  }> {
     const now = new Date();
     const result = await this.executeAsync(() =>
       this.prisma.bookingRequest.updateMany({
@@ -727,14 +843,28 @@ export class BookingsRepository extends BaseRepository {
     if (result.count !== 1) {
       throw new ConflictError("This booking request is already reserved for conversion.");
     }
+
+    return {
+      reservedAt: now,
+      reservationExpiresAt,
+    };
   }
 
-  async releaseConversionReservation(bookingRequestId: string, ownerId: string): Promise<void> {
+  async releaseConversionReservation(
+    bookingRequestId: string,
+    ownerId: string,
+    reservation: {
+      reservedAt: Date;
+      reservationExpiresAt: Date;
+    },
+  ): Promise<void> {
     await this.executeAsync(() =>
       this.prisma.bookingRequest.updateMany({
         where: {
           id: bookingRequestId,
           ownerId,
+          conversionReservedAt: reservation.reservedAt,
+          conversionReservationExpiresAt: reservation.reservationExpiresAt,
         },
         data: {
           conversionReservedAt: null,
