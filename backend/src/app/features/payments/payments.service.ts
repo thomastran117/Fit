@@ -1,5 +1,8 @@
 import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
+import type { CacheService } from "@/features/cache/cache.service";
+import { flowLockKeys, withFlowLock } from "@/features/cache/cache-locks";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PaymentProviderAdapter } from "@/features/payments/payment-provider";
@@ -9,6 +12,7 @@ import type {
   ListPayoutsInput,
   PaymentRecord,
   PayoutListResult,
+  ProviderPaymentStatus,
   RetryPaymentInput,
 } from "@/features/payments/payments.model";
 import { PaymentsRepository } from "@/features/payments/payments.repository";
@@ -40,6 +44,7 @@ export class PaymentsService {
     private readonly paymentProvider: PaymentProviderAdapter,
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
     private readonly postingsRepository: PostingsRepository,
+    private readonly cacheService: CacheService,
   ) {}
 
   async createPaymentSession(input: CreatePaymentSessionInput): Promise<PaymentRecord> {
@@ -160,13 +165,13 @@ export class PaymentsService {
       const status = (details.status ?? "").toUpperCase();
 
       if (status === "COMPLETED") {
-        const payment = await this.paymentsRepository.markPaymentSucceeded({
+        const result = await this.markCompletedPaymentStatus({
           providerPaymentId: details.paymentId,
           providerOrderId: details.orderId,
           status: "COMPLETED",
           raw: verification.payload,
         });
-        await this.enqueueSearchSync(payment?.postingId);
+        await this.enqueueSearchSync(result.payment?.postingId);
       } else if (status === "FAILED" || status === "CANCELED") {
         const payment = await this.paymentsRepository.markPaymentFailed(
           {
@@ -198,14 +203,21 @@ export class PaymentsService {
     }
 
     if (status.status === "COMPLETED") {
-      const payment = await this.paymentsRepository.markPaymentSucceeded(status);
+      const result = await this.markCompletedPaymentStatus(status, payment.postingId);
 
-      if (!payment) {
+      if (!result.payment) {
         throw new ResourceNotFoundError("Payment could not be reconciled.");
       }
 
-      await this.enqueueSearchSync(payment.postingId);
-      return payment;
+      await this.enqueueSearchSync(result.payment.postingId);
+
+      if (result.reconciliationRequired) {
+        throw new ConflictError(
+          "Payment succeeded, but the booking now requires reconciliation before it can be finalized.",
+        );
+      }
+
+      return result.payment;
     }
 
     if (status.status === "FAILED" || status.status === "CANCELED") {
@@ -242,8 +254,8 @@ export class PaymentsService {
     }
 
     if (status.status === "COMPLETED") {
-      const result = await this.paymentsRepository.markPaymentSucceeded(status);
-      await this.enqueueSearchSync(result?.postingId);
+      const result = await this.markCompletedPaymentStatus(status, payment.postingId);
+      await this.enqueueSearchSync(result.payment?.postingId);
       return;
     }
 
@@ -328,5 +340,33 @@ export class PaymentsService {
     }
 
     await this.postingsRepository.enqueueSearchSync(postingId);
+  }
+
+  private async markCompletedPaymentStatus(
+    status: ProviderPaymentStatus,
+    postingId?: string,
+  ): Promise<{
+    payment: PaymentRecord | null;
+    reconciliationRequired: boolean;
+  }> {
+    const existingPayment =
+      postingId === undefined
+        ? await this.paymentsRepository.findBySquareReferences({
+            squarePaymentId: status.providerPaymentId,
+            squareOrderId: status.providerOrderId,
+          })
+        : null;
+    const lockPostingId = postingId ?? existingPayment?.postingId;
+
+    if (!lockPostingId) {
+      return this.paymentsRepository.markPaymentSucceeded(status);
+    }
+
+    return withFlowLock(
+      this.cacheService,
+      flowLockKeys.postingBookingWindow(lockPostingId),
+      () => this.paymentsRepository.markPaymentSucceeded(status),
+      "Another request is already finalizing a booking window for this posting. Please retry.",
+    );
   }
 }

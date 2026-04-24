@@ -171,6 +171,7 @@ describe("PaymentsRepository", () => {
         }),
       },
       postingAvailabilityBlock: {
+        findFirst: jest.fn(async () => null),
         create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
           blockCreates.push(data);
           return {
@@ -180,6 +181,7 @@ describe("PaymentsRepository", () => {
       },
       renting: {
         create: rentingCreate,
+        findFirst: jest.fn(async () => null),
       },
       paymentLedgerEntry: {
         create: jest.fn(async () => undefined),
@@ -204,14 +206,170 @@ describe("PaymentsRepository", () => {
       },
     });
 
-    expect(result?.booking.status).toBe("paid");
+    expect(result.payment?.booking.status).toBe("paid");
+    expect(result.reconciliationRequired).toBe(false);
     expect(blockCreates).toHaveLength(1);
     expect(bookingUpdates[0]).toMatchObject({
       status: "paid",
-      convertedAt: null,
       holdBlockId: "block-1",
     });
     expect(rentingCreate).not.toHaveBeenCalled();
+  });
+
+  it("flags reconciliation when payment success finds a conflicting hold or renting", async () => {
+    const bookingUpdates: Array<Record<string, unknown>> = [];
+    const payment = createPaymentPersistence({
+      status: "processing",
+      attempts: [
+        {
+          id: "attempt-1",
+          status: "processing",
+        },
+      ],
+    });
+    const booking = createBookingPersistence({
+      status: "payment_processing",
+      holdBlockId: null,
+      renting: null,
+    });
+    const refreshedPayment = createPaymentPersistence({
+      status: "succeeded",
+      bookingRequest: {
+        ...payment.bookingRequest,
+        status: "payment_processing",
+        paymentReconciliationRequired: true,
+      },
+    });
+
+    const transaction = {
+      payment: {
+        findFirst: jest.fn(async () => payment),
+        update: jest.fn(async () => undefined),
+        findUniqueOrThrow: jest.fn(async () => refreshedPayment),
+      },
+      paymentAttempt: {
+        update: jest.fn(async () => undefined),
+      },
+      bookingRequest: {
+        findUniqueOrThrow: jest.fn(async () => booking),
+        update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          bookingUpdates.push(data);
+        }),
+      },
+      postingAvailabilityBlock: {
+        findFirst: jest.fn(async () => ({
+          id: "conflict-block",
+        })),
+      },
+      renting: {
+        findFirst: jest.fn(async () => null),
+      },
+      paymentLedgerEntry: {
+        create: jest.fn(async () => undefined),
+      },
+      payout: {
+        create: jest.fn(async () => undefined),
+      },
+    };
+
+    const database = {
+      $transaction: async <T>(callback: (client: typeof transaction) => Promise<T>) =>
+        callback(transaction),
+    };
+
+    const repository = new PaymentsRepository(database as never);
+    const result = await repository.markPaymentSucceeded({
+      providerPaymentId: "square-pay-1",
+      providerOrderId: "square-order-1",
+      status: "COMPLETED",
+      raw: {
+        ok: true,
+      },
+    });
+
+    expect(result.reconciliationRequired).toBe(true);
+    expect(bookingUpdates[0]).toMatchObject({
+      paymentReconciliationRequired: true,
+    });
+    expect(result.payment?.booking.paymentReconciliationRequired).toBe(true);
+  });
+
+  it("treats duplicate payment success after conversion as idempotent", async () => {
+    const bookingUpdate = jest.fn();
+    const blockCreate = jest.fn();
+    const ledgerCreate = jest.fn();
+    const payoutCreate = jest.fn();
+    const payment = createPaymentPersistence({
+      status: "succeeded",
+      succeededAt: new Date("2026-04-20T01:00:00.000Z"),
+      payout: {
+        id: "payout-1",
+        paymentId: "payment-1",
+        ownerId: "owner-1",
+        status: "scheduled",
+        amount: new Prisma.Decimal(100),
+        dueAt: new Date("2026-05-01T00:00:00.000Z"),
+        releasedAt: null,
+        failedAt: null,
+        squarePayoutId: null,
+        failureMessage: null,
+        createdAt: new Date("2026-04-20T01:00:00.000Z"),
+        updatedAt: new Date("2026-04-20T01:00:00.000Z"),
+      },
+    });
+    const booking = createBookingPersistence({
+      status: "paid",
+      convertedAt: new Date("2026-04-21T00:00:00.000Z"),
+      renting: {
+        id: "renting-1",
+      },
+      holdBlockId: null,
+    });
+
+    const transaction = {
+      payment: {
+        findFirst: jest.fn(async () => payment),
+        update: jest.fn(async () => undefined),
+        findUniqueOrThrow: jest.fn(async () => payment),
+      },
+      paymentAttempt: {
+        update: jest.fn(async () => undefined),
+      },
+      bookingRequest: {
+        findUniqueOrThrow: jest.fn(async () => booking),
+        update: bookingUpdate,
+      },
+      postingAvailabilityBlock: {
+        create: blockCreate,
+      },
+      paymentLedgerEntry: {
+        create: ledgerCreate,
+      },
+      payout: {
+        create: payoutCreate,
+      },
+    };
+
+    const database = {
+      $transaction: async <T>(callback: (client: typeof transaction) => Promise<T>) =>
+        callback(transaction),
+    };
+
+    const repository = new PaymentsRepository(database as never);
+    const result = await repository.markPaymentSucceeded({
+      providerPaymentId: "square-pay-1",
+      providerOrderId: "square-order-1",
+      status: "COMPLETED",
+      raw: {
+        ok: true,
+      },
+    });
+
+    expect(result.reconciliationRequired).toBe(false);
+    expect(bookingUpdate).not.toHaveBeenCalled();
+    expect(blockCreate).not.toHaveBeenCalled();
+    expect(ledgerCreate).not.toHaveBeenCalled();
+    expect(payoutCreate).not.toHaveBeenCalled();
   });
 
   it("removes the reservation block when a paid booking is fully refunded", async () => {

@@ -3,6 +3,8 @@ import ConflictError from "@/errors/http/conflict.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { BlobService } from "@/features/blob/blob.service";
+import type { CacheService } from "@/features/cache/cache.service";
+import { flowLockKeys, withFlowLock } from "@/features/cache/cache-locks";
 import {
   DEFAULT_MAX_BOOKING_DURATION_DAYS,
   MAX_BATCH_IDS,
@@ -38,6 +40,7 @@ export class PostingsService {
     private readonly postingsSearchService: PostingsSearchService,
     private readonly blobService: BlobService,
     private readonly contentSanitizationService: ContentSanitizationService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async createDraft(input: UpsertPostingInput): Promise<PostingRecord> {
@@ -85,9 +88,16 @@ export class PostingsService {
     const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
     const normalized = this.normalizeSingleAvailabilityBlock(input);
     this.assertSafeAvailabilityBlockContent(normalized);
-    await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized);
 
-    return this.postingsRepository.createOwnerAvailabilityBlock(posting.id, normalized);
+    return withFlowLock(
+      this.cacheService,
+      flowLockKeys.postingBookingWindow(posting.id),
+      async () => {
+        await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized);
+        return this.postingsRepository.createOwnerAvailabilityBlock(posting.id, normalized);
+      },
+      "Another request is already modifying this posting's availability. Please retry.",
+    );
   }
 
   async updateOwnerAvailabilityBlock(
@@ -99,20 +109,30 @@ export class PostingsService {
     const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
     const normalized = this.normalizeSingleAvailabilityBlock(input);
     this.assertSafeAvailabilityBlockContent(normalized);
-    await this.assertExistingOwnerAvailabilityBlock(posting.id, blockId);
-    await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized, blockId);
 
-    const updated = await this.postingsRepository.updateOwnerAvailabilityBlock(
-      posting.id,
-      blockId,
-      normalized,
+    return withFlowLock(
+      this.cacheService,
+      flowLockKeys.postingBookingWindow(posting.id),
+      async () => {
+        await this.assertExistingOwnerAvailabilityBlock(posting.id, blockId);
+        await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized, blockId);
+
+        const updated = await this.postingsRepository.updateOwnerAvailabilityBlock(
+          posting.id,
+          blockId,
+          normalized,
+        );
+
+        if (!updated) {
+          throw new ConflictError(
+            "This availability block changed before the update could be completed.",
+          );
+        }
+
+        return updated;
+      },
+      "Another request is already modifying this posting's availability. Please retry.",
     );
-
-    if (!updated) {
-      throw new ResourceNotFoundError("Availability block could not be found.");
-    }
-
-    return updated;
   }
 
   async deleteOwnerAvailabilityBlock(
@@ -121,14 +141,22 @@ export class PostingsService {
     blockId: string,
   ): Promise<void> {
     const posting = await this.requireOwnerPostingForAvailability(id, ownerId);
-    const deleted = await this.postingsRepository.deleteOwnerAvailabilityBlock(
-      posting.id,
-      blockId,
-    );
 
-    if (!deleted) {
-      throw new ResourceNotFoundError("Availability block could not be found.");
-    }
+    await withFlowLock(
+      this.cacheService,
+      flowLockKeys.postingBookingWindow(posting.id),
+      async () => {
+        const deleted = await this.postingsRepository.deleteOwnerAvailabilityBlock(
+          posting.id,
+          blockId,
+        );
+
+        if (!deleted) {
+          throw new ResourceNotFoundError("Availability block could not be found.");
+        }
+      },
+      "Another request is already modifying this posting's availability. Please retry.",
+    );
   }
 
   async publish(id: string, ownerId: string): Promise<PostingRecord> {

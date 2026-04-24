@@ -1,4 +1,5 @@
 import BadRequestError from "@/errors/http/bad-request.error";
+import ConflictError from "@/errors/http/conflict.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type {
@@ -22,6 +23,8 @@ import {
   PENDING_BOOKING_HOLD_HOURS,
 } from "@/features/bookings/bookings.model";
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
+import type { CacheService } from "@/features/cache/cache.service";
+import { flowLockKeys, withFlowLock, withFlowLocks } from "@/features/cache/cache-locks";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
@@ -56,6 +59,7 @@ export class BookingsService {
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
     private readonly rentingsRepository: RentingsRepository,
+    private readonly cacheService: CacheService,
   ) {}
 
   async create(input: CreateBookingRequestInput): Promise<BookingRequestRecord> {
@@ -64,24 +68,42 @@ export class BookingsService {
 
     const { posting, normalized } = validation;
 
-    const created = await this.bookingsRepository.create({
-      postingId: posting.id,
-      renterId: input.renterId,
-      ownerId: posting.ownerId,
-      startAt: normalized.startAt,
-      endAt: normalized.endAt,
-      durationDays: normalized.durationDays,
-      guestCount: normalized.guestCount,
-      contactName: input.contactName.trim(),
-      contactEmail: input.contactEmail.trim().toLowerCase(),
-      contactPhoneNumber: input.contactPhoneNumber?.trim() || null,
-      note: normalized.note,
-      pricingCurrency: posting.pricing.currency,
-      pricingSnapshot: posting.pricing,
-      dailyPriceAmount: posting.pricing.daily.amount,
-      estimatedTotal: posting.pricing.daily.amount * normalized.durationDays,
-      holdExpiresAt: this.addHours(new Date(), PENDING_BOOKING_HOLD_HOURS),
-    });
+    const created = await withFlowLock(
+      this.cacheService,
+      flowLockKeys.bookingRequestCap(posting.id, input.renterId),
+      async () => {
+        const bookingRequest = await this.bookingsRepository.createIfWithinActiveRequestLimit(
+          {
+            postingId: posting.id,
+            renterId: input.renterId,
+            ownerId: posting.ownerId,
+            startAt: normalized.startAt,
+            endAt: normalized.endAt,
+            durationDays: normalized.durationDays,
+            guestCount: normalized.guestCount,
+            contactName: input.contactName.trim(),
+            contactEmail: input.contactEmail.trim().toLowerCase(),
+            contactPhoneNumber: input.contactPhoneNumber?.trim() || null,
+            note: normalized.note,
+            pricingCurrency: posting.pricing.currency,
+            pricingSnapshot: posting.pricing,
+            dailyPriceAmount: posting.pricing.daily.amount,
+            estimatedTotal: posting.pricing.daily.amount * normalized.durationDays,
+            holdExpiresAt: this.addHours(new Date(), PENDING_BOOKING_HOLD_HOURS),
+          },
+          MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING,
+        );
+
+        if (!bookingRequest) {
+          throw new ConflictError(
+            "Another active booking request was created for this posting before your request could be saved.",
+          );
+        }
+
+        return bookingRequest;
+      },
+      "Another booking request is already being created for this posting. Please retry.",
+    );
 
     await this.postingsAnalyticsRepository.enqueueBookingRequestedEvent({
       postingId: created.postingId,
@@ -150,48 +172,84 @@ export class BookingsService {
       throw new BadRequestError("This booking request has already expired.");
     }
 
-    const posting = await this.requireBookablePosting(existing.postingId);
-    const normalized = this.normalizeCreateInput(
-      {
-        postingId: existing.postingId,
-        renterId: input.renterId,
-        startAt: input.startAt,
-        endAt: input.endAt,
-        guestCount: input.guestCount,
-        contactName: input.contactName,
-        contactEmail: input.contactEmail,
-        contactPhoneNumber: input.contactPhoneNumber,
-        note: input.note,
+    const updated = await withFlowLocks(
+      this.cacheService,
+      [
+        flowLockKeys.bookingRequestState(existing.id),
+        flowLockKeys.postingBookingWindow(existing.postingId),
+      ],
+      async () => {
+        const lockedBookingRequest = await this.bookingsRepository.findById(input.bookingRequestId);
+
+        if (!lockedBookingRequest) {
+          throw new ResourceNotFoundError("Booking request could not be found.");
+        }
+
+        if (lockedBookingRequest.renterId !== input.renterId) {
+          throw new ForbiddenError("You do not have access to this booking request.");
+        }
+
+        if (lockedBookingRequest.status !== "pending") {
+          throw new BadRequestError("Only pending booking requests can be updated.");
+        }
+
+        if (new Date(lockedBookingRequest.holdExpiresAt).getTime() <= Date.now()) {
+          throw new BadRequestError("This booking request has already expired.");
+        }
+
+        const posting = await this.requireBookablePosting(lockedBookingRequest.postingId);
+        const normalized = this.normalizeCreateInput(
+          {
+            postingId: lockedBookingRequest.postingId,
+            renterId: input.renterId,
+            startAt: input.startAt,
+            endAt: input.endAt,
+            guestCount: input.guestCount,
+            contactName: input.contactName,
+            contactEmail: input.contactEmail,
+            contactPhoneNumber: input.contactPhoneNumber,
+            note: input.note,
+          },
+          posting,
+        );
+
+        await this.assertNoBlockingAvailabilityOverlap(
+          posting.id,
+          normalized.startAt,
+          normalized.endAt,
+          lockedBookingRequest.id,
+        );
+        await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
+
+        const nextBookingRequest = await this.bookingsRepository.updatePending(
+          lockedBookingRequest.id,
+          input.renterId,
+          {
+            startAt: normalized.startAt,
+            endAt: normalized.endAt,
+            durationDays: normalized.durationDays,
+            guestCount: normalized.guestCount,
+            contactName: normalized.contactName,
+            contactEmail: normalized.contactEmail,
+            contactPhoneNumber: normalized.contactPhoneNumber,
+            note: normalized.note,
+            pricingCurrency: posting.pricing.currency,
+            pricingSnapshot: posting.pricing,
+            dailyPriceAmount: posting.pricing.daily.amount,
+            estimatedTotal: posting.pricing.daily.amount * normalized.durationDays,
+          },
+        );
+
+        if (!nextBookingRequest) {
+          throw new ConflictError(
+            "This booking request changed before the update could be completed.",
+          );
+        }
+
+        return nextBookingRequest;
       },
-      posting,
+      "Another request is already modifying this booking request. Please retry.",
     );
-
-    await this.assertNoBlockingAvailabilityOverlap(
-      posting.id,
-      normalized.startAt,
-      normalized.endAt,
-      existing.id,
-    );
-    await this.assertNoRentingOverlap(posting.id, normalized.startAt, normalized.endAt);
-
-    const updated = await this.bookingsRepository.updatePending(existing.id, input.renterId, {
-      startAt: normalized.startAt,
-      endAt: normalized.endAt,
-      durationDays: normalized.durationDays,
-      guestCount: normalized.guestCount,
-      contactName: normalized.contactName,
-      contactEmail: normalized.contactEmail,
-      contactPhoneNumber: normalized.contactPhoneNumber,
-      note: normalized.note,
-      pricingCurrency: posting.pricing.currency,
-      pricingSnapshot: posting.pricing,
-      dailyPriceAmount: posting.pricing.daily.amount,
-      estimatedTotal: posting.pricing.daily.amount * normalized.durationDays,
-    });
-
-    if (!updated) {
-      throw new ResourceNotFoundError("Booking request could not be found.");
-    }
 
     await this.postingsRepository.enqueueSearchSync(updated.postingId);
     return updated;
@@ -215,31 +273,50 @@ export class BookingsService {
 
   async approve(input: DecideBookingRequestInput): Promise<BookingRequestRecord> {
     const bookingRequest = await this.requireOwnerBookingRequest(input.bookingRequestId, input.ownerId);
-    this.assertCanDecide(bookingRequest, "approve");
+    const approved = await withFlowLocks(
+      this.cacheService,
+      [
+        flowLockKeys.bookingRequestDecision(bookingRequest.id),
+        flowLockKeys.bookingRequestState(bookingRequest.id),
+        flowLockKeys.postingBookingWindow(bookingRequest.postingId),
+      ],
+      async () => {
+        const lockedBookingRequest = await this.requireOwnerBookingRequest(
+          input.bookingRequestId,
+          input.ownerId,
+        );
 
-    await this.requireBookablePosting(bookingRequest.postingId);
-    await this.assertNoRentingOverlap(
-      bookingRequest.postingId,
-      new Date(bookingRequest.startAt),
-      new Date(bookingRequest.endAt),
-    );
-    await this.assertNoBlockingAvailabilityOverlap(
-      bookingRequest.postingId,
-      new Date(bookingRequest.startAt),
-      new Date(bookingRequest.endAt),
-      bookingRequest.id,
-    );
+        this.assertCanDecide(lockedBookingRequest, "approve");
+        await this.requireBookablePosting(lockedBookingRequest.postingId);
+        await this.assertNoRentingOverlap(
+          lockedBookingRequest.postingId,
+          new Date(lockedBookingRequest.startAt),
+          new Date(lockedBookingRequest.endAt),
+        );
+        await this.assertNoBlockingAvailabilityOverlap(
+          lockedBookingRequest.postingId,
+          new Date(lockedBookingRequest.startAt),
+          new Date(lockedBookingRequest.endAt),
+          lockedBookingRequest.id,
+        );
 
-    const approved = await this.bookingsRepository.approve(
-      bookingRequest.id,
-      input.ownerId,
-      input.note,
-      this.addHours(new Date(), APPROVED_BOOKING_HOLD_HOURS),
-    );
+        const nextBookingRequest = await this.bookingsRepository.approve(
+          lockedBookingRequest.id,
+          input.ownerId,
+          input.note,
+          this.addHours(new Date(), APPROVED_BOOKING_HOLD_HOURS),
+        );
 
-    if (!approved) {
-      throw new ResourceNotFoundError("Booking request could not be found.");
-    }
+        if (!nextBookingRequest) {
+          throw new ConflictError(
+            "This booking request changed before it could be approved.",
+          );
+        }
+
+        return nextBookingRequest;
+      },
+      "Another request is already deciding this booking request. Please retry.",
+    );
 
     await this.postingsRepository.enqueueSearchSync(approved.postingId);
     return approved;
@@ -247,17 +324,36 @@ export class BookingsService {
 
   async decline(input: DecideBookingRequestInput): Promise<BookingRequestRecord> {
     const bookingRequest = await this.requireOwnerBookingRequest(input.bookingRequestId, input.ownerId);
-    this.assertCanDecide(bookingRequest, "decline");
+    const declined = await withFlowLocks(
+      this.cacheService,
+      [
+        flowLockKeys.bookingRequestDecision(bookingRequest.id),
+        flowLockKeys.bookingRequestState(bookingRequest.id),
+      ],
+      async () => {
+        const lockedBookingRequest = await this.requireOwnerBookingRequest(
+          input.bookingRequestId,
+          input.ownerId,
+        );
 
-    const declined = await this.bookingsRepository.decline(
-      bookingRequest.id,
-      input.ownerId,
-      input.note,
+        this.assertCanDecide(lockedBookingRequest, "decline");
+
+        const nextBookingRequest = await this.bookingsRepository.decline(
+          lockedBookingRequest.id,
+          input.ownerId,
+          input.note,
+        );
+
+        if (!nextBookingRequest) {
+          throw new ConflictError(
+            "This booking request changed before it could be declined.",
+          );
+        }
+
+        return nextBookingRequest;
+      },
+      "Another request is already deciding this booking request. Please retry.",
     );
-
-    if (!declined) {
-      throw new ResourceNotFoundError("Booking request could not be found.");
-    }
 
     await this.postingsRepository.enqueueSearchSync(declined.postingId);
     return declined;
