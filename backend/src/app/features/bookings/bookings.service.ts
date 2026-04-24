@@ -24,7 +24,7 @@ import {
 } from "@/features/bookings/bookings.model";
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import type { CacheService } from "@/features/cache/cache.service";
-import { flowLockKeys, withFlowLock, withFlowLocks } from "@/features/cache/cache-locks";
+import { flowLockKeys, withFlowLocks } from "@/features/cache/cache-locks";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
@@ -66,17 +66,24 @@ export class BookingsService {
     const validation = await this.validateBookingRequest(input);
     this.assertBookingRequestValidationPassed(validation);
 
-    const { posting, normalized } = validation;
+    const { posting } = validation;
 
-    const created = await withFlowLock(
+    const created = await withFlowLocks(
       this.cacheService,
-      flowLockKeys.bookingRequestCap(posting.id, input.renterId),
+      [
+        flowLockKeys.postingBookingWindow(posting.id),
+        flowLockKeys.bookingRequestCap(posting.id, input.renterId),
+      ],
       async () => {
+        const lockedValidation = await this.validateBookingRequest(input);
+        this.assertBookingRequestValidationPassed(lockedValidation);
+
+        const { posting: lockedPosting, normalized } = lockedValidation;
         const bookingRequest = await this.bookingsRepository.createIfWithinActiveRequestLimit(
           {
-            postingId: posting.id,
+            postingId: lockedPosting.id,
             renterId: input.renterId,
-            ownerId: posting.ownerId,
+            ownerId: lockedPosting.ownerId,
             startAt: normalized.startAt,
             endAt: normalized.endAt,
             durationDays: normalized.durationDays,
@@ -85,10 +92,10 @@ export class BookingsService {
             contactEmail: input.contactEmail.trim().toLowerCase(),
             contactPhoneNumber: input.contactPhoneNumber?.trim() || null,
             note: normalized.note,
-            pricingCurrency: posting.pricing.currency,
-            pricingSnapshot: posting.pricing,
-            dailyPriceAmount: posting.pricing.daily.amount,
-            estimatedTotal: posting.pricing.daily.amount * normalized.durationDays,
+            pricingCurrency: lockedPosting.pricing.currency,
+            pricingSnapshot: lockedPosting.pricing,
+            dailyPriceAmount: lockedPosting.pricing.daily.amount,
+            estimatedTotal: lockedPosting.pricing.daily.amount * normalized.durationDays,
             holdExpiresAt: this.addHours(new Date(), PENDING_BOOKING_HOLD_HOURS),
           },
           MAX_ACTIVE_BOOKING_REQUESTS_PER_POSTING,
@@ -102,7 +109,7 @@ export class BookingsService {
 
         return bookingRequest;
       },
-      "Another booking request is already being created for this posting. Please retry.",
+      "Another request is already modifying this posting's booking availability. Please retry.",
     );
 
     await this.postingsAnalyticsRepository.enqueueBookingRequestedEvent({
@@ -197,7 +204,7 @@ export class BookingsService {
           throw new BadRequestError("This booking request has already expired.");
         }
 
-        const posting = await this.requireBookablePosting(lockedBookingRequest.postingId);
+        const posting = await this.requirePostingEditableForRenter(lockedBookingRequest.postingId);
         const normalized = this.normalizeCreateInput(
           {
             postingId: lockedBookingRequest.postingId,
@@ -287,7 +294,7 @@ export class BookingsService {
         );
 
         this.assertCanDecide(lockedBookingRequest, "approve");
-        await this.requireBookablePosting(lockedBookingRequest.postingId);
+        await this.requirePostingActionableForOwner(lockedBookingRequest.postingId);
         await this.assertNoRentingOverlap(
           lockedBookingRequest.postingId,
           new Date(lockedBookingRequest.startAt),
@@ -359,15 +366,29 @@ export class BookingsService {
     return declined;
   }
 
-  private async requireBookablePosting(postingId: string): Promise<PostingRecord> {
+  private async requirePostingEditableForRenter(postingId: string): Promise<PostingRecord> {
     const posting = await this.postingsRepository.findById(postingId);
 
     if (!posting) {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
-    if (posting.status !== "published" || posting.archivedAt) {
-      throw new BadRequestError("Booking requests are only allowed for published postings.");
+    if (posting.archivedAt || posting.status !== "published") {
+      throw new BadRequestError("Pending booking requests cannot be updated for this posting.");
+    }
+
+    return posting;
+  }
+
+  private async requirePostingActionableForOwner(postingId: string): Promise<PostingRecord> {
+    const posting = await this.postingsRepository.findById(postingId);
+
+    if (!posting) {
+      throw new ResourceNotFoundError("Posting could not be found.");
+    }
+
+    if (posting.archivedAt || !["published", "paused"].includes(posting.status)) {
+      throw new BadRequestError("This posting can no longer accept booking decisions.");
     }
 
     return posting;

@@ -10,7 +10,11 @@ import type {
   PostingAnalyticsDetailInput,
 } from "@/features/postings/postings.analytics.model";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
-import type { PublicPostingRecord, PostingRecord } from "@/features/postings/postings.model";
+import {
+  isPostingPubliclyVisible,
+  type PublicPostingRecord,
+  type PostingRecord,
+} from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 
 export class PostingsAnalyticsService {
@@ -24,7 +28,7 @@ export class PostingsAnalyticsService {
     client: ClientRequestContext,
     viewerUserId?: string,
   ): Promise<void> {
-    if (posting.status !== "published" || posting.archivedAt) {
+    if (!isPostingPubliclyVisible(posting)) {
       return;
     }
 

@@ -53,6 +53,17 @@ export interface AvailabilityBlockInput {
   note?: string | null;
 }
 
+export type PostingStatus = "draft" | "published" | "paused" | "archived";
+
+export interface PostingLifecycleRecord {
+  id: string;
+  status: PostingStatus;
+  publishedAt?: string;
+  pausedAt?: string;
+  archivedAt?: string;
+  updatedAt: string;
+}
+
 const CSRF_COOKIE_NAME = "csrf_token";
 const CSRF_HEADER_NAME = "x-csrf-token";
 
@@ -122,6 +133,20 @@ async function authenticatedJson<TResponse, TBody extends object | undefined = u
 }
 
 export const postingsApi = {
+  pausePosting(postingId: string): Promise<PostingLifecycleRecord> {
+    return authenticatedJson<PostingLifecycleRecord>(
+      "POST",
+      `/postings/${encodeURIComponent(postingId)}/pause`,
+    );
+  },
+
+  unpausePosting(postingId: string): Promise<PostingLifecycleRecord> {
+    return authenticatedJson<PostingLifecycleRecord>(
+      "POST",
+      `/postings/${encodeURIComponent(postingId)}/unpause`,
+    );
+  },
+
   quoteBooking(postingId: string, input: BookingQuoteInput): Promise<BookingQuoteResult> {
     return authenticatedJson<BookingQuoteResult, BookingQuoteInput>(
       "POST",

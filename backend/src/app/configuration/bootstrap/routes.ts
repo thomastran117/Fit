@@ -269,6 +269,14 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<PostingsController>(containerTokens.postingsController, "publish"),
   );
   app.post(
+    "/postings/:id/pause",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "pause"),
+  );
+  app.post(
+    "/postings/:id/unpause",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "unpause"),
+  );
+  app.post(
     "/postings/:id/archive",
     resolveHandler<PostingsController>(containerTokens.postingsController, "archive"),
   );

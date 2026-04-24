@@ -186,10 +186,30 @@ describe("BookingsService", () => {
       renterId: "renter-1",
       excludeBookingRequestId: undefined,
     });
+    expect(bookingsRepository.countActiveRequestsForRenterPosting).toHaveBeenCalledTimes(2);
     expect(bookingsRepository.createIfWithinActiveRequestLimit).toHaveBeenCalledTimes(1);
     expect(analyticsRepository.enqueueBookingRequestedEvent).toHaveBeenCalledTimes(1);
     expect(postingsRepository.enqueueSearchSync).toHaveBeenCalledWith("posting-1");
     expect(result.id).toBe("booking-1");
+  });
+
+  it("serializes booking creation on the posting booking-window lock before the renter cap lock", async () => {
+    const { service, cacheService } = createService();
+
+    await service.create({
+      postingId: "posting-1",
+      renterId: "renter-1",
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      guestCount: 2,
+      contactName: "Jordan Lee",
+      contactEmail: "jordan@example.com",
+    });
+
+    expect(cacheService.acquireLock.mock.calls.map(([key]) => key)).toEqual([
+      "posting:posting-1:booking-window",
+      "booking-request-cap:posting-1:renter-1",
+    ]);
   });
 
   it("rejects creating a third active booking request for the same posting", async () => {
@@ -268,6 +288,76 @@ describe("BookingsService", () => {
       "availability_block_overlap",
       "active_request_limit_exceeded",
     ]);
+  });
+
+  it("rejects new booking demand for paused postings", async () => {
+    const { service, bookingsRepository } = createService({
+      posting: createPostingRecord({
+        status: "paused",
+        pausedAt: "2026-04-23T00:00:00.000Z",
+      }),
+    });
+
+    const quote = await service.quote({
+      postingId: "posting-1",
+      renterId: "renter-1",
+      startAt: "2026-05-01T00:00:00.000Z",
+      endAt: "2026-05-04T00:00:00.000Z",
+      guestCount: 2,
+    });
+
+    expect(quote.bookable).toBe(false);
+    expect(quote.failureReasons.map((reason) => reason.code)).toContain("posting_unavailable");
+
+    await expect(
+      service.create({
+        postingId: "posting-1",
+        renterId: "renter-1",
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+        guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+      }),
+    ).rejects.toMatchObject<Partial<BadRequestError>>({
+      message: "Booking requests are only allowed for published postings.",
+    });
+
+    expect(bookingsRepository.createIfWithinActiveRequestLimit).not.toHaveBeenCalled();
+  });
+
+  it("re-checks posting status under the posting lock so pause wins a new booking race", async () => {
+    const publishedPosting = createPostingRecord({
+      status: "published",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+    });
+    const pausedPosting = createPostingRecord({
+      status: "paused",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+      pausedAt: "2026-04-23T00:00:00.000Z",
+    });
+    const { service, postingsRepository, bookingsRepository } = createService({
+      posting: publishedPosting,
+    });
+    postingsRepository.findById
+      .mockResolvedValueOnce(publishedPosting)
+      .mockResolvedValueOnce(pausedPosting);
+
+    await expect(
+      service.create({
+        postingId: "posting-1",
+        renterId: "renter-1",
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+        guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+      }),
+    ).rejects.toMatchObject<Partial<BadRequestError>>({
+      message: "Booking requests are only allowed for published postings.",
+    });
+
+    expect(bookingsRepository.createIfWithinActiveRequestLimit).not.toHaveBeenCalled();
   });
 
   it("runs heavyweight validation before rejecting booking creation", async () => {
@@ -370,6 +460,36 @@ describe("BookingsService", () => {
     ]);
   });
 
+  it("blocks renter updates when the posting is paused", async () => {
+    const booking = createBookingRequestRecord({
+      holdExpiresAt: "2099-04-21T00:00:00.000Z",
+    });
+    const { service, bookingsRepository, postingsRepository } = createService({
+      createdBooking: booking,
+      posting: createPostingRecord({
+        status: "paused",
+        pausedAt: "2026-04-23T00:00:00.000Z",
+      }),
+    });
+    bookingsRepository.findById.mockResolvedValue(booking);
+
+    await expect(
+      service.updateOwnPending({
+        bookingRequestId: "booking-1",
+        renterId: "renter-1",
+        startAt: "2026-05-01T00:00:00.000Z",
+        endAt: "2026-05-04T00:00:00.000Z",
+        guestCount: 2,
+        contactName: "Jordan Lee",
+        contactEmail: "jordan@example.com",
+      }),
+    ).rejects.toMatchObject<Partial<BadRequestError>>({
+      message: "Pending booking requests cannot be updated for this posting.",
+    });
+
+    expect(postingsRepository.findById).toHaveBeenCalled();
+  });
+
   it("serializes approve with decision, state, and posting locks", async () => {
     const booking = createBookingRequestRecord({
       holdExpiresAt: "2099-04-21T00:00:00.000Z",
@@ -389,5 +509,27 @@ describe("BookingsService", () => {
       "booking-request:booking-1:state",
       "posting:posting-1:booking-window",
     ]);
+  });
+
+  it("allows owners to approve existing requests while the posting is paused", async () => {
+    const booking = createBookingRequestRecord({
+      holdExpiresAt: "2099-04-21T00:00:00.000Z",
+    });
+    const { service, bookingsRepository } = createService({
+      createdBooking: booking,
+      posting: createPostingRecord({
+        status: "paused",
+        pausedAt: "2026-04-23T00:00:00.000Z",
+      }),
+    });
+
+    const approved = await service.approve({
+      bookingRequestId: "booking-1",
+      ownerId: "owner-1",
+      note: "approved",
+    });
+
+    expect(bookingsRepository.approve).toHaveBeenCalledTimes(1);
+    expect(approved.status).toBe("awaiting_payment");
   });
 });

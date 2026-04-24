@@ -18,12 +18,17 @@ class FakePostingsRepository {
   createCalls = 0;
   updateCalls = 0;
   findByIdCalls = 0;
+  publishCalls = 0;
+  pauseCalls = 0;
+  unpauseCalls = 0;
+  archiveCalls = 0;
   createOwnerAvailabilityBlockCalls = 0;
   updateOwnerAvailabilityBlockCalls = 0;
   deleteOwnerAvailabilityBlockCalls = 0;
   ownerOverlap = false;
   bookingConflict = false;
   rentingConflict = false;
+  posting = buildPostingRecord(createValidInput());
   ownerBlocks: PostingAvailabilityBlockRecord[] = [
     buildAvailabilityBlockRecord("block-1", {
       startAt: "2026-05-01T00:00:00.000Z",
@@ -50,9 +55,59 @@ class FakePostingsRepository {
     this.findByIdCalls += 1;
 
     return {
-      ...buildPostingRecord(createValidInput()),
+      ...this.posting,
       id,
     };
+  }
+
+  async publish(id: string): Promise<PostingRecord> {
+    this.publishCalls += 1;
+    this.posting = {
+      ...this.posting,
+      id,
+      status: "published",
+      publishedAt: this.posting.publishedAt ?? "2026-04-21T00:00:00.000Z",
+      pausedAt: undefined,
+      archivedAt: undefined,
+    };
+    return this.posting;
+  }
+
+  async pause(id: string): Promise<PostingRecord> {
+    this.pauseCalls += 1;
+    this.posting = {
+      ...this.posting,
+      id,
+      status: "paused",
+      publishedAt: this.posting.publishedAt ?? "2026-04-21T00:00:00.000Z",
+      pausedAt: "2026-04-23T00:00:00.000Z",
+      archivedAt: undefined,
+    };
+    return this.posting;
+  }
+
+  async unpause(id: string): Promise<PostingRecord> {
+    this.unpauseCalls += 1;
+    this.posting = {
+      ...this.posting,
+      id,
+      status: "published",
+      pausedAt: undefined,
+      archivedAt: undefined,
+    };
+    return this.posting;
+  }
+
+  async archive(id: string): Promise<PostingRecord> {
+    this.archiveCalls += 1;
+    this.posting = {
+      ...this.posting,
+      id,
+      status: "archived",
+      pausedAt: undefined,
+      archivedAt: "2026-04-23T00:00:00.000Z",
+    };
+    return this.posting;
   }
 
   async listOwnerAvailabilityBlocks(): Promise<PostingAvailabilityBlockRecord[]> {
@@ -208,6 +263,9 @@ function buildPostingRecord(input: UpsertPostingInput): PostingRecord {
       updatedAt: "2026-04-18T00:00:00.000Z",
     })),
     location: input.location,
+    publishedAt: undefined,
+    pausedAt: undefined,
+    archivedAt: undefined,
     createdAt: "2026-04-18T00:00:00.000Z",
     updatedAt: "2026-04-18T00:00:00.000Z",
   };
@@ -296,6 +354,86 @@ describe("PostingsService", () => {
 
     expect(repository.createCalls).toBe(1);
     expect(created.tags).toEqual(["loft", "transit"]);
+  });
+
+  it("pauses a published posting while preserving its published timestamp", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "published",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+    };
+    const service = createService(repository);
+
+    const paused = await service.pause("posting-1", "owner-1");
+
+    expect(paused.status).toBe("paused");
+    expect(paused.publishedAt).toBe("2026-04-21T00:00:00.000Z");
+    expect(paused.pausedAt).toBeDefined();
+    expect(repository.pauseCalls).toBe(1);
+  });
+
+  it("unpauses a paused posting without changing its original published timestamp", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "paused",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+      pausedAt: "2026-04-23T00:00:00.000Z",
+    };
+    const service = createService(repository);
+
+    const unpaused = await service.unpause("posting-1", "owner-1");
+
+    expect(unpaused.status).toBe("published");
+    expect(unpaused.publishedAt).toBe("2026-04-21T00:00:00.000Z");
+    expect(unpaused.pausedAt).toBeUndefined();
+    expect(repository.unpauseCalls).toBe(1);
+  });
+
+  it("rejects invalid posting lifecycle transitions", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+
+    repository.posting = {
+      ...repository.posting,
+      status: "paused",
+    };
+    await expect(service.publish("posting-1", "owner-1")).rejects.toBeInstanceOf(BadRequestError);
+
+    repository.posting = {
+      ...repository.posting,
+      status: "draft",
+    };
+    await expect(service.pause("posting-1", "owner-1")).rejects.toBeInstanceOf(BadRequestError);
+
+    repository.posting = {
+      ...repository.posting,
+      status: "published",
+    };
+    await expect(service.unpause("posting-1", "owner-1")).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it("hides paused postings from public getById while still allowing owners to view them", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "paused",
+      ownerId: "owner-1",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+      pausedAt: "2026-04-23T00:00:00.000Z",
+    };
+    const service = createService(repository);
+
+    await expect(service.getById("posting-1", "renter-1")).rejects.toBeInstanceOf(
+      ResourceNotFoundError,
+    );
+
+    const ownerView = await service.getById("posting-1", "owner-1");
+    expect(ownerView.status).toBe("paused");
   });
 
   it("rejects subtypes that do not belong to the selected family", async () => {

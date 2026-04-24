@@ -133,6 +133,20 @@ export class PostingsController {
     return context.json(result);
   };
 
+  pause = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    const result = await this.postingsService.pause(this.requireRouteId(context), auth.sub);
+    return context.json(result);
+  };
+
+  unpause = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    const result = await this.postingsService.unpause(this.requireRouteId(context), auth.sub);
+    return context.json(result);
+  };
+
   getById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.getOptionalAuth(context);
     const result = await this.postingsService.getById(this.requireRouteId(context), auth?.sub);

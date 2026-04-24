@@ -1,9 +1,12 @@
 import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthController } from "@/features/auth/auth.controller";
 import type { AuthSessionResult, AuthUserProfile } from "@/features/auth/auth.model";
+import { containerTokens } from "@/configuration/container/tokens";
 import type { JwtClaims } from "@/features/auth/token/token.service";
 import type { AppBindings, ClientRequestContext } from "@/configuration/http/bindings";
+import type { ServiceContainer } from "@/configuration/bootstrap/container";
 import { RequestValidationError } from "@/configuration/validation/request";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import type { Context } from "hono";
 
 const mockRequireJwtAuth = jest.fn();
@@ -89,6 +92,22 @@ function createContext(options?: {
   headers?: Record<string, string | undefined>;
 }) {
   const variables = new Map<string, unknown>();
+  const contentSanitizationService = new ContentSanitizationService();
+  const container: ServiceContainer = {
+    resolve<TValue>(token: unknown): TValue {
+      if (token === containerTokens.contentSanitizationService) {
+        return contentSanitizationService as TValue;
+      }
+
+      throw new Error(`Unexpected token: ${String(token)}`);
+    },
+    createScope(): ServiceContainer {
+      return this;
+    },
+    async dispose(): Promise<void> {},
+  };
+
+  variables.set("container", container);
   variables.set("client", options?.client ?? createClient());
 
   if (options?.auth) {
@@ -389,11 +408,10 @@ describe("AuthController", () => {
     await expect(controller.localSignup(context)).rejects.toMatchObject<
       Partial<RequestValidationError>
     >({
-      message: "Request body validation failed.",
       details: [
         {
           path: "firstName",
-          message: "Input contains unsupported HTML or script content.",
+          message: "Contains disallowed content.",
         },
       ],
     });

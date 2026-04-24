@@ -29,6 +29,8 @@ export class RentingsService {
       throw new ForbiddenError("You do not have access to this booking request.");
     }
 
+    await this.requirePostingActionableForConversion(bookingRequest.postingId);
+
     const renting = await withFlowLocks(
       this.cacheService,
       [
@@ -92,5 +94,17 @@ export class RentingsService {
 
   async listMine(input: ListMyRentingsInput): Promise<ListRentingsResult> {
     return this.rentingsRepository.listMine(input);
+  }
+
+  private async requirePostingActionableForConversion(postingId: string): Promise<void> {
+    const posting = await this.postingsRepository.findById(postingId);
+
+    if (!posting) {
+      throw new ResourceNotFoundError("Posting could not be found.");
+    }
+
+    if (posting.archivedAt || !["published", "paused"].includes(posting.status)) {
+      throw new ForbiddenError("This posting can no longer be converted into a renting.");
+    }
   }
 }

@@ -34,8 +34,13 @@ function createContext(options?: {
     req: {
       json: async () => options?.body ?? {},
       url: options?.url ?? "https://example.test/postings",
-      param: (name: string) => options?.params?.[name],
+      param: (name?: string) => (name ? options?.params?.[name] : options?.params ?? {}),
     },
+    get: () => ({
+      resolve: () => ({
+        inspectRequest: () => [],
+      }),
+    }),
     json: (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), {
         status,
@@ -279,6 +284,39 @@ describe("PostingsController", () => {
       note: undefined,
     });
     expect(response.status).toBe(200);
+  });
+
+  it("routes pause and unpause with posting id and owner id", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const pause = jest.fn(async () => ({
+      id: "posting-1",
+      status: "paused",
+    }));
+    const unpause = jest.fn(async () => ({
+      id: "posting-1",
+      status: "published",
+    }));
+    const controller = new PostingsController(
+      {
+        pause,
+        unpause,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+    });
+
+    const pauseResponse = await controller.pause(context);
+    const unpauseResponse = await controller.unpause(context);
+
+    expect(pause).toHaveBeenCalledWith("posting-1", "owner-1");
+    expect(unpause).toHaveBeenCalledWith("posting-1", "owner-1");
+    expect(pauseResponse.status).toBe(200);
+    expect(unpauseResponse.status).toBe(200);
   });
 
   it("requires owner auth for listing availability blocks", async () => {
