@@ -1,6 +1,7 @@
 import BadRequestError from "@/errors/http/bad-request.error";
 import type { Context } from "hono";
 import { ZodError, type ZodType, type output } from "zod";
+import { assertSafeRequestBody } from "./input-sanitization";
 
 export class RequestValidationError extends BadRequestError {
   constructor(
@@ -21,6 +22,7 @@ export async function parseRequestBody<TSchema extends ZodType>(
 ): Promise<output<TSchema>> {
   try {
     const body = await context.req.json();
+    assertSafeRequestBody(context, body);
     return schema.parse(body);
   } catch (error) {
     if (error instanceof ZodError) {

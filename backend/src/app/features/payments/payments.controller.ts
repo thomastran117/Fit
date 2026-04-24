@@ -3,6 +3,7 @@ import type { AppBindings } from "@/configuration/http/bindings";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError, parseRequestBody } from "@/configuration/validation/request";
+import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import type {
   CreatePaymentSessionBody,
   CreateRefundBody,
@@ -127,33 +128,11 @@ export class PaymentsController {
   }
 
   private requireBookingRequestId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private requirePaymentId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private async requireAuth(context: Context<AppBindings>) {

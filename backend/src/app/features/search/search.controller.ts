@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { requireMinimumRole } from "@/features/auth/authorization";
-import { RequestValidationError } from "@/configuration/validation/request";
+import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import type { SearchService } from "@/features/search/search.service";
 
 export class SearchController {
@@ -30,18 +30,7 @@ export class SearchController {
   };
 
   private requireRouteId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private async requireAdmin(context: Context<AppBindings>) {

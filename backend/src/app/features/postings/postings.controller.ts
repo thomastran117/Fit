@@ -9,6 +9,7 @@ import {
   RequestValidationError,
   parseRequestBody,
 } from "@/configuration/validation/request";
+import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import {
   listPostingAnalyticsQuerySchema,
@@ -494,18 +495,7 @@ export class PostingsController {
   }
 
   private requireRouteParam(context: Context<AppBindings>, name: string): string {
-    const value = context.req.param(name);
-
-    if (!value) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: name,
-          message: `Route parameter ${name} is required.`,
-        },
-      ]);
-    }
-
-    return value;
+    return requireSafeRouteParam(context, name);
   }
 
   private async requireAuth(context: Context<AppBindings>): Promise<JwtClaims> {

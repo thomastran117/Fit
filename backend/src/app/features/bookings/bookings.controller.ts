@@ -6,6 +6,7 @@ import {
   RequestValidationError,
   parseRequestBody,
 } from "@/configuration/validation/request";
+import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import type {
   BookingQuoteBody,
   BookingQuoteInput,
@@ -216,33 +217,11 @@ export class BookingsController {
   }
 
   private requirePostingId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private requireBookingRequestId(context: Context<AppBindings>): string {
-    const id = context.req.param("id");
-
-    if (!id) {
-      throw new RequestValidationError("Route parameter validation failed.", [
-        {
-          path: "id",
-          message: "Route parameter id is required.",
-        },
-      ]);
-    }
-
-    return id;
+    return requireSafeRouteParam(context, "id");
   }
 
   private async requireAuth(context: Context<AppBindings>) {

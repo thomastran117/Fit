@@ -15,6 +15,8 @@ export interface ContentSanitizationViolation {
   code: ContentSanitizationViolationCode;
 }
 
+type ContentSanitizationProfile = "content" | "request";
+
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const HTML_TAG_PATTERN = /<\s*\/?\s*[a-z!][^>]*>/i;
 const INLINE_EVENT_HANDLER_PATTERN = /\bon[a-z]+\s*=/i;
@@ -69,6 +71,17 @@ const INJECTION_PATTERNS: Array<{
 
 export class ContentSanitizationService {
   inspect(inputs: ContentSanitizationInput[]): ContentSanitizationViolation[] {
+    return this.inspectWithProfile(inputs, "content");
+  }
+
+  inspectRequest(inputs: ContentSanitizationInput[]): ContentSanitizationViolation[] {
+    return this.inspectWithProfile(inputs, "request");
+  }
+
+  private inspectWithProfile(
+    inputs: ContentSanitizationInput[],
+    profile: ContentSanitizationProfile,
+  ): ContentSanitizationViolation[] {
     const violations: ContentSanitizationViolation[] = [];
 
     for (const input of inputs) {
@@ -78,7 +91,7 @@ export class ContentSanitizationService {
         continue;
       }
 
-      const violation = this.inspectValue(input.path, value);
+      const violation = this.inspectValue(input.path, value, profile);
 
       if (violation) {
         violations.push(violation);
@@ -88,7 +101,11 @@ export class ContentSanitizationService {
     return violations;
   }
 
-  private inspectValue(path: string, value: string): ContentSanitizationViolation | null {
+  private inspectValue(
+    path: string,
+    value: string,
+    profile: ContentSanitizationProfile,
+  ): ContentSanitizationViolation | null {
     if (CONTROL_CHARACTER_PATTERN.test(value)) {
       return {
         path,
@@ -107,6 +124,10 @@ export class ContentSanitizationService {
         code: "UNSAFE_MARKUP",
         message: "Contains disallowed content.",
       };
+    }
+
+    if (profile === "request") {
+      return null;
     }
 
     for (const { pattern, code } of INJECTION_PATTERNS) {
