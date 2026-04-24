@@ -25,6 +25,7 @@ import {
   type SearchPostingsInput,
   type SearchPostingsResult,
   type UpsertPostingInput,
+  isPostingPubliclyVisible,
 } from "@/features/postings/postings.model";
 import {
   getPostingSearchableAttributeDefinitions,
@@ -172,8 +173,53 @@ export class PostingsService {
     return published;
   }
 
+  async pause(id: string, ownerId: string): Promise<PostingRecord> {
+    const posting = await this.requireOwnerPosting(id, ownerId);
+    this.assertCanPause(posting);
+
+    return withFlowLock(
+      this.cacheService,
+      flowLockKeys.postingBookingWindow(posting.id),
+      async () => {
+        const lockedPosting = await this.requireOwnerPosting(id, ownerId);
+        this.assertCanPause(lockedPosting);
+        const paused = await this.postingsRepository.pause(id, ownerId);
+
+        if (!paused) {
+          throw new ResourceNotFoundError("Posting could not be found.");
+        }
+
+        return paused;
+      },
+      "Another request is already modifying this posting's booking availability. Please retry.",
+    );
+  }
+
+  async unpause(id: string, ownerId: string): Promise<PostingRecord> {
+    const posting = await this.requireOwnerPosting(id, ownerId);
+    this.assertCanUnpause(posting);
+
+    return withFlowLock(
+      this.cacheService,
+      flowLockKeys.postingBookingWindow(posting.id),
+      async () => {
+        const lockedPosting = await this.requireOwnerPosting(id, ownerId);
+        this.assertCanUnpause(lockedPosting);
+        const unpaused = await this.postingsRepository.unpause(id, ownerId);
+
+        if (!unpaused) {
+          throw new ResourceNotFoundError("Posting could not be found.");
+        }
+
+        return unpaused;
+      },
+      "Another request is already modifying this posting's booking availability. Please retry.",
+    );
+  }
+
   async archive(id: string, ownerId: string): Promise<PostingRecord> {
-    await this.requireOwnerPosting(id, ownerId);
+    const posting = await this.requireOwnerPosting(id, ownerId);
+    this.assertCanArchive(posting);
     const archived = await this.postingsRepository.archive(id, ownerId);
 
     if (!archived) {
@@ -194,7 +240,7 @@ export class PostingsService {
       return posting;
     }
 
-    if (posting.status !== "published" || posting.archivedAt) {
+    if (!isPostingPubliclyVisible(posting)) {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
@@ -556,6 +602,10 @@ export class PostingsService {
   }
 
   private assertCanPublish(posting: PostingRecord): void {
+    if (posting.status !== "draft") {
+      throw new BadRequestError("Only draft postings can be published.");
+    }
+
     if (posting.photos.length < 1 || posting.photos.length > MAX_POSTING_PHOTOS) {
       throw new BadRequestError("Published postings must include between 1 and 10 photos.");
     }
@@ -570,6 +620,24 @@ export class PostingsService {
 
     if (!this.isValidCoordinate(posting.location.longitude, -180, 180)) {
       throw new BadRequestError("Published postings must include a valid longitude.");
+    }
+  }
+
+  private assertCanPause(posting: PostingRecord): void {
+    if (posting.status !== "published") {
+      throw new BadRequestError("Only published postings can be paused.");
+    }
+  }
+
+  private assertCanUnpause(posting: PostingRecord): void {
+    if (posting.status !== "paused") {
+      throw new BadRequestError("Only paused postings can be unpaused.");
+    }
+  }
+
+  private assertCanArchive(posting: PostingRecord): void {
+    if (posting.status === "archived") {
+      throw new BadRequestError("Archived postings cannot be archived again.");
     }
   }
 

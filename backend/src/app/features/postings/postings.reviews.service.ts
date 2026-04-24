@@ -7,6 +7,7 @@ import type {
   PostingReviewRecord,
   UpsertPostingReviewInput,
 } from "@/features/postings/postings.reviews.model";
+import { isPostingPubliclyVisible } from "@/features/postings/postings.model";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 
@@ -60,7 +61,7 @@ export class PostingsReviewsService {
   private async requirePublishedPosting(postingId: string) {
     const posting = await this.postingsRepository.findById(postingId);
 
-    if (!posting || posting.status !== "published" || posting.archivedAt) {
+    if (!posting || !isPostingPubliclyVisible(posting)) {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 

@@ -12,7 +12,7 @@ export const MAX_PAGE_SIZE = 50;
 export const DEFAULT_MAX_BOOKING_DURATION_DAYS = 30;
 export const MAX_BOOKING_DURATION_DAYS_LIMIT = 365;
 
-export const postingStatusSchema = z.enum(["draft", "published", "archived"]);
+export const postingStatusSchema = z.enum(["draft", "published", "paused", "archived"]);
 export const postingAvailabilityStatusSchema = z.enum([
   "available",
   "limited",
@@ -241,6 +241,7 @@ export interface PostingRecord {
   availabilityBlocks: PostingAvailabilityBlockRecord[];
   location: PostingLocationRecord;
   publishedAt?: string;
+  pausedAt?: string;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -376,6 +377,17 @@ export interface PostingSearchDocument {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
+}
+
+export function isPostingPubliclyVisible(posting: {
+  status: PostingStatus;
+  archivedAt?: string | null;
+}): boolean {
+  return posting.status === "published" && !posting.archivedAt;
+}
+
+export function isPostingSearchIndexable(status: PostingStatus): boolean {
+  return status === "published";
 }
 
 export interface PostingSearchOutboxRecord {

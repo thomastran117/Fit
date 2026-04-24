@@ -115,6 +115,7 @@ model Posting {
   country           String                     @db.VarChar(120)
   postalCode        String?                    @map("postal_code") @db.VarChar(32)
   publishedAt       DateTime?                  @map("published_at") @db.DateTime(6)
+  pausedAt          DateTime?                  @map("paused_at") @db.DateTime(6)
   archivedAt        DateTime?                  @map("archived_at") @db.DateTime(6)
   createdAt         DateTime                   @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt         DateTime                   @updatedAt @map("updated_at") @db.DateTime(6)
@@ -547,6 +548,7 @@ model PostingReview {
 enum PostingStatus {
   draft
   published
+  paused
   archived
 }
 

@@ -1,11 +1,13 @@
 import type { Context } from "hono";
 import type { AppBindings, ClientRequestContext } from "@/configuration/http/bindings";
+import { containerTokens } from "@/configuration/container/tokens";
 import type { ServiceContainer } from "@/configuration/bootstrap/container";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { PostingsController } from "@/features/postings/postings.controller";
 import type { JwtClaims } from "@/features/auth/token/token.service";
 import { getOptionalJwtAuth, requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 class FakeTokenService {
   constructor(
@@ -18,9 +20,15 @@ class FakeTokenService {
 }
 
 class FakeContainer implements ServiceContainer {
+  private readonly contentSanitizationService = new ContentSanitizationService();
+
   constructor(private readonly tokenService: FakeTokenService) {}
 
-  resolve<TValue>(_token: unknown): TValue {
+  resolve<TValue>(token: unknown): TValue {
+    if (token === containerTokens.contentSanitizationService) {
+      return this.contentSanitizationService as TValue;
+    }
+
     return this.tokenService as TValue;
   }
 

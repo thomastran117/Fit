@@ -5,6 +5,7 @@ import {
   requireMinimumRole,
 } from "@/features/auth/authorization";
 import { normalizeAppRole } from "@/features/auth/auth.model";
+import { containerTokens } from "@/configuration/container/tokens";
 import { PaymentsController } from "@/features/payments/payments.controller";
 import { PostingsController } from "@/features/postings/postings.controller";
 import { SearchController } from "@/features/search/search.controller";
@@ -12,6 +13,7 @@ import type { Context } from "hono";
 import type { AppBindings, ClientRequestContext } from "@/configuration/http/bindings";
 import type { ServiceContainer } from "@/configuration/bootstrap/container";
 import type { JwtClaims } from "@/features/auth/token/token.service";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 class FakeTokenService {
   constructor(
@@ -24,9 +26,15 @@ class FakeTokenService {
 }
 
 class FakeContainer implements ServiceContainer {
+  private readonly contentSanitizationService = new ContentSanitizationService();
+
   constructor(private readonly tokenService: FakeTokenService) {}
 
-  resolve<TValue>(_token: unknown): TValue {
+  resolve<TValue>(token: unknown): TValue {
+    if (token === containerTokens.contentSanitizationService) {
+      return this.contentSanitizationService as TValue;
+    }
+
     return this.tokenService as TValue;
   }
 

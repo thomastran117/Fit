@@ -8,6 +8,7 @@ import { outputFormatMiddleware } from "@/configuration/middlewares/output-forma
 import { AuthController } from "@/features/auth/auth.controller";
 import type { AuthSessionResult, AuthUserProfile } from "@/features/auth/auth.model";
 import type { JwtClaims } from "@/features/auth/token/token.service";
+import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 function createAuthUser(overrides: Partial<AuthUserProfile> = {}): AuthUserProfile {
   return {
@@ -57,6 +58,8 @@ function createClaims(overrides: Partial<JwtClaims> = {}): JwtClaims {
 }
 
 class FakeRequestContainer implements ServiceContainer {
+  private readonly contentSanitizationService = new ContentSanitizationService();
+
   constructor(
     private readonly authController: AuthController,
     private readonly tokenService: {
@@ -71,6 +74,10 @@ class FakeRequestContainer implements ServiceContainer {
 
     if (token === containerTokens.tokenService) {
       return this.tokenService as TValue;
+    }
+
+    if (token === containerTokens.contentSanitizationService) {
+      return this.contentSanitizationService as TValue;
     }
 
     throw new Error("Unsupported test container token.");

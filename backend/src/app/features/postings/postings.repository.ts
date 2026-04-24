@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import {
   DEFAULT_MAX_BOOKING_DURATION_DAYS,
+  isPostingSearchIndexable,
 } from "@/features/postings/postings.model";
 import type {
   BatchPublicPostingsInput,
@@ -134,7 +135,11 @@ export class PostingsRepository extends BaseRepository {
           include: postingInclude,
         });
 
-        await this.enqueueOutbox(transaction, created.id, "upsert");
+        await this.enqueueOutbox(
+          transaction,
+          created.id,
+          isPostingSearchIndexable(created.status as PostingStatus) ? "upsert" : "delete",
+        );
         await this.syncOwnerPostingCounts(transaction, input.ownerId);
 
         return created;
@@ -159,7 +164,7 @@ export class PostingsRepository extends BaseRepository {
           await this.enqueueOutbox(
             transaction,
             updated.id,
-            updated.status === "archived" ? "delete" : "upsert",
+            isPostingSearchIndexable(updated.status as PostingStatus) ? "upsert" : "delete",
           );
           await this.syncOwnerPostingCounts(transaction, input.ownerId);
 
@@ -408,6 +413,7 @@ export class PostingsRepository extends BaseRepository {
             data: {
               status: "published",
               publishedAt: new Date(),
+              pausedAt: null,
               archivedAt: null,
             },
             include: postingInclude,
@@ -440,12 +446,79 @@ export class PostingsRepository extends BaseRepository {
             },
             data: {
               status: "archived",
+              pausedAt: null,
               archivedAt: new Date(),
             },
             include: postingInclude,
           });
 
           await this.enqueueOutbox(transaction, updated.id, "delete");
+          await this.syncOwnerPostingCounts(transaction, ownerId);
+
+          return updated;
+        });
+
+        return this.mapPosting(posting);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+          return null;
+        }
+
+        throw error;
+      }
+    });
+  }
+
+  async pause(id: string, ownerId: string): Promise<PostingRecord | null> {
+    return this.executeAsync(async () => {
+      try {
+        const posting = await this.prisma.$transaction(async (transaction) => {
+          const updated = await transaction.posting.update({
+            where: {
+              id,
+            },
+            data: {
+              status: "paused",
+              pausedAt: new Date(),
+              archivedAt: null,
+            },
+            include: postingInclude,
+          });
+
+          await this.enqueueOutbox(transaction, updated.id, "delete");
+          await this.syncOwnerPostingCounts(transaction, ownerId);
+
+          return updated;
+        });
+
+        return this.mapPosting(posting);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+          return null;
+        }
+
+        throw error;
+      }
+    });
+  }
+
+  async unpause(id: string, ownerId: string): Promise<PostingRecord | null> {
+    return this.executeAsync(async () => {
+      try {
+        const posting = await this.prisma.$transaction(async (transaction) => {
+          const updated = await transaction.posting.update({
+            where: {
+              id,
+            },
+            data: {
+              status: "published",
+              pausedAt: null,
+              archivedAt: null,
+            },
+            include: postingInclude,
+          });
+
+          await this.enqueueOutbox(transaction, updated.id, "upsert");
           await this.syncOwnerPostingCounts(transaction, ownerId);
 
           return updated;
@@ -1298,7 +1371,7 @@ export class PostingsRepository extends BaseRepository {
         where: {
           ownerId,
           status: {
-            in: ["draft", "published"],
+            in: ["draft", "published", "paused"],
           },
         },
       }),
@@ -1478,6 +1551,7 @@ export class PostingsRepository extends BaseRepository {
         postalCode: posting.postalCode ?? undefined,
       },
       publishedAt: posting.publishedAt?.toISOString(),
+      pausedAt: posting.pausedAt?.toISOString(),
       archivedAt: posting.archivedAt?.toISOString(),
       createdAt: posting.createdAt.toISOString(),
       updatedAt: posting.updatedAt.toISOString(),

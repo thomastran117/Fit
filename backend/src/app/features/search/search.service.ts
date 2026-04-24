@@ -1,5 +1,6 @@
 import ConflictError from "@/errors/http/conflict.error";
 import type { PostingSearchOutboxRecord } from "@/features/postings/postings.model";
+import { isPostingSearchIndexable } from "@/features/postings/postings.model";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type {
@@ -157,7 +158,7 @@ export class SearchService {
         const documents = await this.postingsRepository.findByIdsForIndexing([job.postingId]);
         const document = documents[0];
 
-        if (!document || document.status !== "published") {
+        if (!document || !isPostingSearchIndexable(document.status)) {
           await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
         } else {
           await this.postingsSearchService.upsertDocument(document, job.targetIndexName);
