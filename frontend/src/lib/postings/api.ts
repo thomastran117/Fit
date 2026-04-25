@@ -64,6 +64,15 @@ export interface PostingLifecycleRecord {
   updatedAt: string;
 }
 
+export interface PostingViewerReviewState {
+  eligible: boolean;
+  hasOwnReview: boolean;
+}
+
+export interface PostingDetailResponse {
+  viewerReviewState?: PostingViewerReviewState;
+}
+
 const CSRF_COOKIE_NAME = "csrf_token";
 const CSRF_HEADER_NAME = "x-csrf-token";
 
@@ -133,6 +142,12 @@ async function authenticatedJson<TResponse, TBody extends object | undefined = u
 }
 
 export const postingsApi = {
+  getPosting<TResponse extends PostingDetailResponse = PostingDetailResponse>(
+    postingId: string,
+  ): Promise<TResponse> {
+    return authenticatedJson<TResponse>("GET", `/postings/${encodeURIComponent(postingId)}`);
+  },
+
   pausePosting(postingId: string): Promise<PostingLifecycleRecord> {
     return authenticatedJson<PostingLifecycleRecord>(
       "POST",

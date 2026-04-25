@@ -222,6 +222,11 @@ export interface PublicPostingLocationRecord {
   longitude: number;
 }
 
+export interface PostingViewerReviewState {
+  eligible: boolean;
+  hasOwnReview: boolean;
+}
+
 export interface PostingRecord {
   id: string;
   ownerId: string;
@@ -249,6 +254,7 @@ export interface PostingRecord {
 
 export interface PublicPostingRecord extends Omit<PostingRecord, "location"> {
   location: PublicPostingLocationRecord;
+  viewerReviewState?: PostingViewerReviewState;
 }
 
 export interface PostingPagination {

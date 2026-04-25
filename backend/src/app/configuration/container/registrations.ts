@@ -359,11 +359,13 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     dependencies: [
       containerTokens.postingsReviewsRepository,
       containerTokens.postingsRepository,
+      containerTokens.rentingsRepository,
     ],
     resolve: ({ resolve }) =>
       new PostingsReviewsService(
         resolve(containerTokens.postingsReviewsRepository),
         resolve(containerTokens.postingsRepository),
+        resolve(containerTokens.rentingsRepository),
       ),
   });
   container.register({
@@ -412,6 +414,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     dependencies: [
       containerTokens.postingsRepository,
       containerTokens.postingsSearchService,
+      containerTokens.postingsReviewsRepository,
+      containerTokens.rentingsRepository,
       containerTokens.blobService,
       containerTokens.contentSanitizationService,
       containerTokens.cacheService,
@@ -420,6 +424,8 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       new PostingsService(
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.postingsSearchService),
+        resolve(containerTokens.postingsReviewsRepository),
+        resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.blobService),
         resolve(containerTokens.contentSanitizationService),
         resolve(containerTokens.cacheService),

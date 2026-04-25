@@ -32,13 +32,17 @@ import {
   getPostingVariantDefinition,
 } from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
+import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 export class PostingsService {
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsSearchService: PostingsSearchService,
+    private readonly postingsReviewsRepository: PostingsReviewsRepository,
+    private readonly rentingsRepository: RentingsRepository,
     private readonly blobService: BlobService,
     private readonly contentSanitizationService: ContentSanitizationService,
     private readonly cacheService: CacheService,
@@ -244,7 +248,28 @@ export class PostingsService {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
-    return this.toPublicPosting(posting);
+    const publicPosting = this.toPublicPosting(posting);
+
+    if (!viewerId) {
+      return publicPosting;
+    }
+
+    const [hasEligibleReviewRenting, ownReview] = await Promise.all([
+      this.rentingsRepository.hasEligibleReviewRenting({
+        postingId: posting.id,
+        renterId: viewerId,
+        now: new Date(),
+      }),
+      this.postingsReviewsRepository.findOwnReview(posting.id, viewerId),
+    ]);
+
+    return {
+      ...publicPosting,
+      viewerReviewState: {
+        eligible: hasEligibleReviewRenting,
+        hasOwnReview: Boolean(ownReview),
+      },
+    };
   }
 
   async listByOwner(input: ListOwnerPostingsInput): Promise<ListOwnerPostingsResult> {
