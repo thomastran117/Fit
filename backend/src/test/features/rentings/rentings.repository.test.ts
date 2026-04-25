@@ -22,4 +22,38 @@ describe("RentingsRepository", () => {
       repository.convertApprovedBookingRequest("booking-1", "owner-1"),
     ).rejects.toBeInstanceOf(ConflictError);
   });
+
+  it("queries for an ended confirmed renting when checking review eligibility", async () => {
+    const now = new Date("2026-04-23T12:00:00.000Z");
+    const findFirst = jest.fn(async () => ({
+      id: "renting-1",
+    }));
+    const database = {
+      renting: {
+        findFirst,
+      },
+    };
+    const repository = new RentingsRepository(database as never);
+
+    const result = await repository.hasEligibleReviewRenting({
+      postingId: "posting-1",
+      renterId: "renter-1",
+      now,
+    });
+
+    expect(result).toBe(true);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        postingId: "posting-1",
+        renterId: "renter-1",
+        status: "confirmed",
+        endAt: {
+          lte: now,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+  });
 });

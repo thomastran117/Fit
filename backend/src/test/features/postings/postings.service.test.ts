@@ -7,11 +7,13 @@ import type {
   PostingRecord,
   UpsertPostingInput,
 } from "@/features/postings/postings.model";
+import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
 import type { CacheService } from "@/features/cache/cache.service";
+import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 
 class FakePostingsRepository {
@@ -157,7 +159,27 @@ class FakePostingsRepository {
   }
 }
 
-function createService(repository: FakePostingsRepository): PostingsService {
+class FakePostingsReviewsRepository {
+  ownReview: { id: string } | null = null;
+
+  async findOwnReview(): Promise<{ id: string } | null> {
+    return this.ownReview;
+  }
+}
+
+class FakeRentingsRepository {
+  eligibleReviewRenting = false;
+
+  async hasEligibleReviewRenting(): Promise<boolean> {
+    return this.eligibleReviewRenting;
+  }
+}
+
+function createService(
+  repository: FakePostingsRepository,
+  postingsReviewsRepository = new FakePostingsReviewsRepository(),
+  rentingsRepository = new FakeRentingsRepository(),
+): PostingsService {
   const searchService = {} as PostingsSearchService;
   const blobService = {
     isConfigured: () => true,
@@ -175,6 +197,8 @@ function createService(repository: FakePostingsRepository): PostingsService {
   return new PostingsService(
     repository as unknown as PostingsRepository,
     searchService,
+    postingsReviewsRepository as unknown as PostingsReviewsRepository,
+    rentingsRepository as unknown as RentingsRepository,
     blobService,
     new ContentSanitizationService(),
     cacheService,
@@ -436,6 +460,65 @@ describe("PostingsService", () => {
     expect(ownerView.status).toBe("paused");
   });
 
+  it("includes viewer review state for an eligible renter on public getById", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "published",
+      ownerId: "owner-1",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+    };
+    const postingsReviewsRepository = new FakePostingsReviewsRepository();
+    postingsReviewsRepository.ownReview = { id: "review-1" };
+    const rentingsRepository = new FakeRentingsRepository();
+    rentingsRepository.eligibleReviewRenting = true;
+    const service = createService(repository, postingsReviewsRepository, rentingsRepository);
+
+    const posting = await service.getById("posting-1", "renter-1");
+
+    expect("viewerReviewState" in posting).toBe(true);
+    expect("viewerReviewState" in posting && posting.viewerReviewState).toEqual({
+      eligible: true,
+      hasOwnReview: true,
+    });
+  });
+
+  it("omits viewer review state for anonymous public getById", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "published",
+      ownerId: "owner-1",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+    };
+    const service = createService(repository);
+
+    const posting = await service.getById("posting-1");
+
+    expect("viewerReviewState" in posting).toBe(false);
+  });
+
+  it("includes viewer review state for an ineligible renter on public getById", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "published",
+      ownerId: "owner-1",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+    };
+    const service = createService(repository);
+
+    const posting = await service.getById("posting-1", "renter-1");
+
+    expect("viewerReviewState" in posting && posting.viewerReviewState).toEqual({
+      eligible: false,
+      hasOwnReview: false,
+    });
+  });
+
   it("rejects subtypes that do not belong to the selected family", async () => {
     const repository = new FakePostingsRepository();
     const service = createService(repository);
@@ -606,6 +689,8 @@ describe("PostingsService", () => {
     const service = new PostingsService(
       repository as unknown as PostingsRepository,
       searchService,
+      {} as unknown as PostingsReviewsRepository,
+      {} as unknown as RentingsRepository,
       blobService,
       new ContentSanitizationService(),
       cacheService,

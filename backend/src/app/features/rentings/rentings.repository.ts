@@ -257,6 +257,30 @@ export class RentingsRepository extends BaseRepository {
     return Boolean(match);
   }
 
+  async hasEligibleReviewRenting(input: {
+    postingId: string;
+    renterId: string;
+    now: Date;
+  }): Promise<boolean> {
+    const match = await this.executeAsync(() =>
+      this.prisma.renting.findFirst({
+        where: {
+          postingId: input.postingId,
+          renterId: input.renterId,
+          status: "confirmed",
+          endAt: {
+            lte: input.now,
+          },
+        },
+        select: {
+          id: true,
+        },
+      }),
+    );
+
+    return Boolean(match);
+  }
+
   private mapRenting(renting: RentingPersistence): RentingRecord {
     return {
       id: renting.id,

@@ -10,11 +10,13 @@ import type {
 import { isPostingPubliclyVisible } from "@/features/postings/postings.model";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 
 export class PostingsReviewsService {
   constructor(
     private readonly postingsReviewsRepository: PostingsReviewsRepository,
     private readonly postingsRepository: PostingsRepository,
+    private readonly rentingsRepository: RentingsRepository,
   ) {}
 
   async create(
@@ -24,6 +26,7 @@ export class PostingsReviewsService {
   ): Promise<PostingReviewRecord> {
     const posting = await this.requirePublishedPosting(postingId);
     this.assertReviewerIsNotOwner(posting.ownerId, reviewerId);
+    await this.assertReviewerIsEligible(postingId, reviewerId);
 
     const existing = await this.postingsReviewsRepository.findOwnReview(postingId, reviewerId);
 
@@ -41,6 +44,7 @@ export class PostingsReviewsService {
   ): Promise<PostingReviewRecord> {
     const posting = await this.requirePublishedPosting(postingId);
     this.assertReviewerIsNotOwner(posting.ownerId, reviewerId);
+    await this.assertReviewerIsEligible(postingId, reviewerId);
 
     const review = await this.postingsReviewsRepository.updateOwnReview(
       this.toUpsertInput(postingId, reviewerId, body),
@@ -71,6 +75,18 @@ export class PostingsReviewsService {
   private assertReviewerIsNotOwner(ownerId: string, reviewerId: string): void {
     if (ownerId === reviewerId) {
       throw new ForbiddenError("You cannot review your own posting.");
+    }
+  }
+
+  private async assertReviewerIsEligible(postingId: string, reviewerId: string): Promise<void> {
+    const eligible = await this.rentingsRepository.hasEligibleReviewRenting({
+      postingId,
+      renterId: reviewerId,
+      now: new Date(),
+    });
+
+    if (!eligible) {
+      throw new ForbiddenError("You can only review postings you have completed a rental for.");
     }
   }
 
