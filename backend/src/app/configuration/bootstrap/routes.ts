@@ -265,6 +265,10 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<PostingsController>(containerTokens.postingsController, "update"),
   );
   app.post(
+    "/postings/:id/duplicate",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "duplicate"),
+  );
+  app.post(
     "/postings/:id/publish",
     resolveHandler<PostingsController>(containerTokens.postingsController, "publish"),
   );

@@ -1,5 +1,6 @@
 import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
+import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type {
   PostingAvailabilityBlockInput,
@@ -18,6 +19,7 @@ import { ContentSanitizationService } from "@/features/security/content-sanitiza
 
 class FakePostingsRepository {
   createCalls = 0;
+  lastCreateInput: UpsertPostingInput | null = null;
   updateCalls = 0;
   findByIdCalls = 0;
   publishCalls = 0;
@@ -42,6 +44,7 @@ class FakePostingsRepository {
 
   async create(input: UpsertPostingInput): Promise<PostingRecord> {
     this.createCalls += 1;
+    this.lastCreateInput = input;
     return buildPostingRecord(input);
   }
 
@@ -378,6 +381,85 @@ describe("PostingsService", () => {
 
     expect(repository.createCalls).toBe(1);
     expect(created.tags).toEqual(["loft", "transit"]);
+  });
+
+  it("duplicates an owner posting into a new draft with owner-authored availability and copied photos", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-source",
+      status: "published",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+      availabilityBlocks: [
+        buildAvailabilityBlockRecord("hold-1", {
+          startAt: "2026-06-10T00:00:00.000Z",
+          endAt: "2026-06-12T00:00:00.000Z",
+          note: "Temporary booking hold",
+        }),
+      ],
+    };
+    repository.ownerBlocks = [
+      buildAvailabilityBlockRecord("owner-block-1", {
+        startAt: "2026-07-01T00:00:00.000Z",
+        endAt: "2026-07-03T00:00:00.000Z",
+        note: "Owner stay",
+      }),
+    ];
+    const service = createService(repository);
+
+    const duplicated = await service.duplicate("posting-source", "owner-1");
+
+    expect(repository.findByIdCalls).toBe(1);
+    expect(repository.createCalls).toBe(1);
+    expect(repository.lastCreateInput).toMatchObject({
+      ownerId: "owner-1",
+      variant: repository.posting.variant,
+      name: repository.posting.name,
+      description: repository.posting.description,
+      pricing: {
+        ...repository.posting.pricing,
+        currency: "CAD",
+      },
+      tags: ["loft", "transit"],
+      attributes: repository.posting.attributes,
+      availabilityStatus: repository.posting.availabilityStatus,
+      availabilityNotes: repository.posting.availabilityNotes,
+      maxBookingDurationDays: repository.posting.maxBookingDurationDays,
+      location: repository.posting.location,
+      photos: repository.posting.photos.map((photo) => ({
+        blobUrl: photo.blobUrl,
+        blobName: photo.blobName,
+        position: photo.position,
+      })),
+      availabilityBlocks: repository.ownerBlocks.map((block) => ({
+        startAt: block.startAt,
+        endAt: block.endAt,
+        note: block.note,
+      })),
+    });
+    expect(duplicated.id).toBe("posting-1");
+    expect(duplicated.status).toBe("draft");
+    expect(duplicated.publishedAt).toBeUndefined();
+    expect(duplicated.photos).toHaveLength(repository.posting.photos.length);
+    expect(duplicated.availabilityBlocks).toEqual([
+      expect.objectContaining({
+        startAt: "2026-07-01T00:00:00.000Z",
+        endAt: "2026-07-03T00:00:00.000Z",
+        note: "Owner stay",
+      }),
+    ]);
+  });
+
+  it("does not allow duplicating another owner's posting", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      ownerId: "owner-2",
+    };
+    const service = createService(repository);
+
+    await expect(service.duplicate("posting-1", "owner-1")).rejects.toBeInstanceOf(ForbiddenError);
+    expect(repository.createCalls).toBe(0);
   });
 
   it("pauses a published posting while preserving its published timestamp", async () => {

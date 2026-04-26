@@ -56,6 +56,18 @@ export class PostingsService {
     return this.postingsRepository.create(normalizedInput);
   }
 
+  async duplicate(id: string, ownerId: string): Promise<PostingRecord> {
+    const posting = await this.requireOwnerPosting(id, ownerId);
+    const availabilityBlocks = await this.postingsRepository.listOwnerAvailabilityBlocks(posting.id);
+    const duplicateInput = this.normalizeUpsertInput(
+      this.toDuplicateInput(posting, availabilityBlocks),
+    );
+    this.assertSafeTextContent(duplicateInput);
+    this.assertPublishableDraftShape(duplicateInput);
+
+    return this.postingsRepository.create(duplicateInput);
+  }
+
   async update(id: string, input: UpsertPostingInput): Promise<PostingRecord> {
     const existing = await this.requireOwnerPosting(id, input.ownerId);
     const normalizedInput = this.normalizeUpsertInput(input);
@@ -473,6 +485,39 @@ export class PostingsService {
     if (violations.length > 0) {
       throw new BadRequestError("Request body validation failed.", violations);
     }
+  }
+
+  private toDuplicateInput(
+    posting: PostingRecord,
+    availabilityBlocks: PostingAvailabilityBlockRecord[],
+  ): UpsertPostingInput {
+    // Duplicate the posting with the same managed photo blobs and only owner-authored
+    // availability blocks; transient booking holds should not carry over to the new draft.
+    return {
+      ownerId: posting.ownerId,
+      variant: posting.variant,
+      name: posting.name,
+      description: posting.description,
+      pricing: posting.pricing,
+      photos: posting.photos.map((photo) => ({
+        blobUrl: photo.blobUrl,
+        blobName: photo.blobName,
+        position: photo.position,
+      })),
+      tags: [...posting.tags],
+      attributes: posting.attributes,
+      availabilityStatus: posting.availabilityStatus,
+      availabilityNotes: posting.availabilityNotes ?? null,
+      maxBookingDurationDays: posting.maxBookingDurationDays ?? null,
+      availabilityBlocks: availabilityBlocks.map((block) => ({
+        startAt: block.startAt,
+        endAt: block.endAt,
+        note: block.note,
+      })),
+      location: {
+        ...posting.location,
+      },
+    };
   }
 
   private assertSafeAvailabilityBlockContent(input: PostingAvailabilityBlockInput): void {

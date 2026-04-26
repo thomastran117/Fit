@@ -73,6 +73,13 @@ export class PostingsController {
     return context.json(result);
   };
 
+  duplicate = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAuth(context);
+    requireMinimumRole(auth, "owner");
+    const result = await this.postingsService.duplicate(this.requireRouteId(context), auth.sub);
+    return context.json(result, 201);
+  };
+
   listAvailabilityBlocks = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");

@@ -155,6 +155,10 @@ export const postingsApi = {
     );
   },
 
+  duplicatePosting<TResponse>(postingId: string): Promise<TResponse> {
+    return authenticatedJson<TResponse>("POST", `/postings/${encodeURIComponent(postingId)}/duplicate`);
+  },
+
   unpausePosting(postingId: string): Promise<PostingLifecycleRecord> {
     return authenticatedJson<PostingLifecycleRecord>(
       "POST",
