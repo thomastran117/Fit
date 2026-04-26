@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { requireMinimumRole } from "@/features/auth/authorization";
+import { resolveIdempotencyKey } from "@/configuration/middlewares/idempotency.middleware";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError, parseRequestBody } from "@/configuration/validation/request";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
@@ -28,7 +29,7 @@ export class PaymentsController {
     const result = await this.paymentsService.createPaymentSession({
       bookingRequestId: this.requireBookingRequestId(context),
       renterId: auth.sub,
-      idempotencyKey: body.idempotencyKey,
+      idempotencyKey: resolveIdempotencyKey(context, body.idempotencyKey),
     });
     return context.json(result, 201);
   };
@@ -45,7 +46,7 @@ export class PaymentsController {
     const result = await this.paymentsService.retryPayment({
       paymentId: this.requirePaymentId(context),
       renterId: auth.sub,
-      idempotencyKey: body.idempotencyKey,
+      idempotencyKey: resolveIdempotencyKey(context, body.idempotencyKey),
     });
     return context.json(result);
   };
@@ -58,7 +59,7 @@ export class PaymentsController {
       actorUserId: auth.sub,
       amount: body.amount,
       reason: body.reason ?? null,
-      idempotencyKey: body.idempotencyKey,
+      idempotencyKey: resolveIdempotencyKey(context, body.idempotencyKey),
     });
     return context.json(result, 201);
   };

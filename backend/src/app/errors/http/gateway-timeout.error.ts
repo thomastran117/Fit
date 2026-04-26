@@ -2,7 +2,7 @@ import AppError from "./app.error";
 
 class GatewayTimeoutError extends AppError {
   constructor(message: string, details?: unknown) {
-    super(message, 400, "GATEWAY_TIMEOUT", details);
+    super(message, 504, "GATEWAY_TIMEOUT", details);
     this.name = "GatewayTimeoutError";
   }
 }

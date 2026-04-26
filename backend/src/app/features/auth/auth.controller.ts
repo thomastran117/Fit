@@ -3,6 +3,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
+import { resolveIdempotencyKey } from "@/configuration/middlewares/idempotency.middleware";
 import { parseRequestBody } from "@/configuration/validation/request";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import { environment } from "@/configuration/environment";
@@ -523,7 +524,7 @@ export class AuthController {
     const result = await this.captchaService.verify({
       token: captchaToken,
       remoteIp: context.get("client").ip,
-      idempotencyKey: context.req.header("x-request-id") ?? randomUUID(),
+      idempotencyKey: resolveIdempotencyKey(context),
     });
 
     if (!result.success || result.failOpen) {
