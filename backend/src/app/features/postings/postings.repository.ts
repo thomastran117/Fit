@@ -1286,15 +1286,21 @@ export class PostingsRepository extends BaseRepository {
   ): Prisma.Sql {
     switch (input.sort) {
       case "dailyPrice":
-        return Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) ASC, published_at DESC, created_at DESC`;
+        return Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) ASC, published_at DESC, created_at DESC, id ASC`;
+      case "oldest":
+        return Prisma.sql`published_at ASC, created_at ASC, id ASC`;
+      case "nameAsc":
+        return Prisma.sql`LOWER(name) ASC, published_at DESC, created_at DESC, id ASC`;
+      case "nameDesc":
+        return Prisma.sql`LOWER(name) DESC, published_at DESC, created_at DESC, id ASC`;
       case "nearest":
         if (distanceExpression) {
-          return Prisma.sql`${distanceExpression} ASC, published_at DESC, created_at DESC`;
+          return Prisma.sql`${distanceExpression} ASC, published_at DESC, created_at DESC, id ASC`;
         }
 
-        return Prisma.sql`published_at DESC, created_at DESC`;
+        return Prisma.sql`published_at DESC, created_at DESC, id ASC`;
       case "newest":
-        return Prisma.sql`published_at DESC, created_at DESC`;
+        return Prisma.sql`published_at DESC, created_at DESC, id ASC`;
       case "relevance":
       default:
         if (input.query) {
@@ -1307,10 +1313,10 @@ export class PostingsRepository extends BaseRepository {
             + CASE WHEN city LIKE ${likeValue} THEN 2 ELSE 0 END
             + CASE WHEN region LIKE ${likeValue} THEN 1 ELSE 0 END
             + CASE WHEN country LIKE ${likeValue} THEN 1 ELSE 0 END
-          ) DESC, published_at DESC, created_at DESC`;
+          ) DESC, published_at DESC, created_at DESC, id ASC`;
         }
 
-        return Prisma.sql`published_at DESC, created_at DESC`;
+        return Prisma.sql`published_at DESC, created_at DESC, id ASC`;
     }
   }
 
