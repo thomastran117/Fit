@@ -212,6 +212,31 @@ describe("PostingsController", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("routes duplicate with posting id and owner id", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const duplicate = jest.fn(async () => ({
+      id: "posting-2",
+      status: "draft",
+    }));
+    const controller = new PostingsController(
+      {
+        duplicate,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+    });
+
+    const response = await controller.duplicate(context);
+
+    expect(duplicate).toHaveBeenCalledWith("posting-1", "owner-1");
+    expect(response.status).toBe(201);
+  });
+
   it("routes availability block creation with posting id and owner id", async () => {
     mockRequireJwtAuth.mockResolvedValue(createClaims());
     const createOwnerAvailabilityBlock = jest.fn(async () => ({
