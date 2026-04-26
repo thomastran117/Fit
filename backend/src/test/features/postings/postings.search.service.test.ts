@@ -271,6 +271,112 @@ describe("PostingsSearchService", () => {
           order: "desc",
         },
       },
+      {
+        createdAt: {
+          order: "desc",
+        },
+      },
+      {
+        id: {
+          order: "asc",
+        },
+      },
+    ]);
+  });
+
+  it("adds oldest and alphabetical sort clauses to Elasticsearch search requests", async () => {
+    const { requestJson, service } = createElasticsearchSearchService();
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 20,
+      sort: "oldest",
+    });
+
+    let body = readSearchRequest(requestJson);
+
+    expect(body.sort).toEqual([
+      {
+        publishedAt: {
+          order: "asc",
+        },
+      },
+      {
+        createdAt: {
+          order: "asc",
+        },
+      },
+      {
+        id: {
+          order: "asc",
+        },
+      },
+    ]);
+
+    requestJson.mockClear();
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 20,
+      sort: "nameAsc",
+    });
+
+    body = readSearchRequest(requestJson);
+
+    expect(body.sort).toEqual([
+      {
+        "name.sort": {
+          order: "asc",
+        },
+      },
+      {
+        publishedAt: {
+          order: "desc",
+        },
+      },
+      {
+        createdAt: {
+          order: "desc",
+        },
+      },
+      {
+        id: {
+          order: "asc",
+        },
+      },
+    ]);
+
+    requestJson.mockClear();
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 20,
+      sort: "nameDesc",
+    });
+
+    body = readSearchRequest(requestJson);
+
+    expect(body.sort).toEqual([
+      {
+        "name.sort": {
+          order: "desc",
+        },
+      },
+      {
+        publishedAt: {
+          order: "desc",
+        },
+      },
+      {
+        createdAt: {
+          order: "desc",
+        },
+      },
+      {
+        id: {
+          order: "asc",
+        },
+      },
     ]);
   });
 
@@ -401,7 +507,7 @@ describe("PostingsRepository.searchPublicFallback", () => {
     expect(idQuery.sql).toContain("6371 * ACOS");
     expect(idQuery.sql).toContain("<= ?");
     expect(idQuery.sql).toContain("ORDER BY (");
-    expect(idQuery.sql).toContain("ASC, published_at DESC, created_at DESC");
+    expect(idQuery.sql).toContain("ASC, published_at DESC, created_at DESC, id ASC");
     expect(idQuery.values).toEqual(
       expect.arrayContaining(["place", "entire_place", "loft", "workspace", "available", 100, 200, 12]),
     );
@@ -426,7 +532,42 @@ describe("PostingsRepository.searchPublicFallback", () => {
     expect(idQuery.sql).toContain("CASE WHEN city LIKE ?");
     expect(idQuery.sql).toContain("CASE WHEN region LIKE ?");
     expect(idQuery.sql).toContain("CASE WHEN country LIKE ?");
-    expect(idQuery.sql).toContain(") DESC, published_at DESC, created_at DESC");
+    expect(idQuery.sql).toContain(") DESC, published_at DESC, created_at DESC, id ASC");
     expect(idQuery.values.filter((value) => value === "%loft%")).toHaveLength(12);
+  });
+
+  it("supports oldest and alphabetical fallback ordering with stable tie-breakers", async () => {
+    const { queries, repository } = createFallbackRepository();
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      sort: "oldest",
+    });
+
+    let idQuery = queries[1]!;
+    expect(idQuery.sql).toContain("ORDER BY published_at ASC, created_at ASC, id ASC");
+
+    queries.length = 0;
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      sort: "nameAsc",
+    });
+
+    idQuery = queries[1]!;
+    expect(idQuery.sql).toContain("ORDER BY LOWER(name) ASC, published_at DESC, created_at DESC, id ASC");
+
+    queries.length = 0;
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      sort: "nameDesc",
+    });
+
+    idQuery = queries[1]!;
+    expect(idQuery.sql).toContain("ORDER BY LOWER(name) DESC, published_at DESC, created_at DESC, id ASC");
   });
 });

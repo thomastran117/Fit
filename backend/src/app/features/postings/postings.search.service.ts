@@ -403,11 +403,27 @@ export class PostingsSearchService {
               order: "asc",
             },
           },
+          ...this.buildStableRecencySort("desc"),
+        ];
+      case "oldest":
+        return this.buildStableRecencySort("asc");
+      case "nameAsc":
+        return [
           {
-            publishedAt: {
+            "name.sort": {
+              order: "asc",
+            },
+          },
+          ...this.buildStableRecencySort("desc"),
+        ];
+      case "nameDesc":
+        return [
+          {
+            "name.sort": {
               order: "desc",
             },
           },
+          ...this.buildStableRecencySort("desc"),
         ];
       case "nearest":
         if (input.geo) {
@@ -422,29 +438,13 @@ export class PostingsSearchService {
                 unit: "km",
               },
             },
-            {
-              publishedAt: {
-                order: "desc",
-              },
-            },
+            ...this.buildStableRecencySort("desc"),
           ];
         }
 
-        return [
-          {
-            publishedAt: {
-              order: "desc",
-            },
-          },
-        ];
+        return this.buildStableRecencySort("desc");
       case "newest":
-        return [
-          {
-            publishedAt: {
-              order: "desc",
-            },
-          },
-        ];
+        return this.buildStableRecencySort("desc");
       case "relevance":
       default:
         return input.query
@@ -454,20 +454,30 @@ export class PostingsSearchService {
                   order: "desc",
                 },
               },
-              {
-                publishedAt: {
-                  order: "desc",
-                },
-              },
+              ...this.buildStableRecencySort("desc"),
             ]
-          : [
-              {
-                publishedAt: {
-                  order: "desc",
-                },
-              },
-            ];
+          : this.buildStableRecencySort("desc");
     }
+  }
+
+  private buildStableRecencySort(direction: "asc" | "desc"): Array<Record<string, unknown>> {
+    return [
+      {
+        publishedAt: {
+          order: direction,
+        },
+      },
+      {
+        createdAt: {
+          order: direction,
+        },
+      },
+      {
+        id: {
+          order: "asc",
+        },
+      },
+    ];
   }
 
   private toElasticsearchDocument(document: PostingSearchDocument): Record<string, unknown> {
@@ -590,7 +600,15 @@ export class PostingsSearchService {
           status: { type: "keyword" },
           family: { type: "keyword" },
           subtype: { type: "keyword" },
-          name: { type: "text" },
+          name: {
+            type: "text",
+            fields: {
+              sort: {
+                type: "keyword",
+                normalizer: "lowercase_normalizer",
+              },
+            },
+          },
           description: { type: "text" },
           tags: { type: "keyword", normalizer: "lowercase_normalizer" },
           availabilityStatus: { type: "keyword" },

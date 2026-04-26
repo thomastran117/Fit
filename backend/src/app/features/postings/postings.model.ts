@@ -21,7 +21,15 @@ export const postingAvailabilityStatusSchema = z.enum([
 export const postingFamilySchema = z.enum(POSTING_FAMILY_VALUES);
 export const postingSubtypeSchema = z.enum(POSTING_SUBTYPE_VALUES);
 export const postingSearchSourceSchema = z.enum(["elasticsearch", "database"]);
-export const postingSortSchema = z.enum(["relevance", "newest", "dailyPrice", "nearest"]);
+export const postingSortSchema = z.enum([
+  "relevance",
+  "newest",
+  "oldest",
+  "dailyPrice",
+  "nearest",
+  "nameAsc",
+  "nameDesc",
+]);
 
 const trimmedStringSchema = z.string().trim().min(1);
 const nullableTrimmedStringSchema = z
