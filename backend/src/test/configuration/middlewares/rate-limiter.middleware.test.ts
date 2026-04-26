@@ -1,0 +1,300 @@
+import { Hono } from "hono";
+import type { AppBindings } from "@/configuration/http/bindings";
+import type { ServiceContainer } from "@/configuration/bootstrap/container";
+import { containerTokens } from "@/configuration/container/tokens";
+import { handleApplicationError } from "@/configuration/middlewares/error-handler.middleware";
+import {
+  rateLimiterMiddleware,
+  resetRateLimiterMemoryFallbackForTests,
+  resolveRateLimitPolicy,
+} from "@/configuration/middlewares/rate-limiter.middleware";
+import UnauthorizedError from "@/errors/http/unauthorized.error";
+import type { JwtClaims } from "@/features/auth/token/token.service";
+
+class FakeContainer implements ServiceContainer {
+  constructor(
+    private readonly cacheService: { eval: jest.Mock },
+    private readonly tokenService: { verifyAccessToken: jest.Mock },
+  ) {}
+
+  resolve<TValue>(token: unknown): TValue {
+    if (token === containerTokens.cacheService) {
+      return this.cacheService as TValue;
+    }
+
+    if (token === containerTokens.tokenService) {
+      return this.tokenService as TValue;
+    }
+
+    throw new Error(`Unexpected token: ${String(token)}`);
+  }
+
+  createScope(): ServiceContainer {
+    return this;
+  }
+
+  async dispose(): Promise<void> {}
+}
+
+function createClaims(overrides: Partial<JwtClaims> = {}): JwtClaims {
+  return {
+    sub: "user-1",
+    email: "user@example.com",
+    role: "user",
+    deviceId: "device-1",
+    tokenVersion: 0,
+    iat: 1,
+    exp: 9_999_999_999,
+    ...overrides,
+  };
+}
+
+function createApp(
+  cacheEval = jest.fn().mockResolvedValue([1, 4, 0]),
+  verifyAccessToken = jest.fn().mockResolvedValue(createClaims()),
+) {
+  const app = new Hono<AppBindings>();
+  const cacheService = {
+    eval: cacheEval,
+  };
+  const tokenService = {
+    verifyAccessToken,
+  };
+
+  app.use("*", async (context, next) => {
+    context.set("client", {
+      ip: "203.0.113.10",
+      device: {
+        type: "desktop",
+        isMobile: false,
+      },
+    });
+    context.set("container", new FakeContainer(cacheService, tokenService));
+    context.set("outputFormat", "json");
+    await next();
+  });
+  app.use("*", rateLimiterMiddleware);
+  app.onError(handleApplicationError);
+  app.post("/auth/local/login", (context) => context.json({ ok: true }));
+  app.post("/auth/refresh", (context) => context.json({ ok: true }));
+  app.post("/payments/:id/refunds", (context) => context.json({ ok: true }));
+  app.post("/postings", (context) => context.json({ ok: true }));
+
+  return { app, cacheEval, verifyAccessToken };
+}
+
+describe("resolveRateLimitPolicy", () => {
+  it("assigns a stricter auth policy to login routes", () => {
+    const policy = resolveRateLimitPolicy(new Request("http://rent.test/auth/local/login", {
+      method: "POST",
+    }));
+
+    expect(policy).toMatchObject({
+      id: "auth-sensitive",
+      strategy: "sliding-window",
+      limit: 10,
+      bucketKey: "POST:auth-sensitive",
+    });
+  });
+
+  it("assigns a stable payment-write bucket to dynamic payment mutation routes", () => {
+    const firstPolicy = resolveRateLimitPolicy(
+      new Request("http://rent.test/payments/payment-1/refunds", { method: "POST" }),
+    );
+    const secondPolicy = resolveRateLimitPolicy(
+      new Request("http://rent.test/payments/payment-2/refunds", { method: "POST" }),
+    );
+
+    expect(firstPolicy.id).toBe("payments-write");
+    expect(secondPolicy.id).toBe("payments-write");
+    expect(firstPolicy.bucketKey).toBe("POST:payments-write");
+    expect(secondPolicy.bucketKey).toBe("POST:payments-write");
+  });
+
+  it("assigns a more generous dedicated policy to refresh than other auth session routes", () => {
+    const refreshPolicy = resolveRateLimitPolicy(
+      new Request("http://rent.test/auth/refresh", { method: "POST" }),
+    );
+    const logoutPolicy = resolveRateLimitPolicy(
+      new Request("http://rent.test/auth/logout", { method: "POST" }),
+    );
+
+    expect(refreshPolicy).toMatchObject({
+      id: "auth-refresh",
+      limit: 60,
+      bucketKey: "POST:auth-refresh",
+    });
+    expect(logoutPolicy).toMatchObject({
+      id: "auth-session",
+      limit: 15,
+      bucketKey: "POST:auth-session",
+    });
+  });
+
+  it("falls back to the default policy for unrelated routes", () => {
+    const policy = resolveRateLimitPolicy(new Request("http://rent.test/postings", {
+      method: "POST",
+    }));
+
+    expect(policy).toMatchObject({
+      id: "default",
+      strategy: "sliding-window",
+      limit: 60,
+      bucketKey: "POST:/postings",
+    });
+  });
+});
+
+describe("rateLimiterMiddleware", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    resetRateLimiterMemoryFallbackForTests();
+  });
+
+  it("uses the stricter auth policy headers on login routes", async () => {
+    const { app } = createApp();
+    const response = await app.request("http://rent.test/auth/local/login", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-ratelimit-backend")).toBe("redis");
+    expect(response.headers.get("x-ratelimit-limit")).toBe("10");
+    expect(response.headers.get("x-ratelimit-policy")).toBe("auth-sensitive");
+    expect(response.headers.get("x-ratelimit-strategy")).toBe("sliding-window");
+  });
+
+  it("uses the dedicated refresh policy headers on the refresh route", async () => {
+    const { app } = createApp();
+    const response = await app.request("http://rent.test/auth/refresh", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-ratelimit-backend")).toBe("redis");
+    expect(response.headers.get("x-ratelimit-limit")).toBe("60");
+    expect(response.headers.get("x-ratelimit-policy")).toBe("auth-refresh");
+    expect(response.headers.get("x-ratelimit-strategy")).toBe("sliding-window");
+  });
+
+  it("uses a stable rate-limit key for payment mutation routes with different ids", async () => {
+    const { app, cacheEval } = createApp();
+
+    await app.request("http://rent.test/payments/payment-1/refunds", {
+      method: "POST",
+    });
+    await app.request("http://rent.test/payments/payment-2/refunds", {
+      method: "POST",
+    });
+
+    const keys = cacheEval.mock.calls.map(([, redisKeys]) => redisKeys[0]);
+    expect(keys).toEqual([
+      "rate-limit:POST:payments-write:ip:203.0.113.10",
+      "rate-limit:POST:payments-write:ip:203.0.113.10",
+    ]);
+  });
+
+  it("returns the matched policy in rate-limit errors", async () => {
+    const { app } = createApp(jest.fn().mockResolvedValue([0, 0, 9]));
+    const response = await app.request("http://rent.test/auth/local/login", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("x-ratelimit-backend")).toBe("redis");
+    expect(response.headers.get("retry-after")).toBe("9");
+    await expect(response.json()).resolves.toEqual({
+      error: "Too many requests. Please try again later.",
+      code: "TOO_MANY_REQUESTS",
+      details: {
+        backend: "redis",
+        identityType: "ip",
+        policy: "auth-sensitive",
+        strategy: "sliding-window",
+        retryAfterSeconds: 9,
+      },
+    });
+  });
+
+  it("prefers the authenticated user id over the client ip when a valid bearer token is present", async () => {
+    const { app, cacheEval, verifyAccessToken } = createApp();
+    const response = await app.request("http://rent.test/postings", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-access-token",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(verifyAccessToken).toHaveBeenCalledWith("valid-access-token");
+    expect(cacheEval.mock.calls[0]?.[1]?.[0]).toBe("rate-limit:POST:/postings:user:user-1");
+  });
+
+  it("falls back to the client ip when optional bearer auth is invalid", async () => {
+    const verifyAccessToken = jest.fn().mockRejectedValue(
+      new UnauthorizedError("Invalid access token signature."),
+    );
+    const { app, cacheEval } = createApp(undefined, verifyAccessToken);
+    const response = await app.request("http://rent.test/postings", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer invalid-access-token",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(cacheEval.mock.calls[0]?.[1]?.[0]).toBe("rate-limit:POST:/postings:ip:203.0.113.10");
+  });
+
+  it("falls back to in-memory limiting when Redis is unavailable", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { app } = createApp(
+      jest.fn().mockRejectedValue(new Error("Redis has not been initialized. Call connectRedis() first.")),
+    );
+
+    const response = await app.request("http://rent.test/auth/local/login", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-ratelimit-backend")).toBe("memory");
+    expect(response.headers.get("x-ratelimit-degraded")).toBe("true");
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it("still enforces limits when running on the in-memory fallback", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { app } = createApp(
+      jest.fn().mockRejectedValue(new Error("Redis connection closed unexpectedly.")),
+    );
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const response = await app.request("http://rent.test/auth/local/login", {
+        method: "POST",
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-ratelimit-backend")).toBe("memory");
+    }
+
+    const limitedResponse = await app.request("http://rent.test/auth/local/login", {
+      method: "POST",
+    });
+
+    expect(limitedResponse.status).toBe(429);
+    expect(limitedResponse.headers.get("x-ratelimit-backend")).toBe("memory");
+    expect(limitedResponse.headers.get("x-ratelimit-degraded")).toBe("true");
+    await expect(limitedResponse.json()).resolves.toEqual({
+      error: "Too many requests. Please try again later.",
+      code: "TOO_MANY_REQUESTS",
+      details: {
+        backend: "memory",
+        identityType: "ip",
+        policy: "auth-sensitive",
+        strategy: "sliding-window",
+        retryAfterSeconds: expect.any(Number),
+      },
+    });
+    expect(warnSpy).toHaveBeenCalled();
+  });
+});

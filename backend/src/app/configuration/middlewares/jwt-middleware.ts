@@ -25,6 +25,12 @@ export const jwtMiddleware = createMiddleware<AppBindings>(async (context, next)
 });
 
 export async function requireJwtAuth(context: Context<AppBindings>): Promise<JwtClaims> {
+  const existingClaims = context.get("auth");
+
+  if (existingClaims) {
+    return existingClaims;
+  }
+
   const token = readBearerToken(context.req.header("authorization"));
   const claims = await getRequestContainer(context)
     .resolve(containerTokens.tokenService)

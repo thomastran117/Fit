@@ -42,8 +42,11 @@ export function createCorsMiddleware(): MiddlewareHandler<AppBindings> {
     exposeHeaders: [
       "content-type",
       "retry-after",
+      "x-ratelimit-backend",
+      "x-ratelimit-degraded",
       "x-ratelimit-limit",
       "x-ratelimit-remaining",
+      "x-ratelimit-policy",
       "x-ratelimit-strategy",
     ],
     credentials: true,
