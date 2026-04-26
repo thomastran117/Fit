@@ -112,6 +112,7 @@ export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (contex
 
     const client = context.get("client");
     const outputFormat = context.get("outputFormat");
+    const requestId = context.get("requestId");
 
     const method = context.req.method;
     const path = getSanitizedPathWithQuery(context.req.raw);
@@ -129,6 +130,7 @@ export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (contex
         `${statusColor}${status}${colors.reset}`,
         `${latencyColor}${durationMs}ms${colors.reset}`,
         `${colors.gray}ip=${client?.ip ?? "unknown"}${colors.reset}`,
+        `${colors.gray}requestId=${requestId ?? "unknown"}${colors.reset}`,
         `${colors.gray}format=${outputFormat}${colors.reset}`,
       ].join(" "),
     );

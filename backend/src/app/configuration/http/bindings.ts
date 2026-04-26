@@ -29,6 +29,8 @@ export interface AppBindings {
     client: ClientRequestContext;
     clientSignature: ClientSignatureContext;
     container: ServiceContainer;
+    idempotencyKey: string;
     outputFormat: OutputFormat;
+    requestId: string;
   };
 }
