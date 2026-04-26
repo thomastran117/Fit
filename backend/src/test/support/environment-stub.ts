@@ -23,6 +23,15 @@ const databaseConfig = {
   url: "mysql://user:password@localhost:3306/rent_test",
 };
 
+const rateLimiterConfig = {
+  enabled: true,
+  strategy: "sliding-window" as const,
+  limit: 60,
+  windowSeconds: 60,
+  bucketCapacity: 60,
+  refillTokensPerSecond: 1,
+};
+
 export const environment = {
   isProduction(): boolean {
     return false;
@@ -36,11 +45,15 @@ export const environment = {
   getCaptchaConfig() {
     return captchaConfig;
   },
+  getRateLimiterConfig() {
+    return rateLimiterConfig;
+  },
   load() {
     return {
       auth: tokenConfig,
       captcha: captchaConfig,
       database: databaseConfig,
+      rateLimiter: rateLimiterConfig,
       server: {
         isProduction: false,
       },

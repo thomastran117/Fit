@@ -12,25 +12,26 @@ export interface ErrorResponseBody {
 export function handleApplicationError(error: unknown, context: Context<AppBindings>): Response {
   const { status, body } = toErrorResponse(error);
   const outputFormat = context.var.outputFormat ?? detectOutputFormat(context.req.raw);
+  const headers = new Headers(context.res?.headers);
 
   if (status >= 500) {
     console.error("Unhandled application error", error);
   }
 
   if (outputFormat === "xml") {
+    headers.set("content-type", "application/xml; charset=UTF-8");
+
     return new Response(serializeToXml(body, "errorResponse"), {
       status,
-      headers: {
-        "content-type": "application/xml; charset=UTF-8",
-      },
+      headers,
     });
   }
 
+  headers.set("content-type", "application/json; charset=UTF-8");
+
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "content-type": "application/json; charset=UTF-8",
-    },
+    headers,
   });
 }
 
