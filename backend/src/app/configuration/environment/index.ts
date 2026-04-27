@@ -22,6 +22,8 @@ type RawEnvironmentValues = {
   CSRF_ALLOWED_ORIGINS?: string;
   DATABASE_OPERATION_LOGGING_ENABLED?: string;
   DATABASE_QUERY_LOGGING_ENABLED?: string;
+  DATABASE_AUTO_SEED_ENABLED?: string;
+  DATABASE_AUTO_SEED_REFRESH?: string;
   DATABASE_SLOW_OPERATION_THRESHOLD_MS?: string;
   DATABASE_SLOW_QUERY_THRESHOLD_MS?: string;
   DATABASE_URL?: string;
@@ -106,6 +108,8 @@ export interface AppEnvironment {
   };
   database: {
     url: string;
+    autoSeedEnabled: boolean;
+    autoSeedRefresh: boolean;
     operationLoggingEnabled: boolean;
     queryLoggingEnabled: boolean;
     slowOperationThresholdMs: number;
@@ -260,6 +264,8 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "CSRF_ALLOWED_ORIGINS",
   "DATABASE_OPERATION_LOGGING_ENABLED",
   "DATABASE_QUERY_LOGGING_ENABLED",
+  "DATABASE_AUTO_SEED_ENABLED",
+  "DATABASE_AUTO_SEED_REFRESH",
   "DATABASE_SLOW_OPERATION_THRESHOLD_MS",
   "DATABASE_SLOW_QUERY_THRESHOLD_MS",
   "DATABASE_URL",
@@ -567,6 +573,11 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
     integer: true,
     min: 1,
   });
+  const databaseAutoSeedEnabled = parseBoolean(
+    raw.DATABASE_AUTO_SEED_ENABLED,
+    nodeEnv !== "production",
+  );
+  const databaseAutoSeedRefresh = parseBoolean(raw.DATABASE_AUTO_SEED_REFRESH, false);
   const rateLimiterWindowSeconds = parseNumber(
     raw,
     "RATE_LIMITER_WINDOW_SECONDS",
@@ -606,6 +617,8 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
     },
     database: {
       url: databaseUrl,
+      autoSeedEnabled: databaseAutoSeedEnabled,
+      autoSeedRefresh: databaseAutoSeedRefresh,
       operationLoggingEnabled: parseBoolean(raw.DATABASE_OPERATION_LOGGING_ENABLED, false),
       queryLoggingEnabled: parseBoolean(raw.DATABASE_QUERY_LOGGING_ENABLED, false),
       slowOperationThresholdMs: parseNumber(
@@ -983,6 +996,14 @@ class EnvironmentManager {
 
   isProduction(): boolean {
     return this.get().server.isProduction;
+  }
+
+  isDevelopment(): boolean {
+    return this.get().server.nodeEnv === "development";
+  }
+
+  isTest(): boolean {
+    return this.get().server.nodeEnv === "test";
   }
 
   getServerPort(): number {

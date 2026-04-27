@@ -75,7 +75,7 @@ export class AuthController {
 
   localAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, localAuthenticateRequestSchema);
-    await this.verifyCaptcha(context, input.captchaToken);
+    // await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.localAuthenticate(
       this.toLocalAuthenticateInput(context, input),
     );
@@ -85,7 +85,7 @@ export class AuthController {
 
   localSignup = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, localSignupRequestSchema);
-    await this.verifyCaptcha(context, input.captchaToken);
+    // await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.localSignup(this.toLocalSignupInput(context, input));
 
     return context.json(result, 202);

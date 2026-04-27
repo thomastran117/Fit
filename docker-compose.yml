@@ -7,10 +7,10 @@ x-mcp-build: &mcp-build
   dockerfile: Dockerfile
 
 x-backend-environment: &backend-environment
-  NODE_ENV: production
-  DATABASE_URL: mysql://rent:rent@mysql:3307/rent
+  NODE_ENV: development
+  DATABASE_URL: mysql://rent:rent@mysql:3306/rent
   REDIS_HOST: redis
-  REDIS_PORT: 6380
+  REDIS_PORT: 6379
   ELASTICSEARCH_ENABLED: "true"
   ELASTICSEARCH_URL: http://elasticsearch:9200
   ELASTICSEARCH_POSTINGS_INDEX: postings
@@ -28,7 +28,7 @@ x-backend-environment: &backend-environment
   SQUARE_WEBHOOK_NOTIFICATION_URL: http://localhost:8040/payments/webhooks/square
 
 x-mcp-environment: &mcp-environment
-  NODE_ENV: production
+  NODE_ENV: development
   RENTIFY_API_BASE_URL: http://backend:8040
   RENTIFY_API_TIMEOUT_MS: 5000
   RENTIFY_PAT: ${RENTIFY_PAT:-}

@@ -1,38 +1,11 @@
 import { serve } from "@hono/node-server";
-import { createApplication } from "@/configuration/bootstrap/application";
-import { initializeContainer } from "@/configuration/bootstrap/container";
-import { environment, loadEnvironment } from "@/configuration/environment/index";
 import {
-  connectElasticsearch,
-  disconnectElasticsearch,
-} from "@/configuration/resources/elasticsearch";
-import {
-  connectDatabase,
-  disconnectDatabase,
-} from "@/configuration/resources/database";
-import {
-  connectRedis,
-  disconnectRedis,
-} from "@/configuration/resources/redis";
-import {
-  connectRabbitMq,
-  disconnectRabbitMq,
-  isRabbitMqEnabled,
-} from "@/configuration/resources/rabbitmq";
+  disconnectApplicationResources,
+  initializeServerApplication,
+} from "@/configuration/bootstrap/startup";
 
 async function bootstrap(): Promise<void> {
-  loadEnvironment();
-
-  const port = environment.getServerPort();
-
-  await connectDatabase();
-  await connectRedis();
-  await connectElasticsearch();
-  if (isRabbitMqEnabled()) {
-    await connectRabbitMq();
-  }
-  initializeContainer();
-  const app = createApplication();
+  const { app, port } = await initializeServerApplication();
 
   const server = serve(
     {
@@ -55,12 +28,7 @@ async function bootstrap(): Promise<void> {
     console.log(`Received ${signal}. Shutting down gracefully...`);
 
     server.close();
-    await Promise.allSettled([
-      disconnectRabbitMq(),
-      disconnectRedis(),
-      disconnectDatabase(),
-      disconnectElasticsearch(),
-    ]);
+    await disconnectApplicationResources();
     process.exit(0);
   };
 
@@ -75,11 +43,6 @@ async function bootstrap(): Promise<void> {
 
 void bootstrap().catch(async (error: unknown) => {
   console.error("Failed to start server", error);
-  await Promise.allSettled([
-    disconnectRabbitMq(),
-    disconnectRedis(),
-    disconnectDatabase(),
-    disconnectElasticsearch(),
-  ]);
+  await disconnectApplicationResources();
   process.exit(1);
 });

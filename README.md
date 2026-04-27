@@ -82,11 +82,14 @@ At the moment, the backend workspace is under `backend/`.
 Useful backend scripts:
 
 - `npm run dev`
-- `npm run dev:seed-users`
+- `npm run seed`
+- `npm run seed:dev`
+- `npm run seed:refresh`
 - `npm run build`
 - `npm run check`
 - `npm run prisma:generate`
 - `npm run prisma:migrate:dev`
+- `npm run test:db-seeds`
 
 Run them from:
 
@@ -121,12 +124,23 @@ Exposed ports:
 Notes:
 
 - The backend container runs `prisma migrate deploy` before starting the server.
-- The Docker stack also runs a dev-only seed step that guarantees four local fixture accounts:
+- In `development` and `test`, the backend now auto-seeds when the database is empty.
+- Set `DATABASE_AUTO_SEED_REFRESH=true` to force a refresh of fixture-owned records on startup.
+- You can manually invoke the orchestrator with `npm run seed`.
+- Use `npm run seed:refresh` or `npm run seed -- --refresh` to force a refresh.
+- Use `npm run seed -- --only-if-empty` if you want a one-off guarded manual run.
+- The local Docker stack now runs the backend in `development` mode, so startup seeding follows the same rules there.
+- Local fixture accounts include:
   - `owner1@rentify.local` / `Rentify123!`
   - `owner2@rentify.local` / `Rentify123!`
+  - `owner3@rentify.local` / `Rentify123!`
+  - `owner4@rentify.local` / `Rentify123!`
   - `user1@rentify.local` / `Rentify123!`
+  - `user2@rentify.local` / `Rentify123!`
+  - `user3@rentify.local` / `Rentify123!`
+  - `user4@rentify.local` / `Rentify123!`
   - `admin1@rentify.local` / `Rentify123!`
-- Those fixture owners also receive 20 seeded postings total, with 10 listings per owner for search, booking, and MCP testing.
+- The seed set includes 62 postings and 27 bookings, along with related payments, rentings, reviews across 5 reviewed postings, search rows, and analytics fixtures for local browsing and testing.
 - The current `docker-compose.yml` includes placeholder values for `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
 - Replace those placeholders before using the stack for anything beyond local bootstrapping.
 
