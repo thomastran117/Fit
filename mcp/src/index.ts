@@ -10,6 +10,7 @@ async function main(): Promise<void> {
   const apiClient = new RentifyApiClient({
     baseUrl: config.apiBaseUrl,
     timeoutMs: config.apiTimeoutMs,
+    personalAccessToken: config.auth.personalAccessToken,
   });
   const server = createServer(config, apiClient);
   const transport = new StdioServerTransport();

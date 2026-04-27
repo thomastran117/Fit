@@ -1,4 +1,5 @@
 export {
+  AuthNotConfiguredError,
   BackendApiError,
   BackendUnavailableError,
   RentifyApiClient,

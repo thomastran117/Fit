@@ -2,8 +2,10 @@ import { createMiddleware } from "hono/factory";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
+import ForbiddenError from "@/errors/http/forbidden.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type { JwtClaims } from "@/features/auth/token/token.service";
+import type { AuthPrincipal, JwtAuthPrincipal } from "@/features/auth/auth.principal";
 
 function readBearerToken(headerValue?: string): string {
   if (!headerValue) {
@@ -19,12 +21,58 @@ function readBearerToken(headerValue?: string): string {
   return token;
 }
 
+function isPersonalAccessToken(token: string): boolean {
+  return token.startsWith("rpat_");
+}
+
+function createJwtPrincipal(claims: JwtClaims): JwtAuthPrincipal {
+  return {
+    ...claims,
+    authMethod: "jwt",
+  };
+}
+
+function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: AuthPrincipal): void {
+  if (auth.authMethod !== "pat") {
+    return;
+  }
+
+  const pathname = new URL(context.req.url).pathname;
+  const requestMethod = context.req.method ?? "GET";
+  const policy = [
+    { method: "GET", pattern: /^\/profile\/me$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/postings\/me$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/postings\/me\/batch$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/booking-requests\/me$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/payouts\/me$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/rentings\/me$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/postings\/analytics\/summary$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/postings\/analytics\/postings$/, requiredScope: "mcp:read" },
+    { method: "GET", pattern: /^\/postings\/[^/]+\/analytics$/, requiredScope: "mcp:read" },
+  ].find((entry) => entry.method === requestMethod && entry.pattern.test(pathname));
+
+  if (!policy) {
+    throw new ForbiddenError("Personal access tokens cannot access this endpoint.", {
+      method: requestMethod,
+      pathname,
+      authMethod: auth.authMethod,
+    });
+  }
+
+  if (!auth.scopes.includes(policy.requiredScope)) {
+    throw new ForbiddenError("Personal access token does not include the required scope.", {
+      requiredScope: policy.requiredScope,
+      scopes: auth.scopes,
+    });
+  }
+}
+
 export const jwtMiddleware = createMiddleware<AppBindings>(async (context, next) => {
   await requireJwtAuth(context);
   await next();
 });
 
-export async function requireJwtAuth(context: Context<AppBindings>): Promise<JwtClaims> {
+export async function requireJwtAuth(context: Context<AppBindings>): Promise<AuthPrincipal> {
   const existingClaims = context.get("auth");
 
   if (existingClaims) {
@@ -32,9 +80,17 @@ export async function requireJwtAuth(context: Context<AppBindings>): Promise<Jwt
   }
 
   const token = readBearerToken(context.req.header("authorization"));
-  const claims = await getRequestContainer(context)
-    .resolve(containerTokens.tokenService)
-    .verifyAccessToken(token);
+  const claims = isPersonalAccessToken(token)
+    ? await getRequestContainer(context)
+        .resolve(containerTokens.personalAccessTokenService)
+        .authenticateToken(token)
+    : createJwtPrincipal(
+        await getRequestContainer(context)
+          .resolve(containerTokens.tokenService)
+          .verifyAccessToken(token),
+      );
+
+  assertPersonalAccessTokenAccess(context, claims);
 
   context.set("auth", claims);
   return claims;
@@ -42,10 +98,22 @@ export async function requireJwtAuth(context: Context<AppBindings>): Promise<Jwt
 
 export async function getOptionalJwtAuth(
   context: Context<AppBindings>,
-): Promise<JwtClaims | null> {
+): Promise<AuthPrincipal | null> {
   if (!context.req.header("authorization")) {
     return null;
   }
 
   return requireJwtAuth(context);
+}
+
+export async function requireSessionAuth(
+  context: Context<AppBindings>,
+): Promise<JwtAuthPrincipal> {
+  const auth = await requireJwtAuth(context);
+
+  if (auth.authMethod !== "jwt") {
+    throw new ForbiddenError("This endpoint requires a signed-in user session.");
+  }
+
+  return auth;
 }

@@ -1,4 +1,5 @@
 import {
+  AuthNotConfiguredError,
   BackendApiError,
   BackendUnavailableError,
   RentifyApiClient,
@@ -74,6 +75,48 @@ describe("RentifyApiClient", () => {
         accept: "application/json",
       },
     });
+  });
+
+  it("does not send auth or device headers on public requests by default", async () => {
+    const fetchMock = createFetchMock().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          postings: [],
+          pagination: {
+            page: 1,
+            pageSize: 20,
+            total: 0,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+          source: "database",
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const client = new RentifyApiClient({
+      baseUrl: "http://127.0.0.1:8040",
+      timeoutMs: 5_000,
+      fetchImplementation: fetchMock,
+      personalAccessToken:
+        "rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+    });
+
+    await client.searchPostings({});
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(requestInit?.headers).toMatchObject({
+      accept: "application/json",
+    });
+    expect((requestInit?.headers as Record<string, string>).authorization).toBeUndefined();
+    expect((requestInit?.headers as Record<string, string>)["x-device-id"]).toBeUndefined();
+    expect((requestInit?.headers as Record<string, string>)["x-device-platform"]).toBeUndefined();
   });
 
   it("returns parsed JSON for each public marketplace endpoint", async () => {
@@ -234,6 +277,78 @@ describe("RentifyApiClient", () => {
       name: "BackendUnavailableError",
       code: "BACKEND_UNAVAILABLE",
       details: "connect ECONNREFUSED",
+    });
+  });
+
+  it("includes bearer auth on protected requests", async () => {
+    const fetchMock = createFetchMock().mockResolvedValue(
+      new Response(JSON.stringify({ id: "user_1", email: "hello@example.com" }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+    );
+    const client = new RentifyApiClient({
+      baseUrl: "http://127.0.0.1:8040",
+      timeoutMs: 5_000,
+      fetchImplementation: fetchMock,
+      personalAccessToken:
+        "rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+    });
+
+    await expect(client.getProtected("/profile/me")).resolves.toMatchObject({
+      id: "user_1",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(requestInit?.headers).toMatchObject({
+      accept: "application/json",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+    });
+  });
+
+  it("fails cleanly when a protected request is attempted without auth", async () => {
+    const client = new RentifyApiClient({
+      baseUrl: "http://127.0.0.1:8040",
+      timeoutMs: 5_000,
+      fetchImplementation: createFetchMock(),
+    });
+
+    await expect(client.getProtected("/profile/me")).rejects.toBeInstanceOf(
+      AuthNotConfiguredError,
+    );
+  });
+
+  it("maps 401s on protected requests into backend API errors when the PAT is rejected", async () => {
+    const fetchMock = createFetchMock()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: "Unauthorized",
+            code: "UNAUTHORIZED",
+          }),
+          {
+            status: 401,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+      );
+    const client = new RentifyApiClient({
+      baseUrl: "http://127.0.0.1:8040",
+      timeoutMs: 5_000,
+      fetchImplementation: fetchMock,
+      personalAccessToken:
+        "rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+    });
+
+    await expect(client.getProtected("/profile/me")).rejects.toMatchObject<Partial<BackendApiError>>({
+      name: "BackendApiError",
+      status: 401,
+      code: "UNAUTHORIZED",
     });
   });
 });

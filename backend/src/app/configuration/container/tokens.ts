@@ -9,6 +9,9 @@ import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
 import { OAuthTokenVerifier } from "@/features/auth/oauth/oauth-token-verifier";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import { AuthService } from "@/features/auth/auth.service";
+import { PersonalAccessTokenController } from "@/features/auth/personal-access-token/personal-access-token.controller";
+import { PersonalAccessTokenRepository } from "@/features/auth/personal-access-token/personal-access-token.repository";
+import { PersonalAccessTokenService } from "@/features/auth/personal-access-token/personal-access-token.service";
 import { TokenService } from "@/features/auth/token/token.service";
 import { BlobController } from "@/features/blob/blob.controller";
 import { BlobService } from "@/features/blob/blob.service";
@@ -58,8 +61,17 @@ export const containerTokens = {
   deviceService: createServiceToken<DeviceService>("DeviceService"),
   tokenService: createServiceToken<TokenService>("TokenService"),
   authRepository: createServiceToken<AuthRepository>("AuthRepository"),
+  personalAccessTokenRepository: createServiceToken<PersonalAccessTokenRepository>(
+    "PersonalAccessTokenRepository",
+  ),
+  personalAccessTokenService: createServiceToken<PersonalAccessTokenService>(
+    "PersonalAccessTokenService",
+  ),
   authService: createServiceToken<AuthService>("AuthService"),
   authController: createServiceToken<AuthController>("AuthController"),
+  personalAccessTokenController: createServiceToken<PersonalAccessTokenController>(
+    "PersonalAccessTokenController",
+  ),
   blobService: createServiceToken<BlobService>("BlobService"),
   blobController: createServiceToken<BlobController>("BlobController"),
   bookingsRepository: createServiceToken<BookingsRepository>("BookingsRepository"),

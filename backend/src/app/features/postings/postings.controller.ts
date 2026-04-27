@@ -45,7 +45,7 @@ import {
   upsertPostingRequestSchema,
 } from "@/features/postings/postings.model";
 import { PostingsService } from "@/features/postings/postings.service";
-import type { JwtClaims } from "@/features/auth/token/token.service";
+import type { AuthPrincipal } from "@/features/auth/auth.principal";
 
 export class PostingsController {
   constructor(
@@ -519,11 +519,11 @@ export class PostingsController {
     return requireSafeRouteParam(context, name);
   }
 
-  private async requireAuth(context: Context<AppBindings>): Promise<JwtClaims> {
+  private async requireAuth(context: Context<AppBindings>): Promise<AuthPrincipal> {
     return requireJwtAuth(context);
   }
 
-  private async getOptionalAuth(context: Context<AppBindings>): Promise<JwtClaims | null> {
+  private async getOptionalAuth(context: Context<AppBindings>): Promise<AuthPrincipal | null> {
     return getOptionalJwtAuth(context);
   }
 

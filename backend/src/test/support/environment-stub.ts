@@ -8,6 +8,7 @@ const tokenConfig = {
   audience: undefined,
   refreshTokenMode: "stateful" as const,
   refreshTokenCachePrefix: "auth:refresh",
+  personalAccessTokenSecret: "test-pat-secret",
 };
 
 const captchaConfig = {

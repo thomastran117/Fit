@@ -9,6 +9,9 @@ import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
 import { OAuthTokenVerifier } from "@/features/auth/oauth/oauth-token-verifier";
 import { AuthRepository } from "@/features/auth/auth.repository";
 import { AuthService } from "@/features/auth/auth.service";
+import { PersonalAccessTokenController } from "@/features/auth/personal-access-token/personal-access-token.controller";
+import { PersonalAccessTokenRepository } from "@/features/auth/personal-access-token/personal-access-token.repository";
+import { PersonalAccessTokenService } from "@/features/auth/personal-access-token/personal-access-token.service";
 import { TokenService } from "@/features/auth/token/token.service";
 import { BlobController } from "@/features/blob/blob.controller";
 import { BlobService } from "@/features/blob/blob.service";
@@ -148,6 +151,12 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     resolve: () => new AuthRepository(),
   });
   container.register({
+    token: containerTokens.personalAccessTokenRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new PersonalAccessTokenRepository(),
+  });
+  container.register({
     token: containerTokens.authService,
     lifetime: "scoped",
     dependencies: [
@@ -175,6 +184,13 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       ),
   });
   container.register({
+    token: containerTokens.personalAccessTokenService,
+    lifetime: "singleton",
+    dependencies: [containerTokens.personalAccessTokenRepository],
+    resolve: ({ resolve }) =>
+      new PersonalAccessTokenService(resolve(containerTokens.personalAccessTokenRepository)),
+  });
+  container.register({
     token: containerTokens.authController,
     lifetime: "scoped",
     dependencies: [
@@ -188,6 +204,13 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.captchaService),
         resolve(containerTokens.tokenService),
       ),
+  });
+  container.register({
+    token: containerTokens.personalAccessTokenController,
+    lifetime: "scoped",
+    dependencies: [containerTokens.personalAccessTokenService],
+    resolve: ({ resolve }) =>
+      new PersonalAccessTokenController(resolve(containerTokens.personalAccessTokenService)),
   });
   container.register({
     token: containerTokens.blobService,

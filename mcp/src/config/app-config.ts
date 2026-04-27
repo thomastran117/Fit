@@ -3,11 +3,16 @@ export interface PackageMetadata {
   version: string;
 }
 
+export interface RentifyMcpAuthConfig {
+  personalAccessToken?: string;
+}
+
 export interface RentifyMcpConfig {
   apiBaseUrl: string;
   apiTimeoutMs: number;
   serverName: string;
   serverVersion: string;
+  auth: RentifyMcpAuthConfig;
 }
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8040";
@@ -37,6 +42,33 @@ function parsePositiveInteger(
   return parsed;
 }
 
+function readOptionalConfiguredString(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): string | undefined {
+  const rawValue = env[name];
+
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const trimmedValue = rawValue.trim();
+
+  if (!trimmedValue) {
+    throw new Error(`${name} must not be empty when configured.`);
+  }
+
+  return trimmedValue;
+}
+
+function readAuthConfig(env: NodeJS.ProcessEnv): RentifyMcpAuthConfig {
+  const personalAccessToken = readOptionalConfiguredString(env, "RENTIFY_PAT");
+
+  return {
+    personalAccessToken,
+  };
+}
+
 export function createConfig(
   packageMetadata: Partial<PackageMetadata>,
   env: NodeJS.ProcessEnv = process.env,
@@ -58,5 +90,6 @@ export function createConfig(
       env.RENTIFY_MCP_VERSION?.trim() ||
       packageMetadata.version?.trim() ||
       FALLBACK_SERVER_VERSION,
+    auth: readAuthConfig(env),
   };
 }

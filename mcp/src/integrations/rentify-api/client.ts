@@ -8,6 +8,11 @@ import type {
 type QueryScalar = string | number | boolean;
 type QueryValue = QueryScalar | QueryScalar[] | null | undefined;
 type QueryParams = Record<string, QueryValue>;
+type JsonObject = Record<string, unknown>;
+
+interface RequestOptions {
+  requiresAuth?: boolean;
+}
 
 interface ErrorPayload {
   error?: string;
@@ -19,6 +24,7 @@ export interface RentifyApiClientOptions {
   baseUrl: string;
   timeoutMs: number;
   fetchImplementation?: typeof fetch;
+  personalAccessToken?: string;
 }
 
 export interface SearchPostingsQuery extends QueryParams {
@@ -59,6 +65,15 @@ export class BackendUnavailableError extends Error {
   ) {
     super(message);
     this.name = "BackendUnavailableError";
+  }
+}
+
+export class AuthNotConfiguredError extends Error {
+  readonly code = "AUTH_NOT_CONFIGURED";
+
+  constructor(message = "Protected Rentify MCP requests require RENTIFY_PAT.") {
+    super(message);
+    this.name = "AuthNotConfiguredError";
   }
 }
 
@@ -104,9 +119,11 @@ async function parseResponseBody(response: Response): Promise<unknown> {
 
 export class RentifyApiClient {
   private readonly fetchImplementation: typeof fetch;
+  private readonly personalAccessToken?: string;
 
   constructor(private readonly options: RentifyApiClientOptions) {
     this.fetchImplementation = options.fetchImplementation ?? fetch;
+    this.personalAccessToken = options.personalAccessToken;
   }
 
   async searchPostings(query: SearchPostingsQuery): Promise<SearchPostingsResponse> {
@@ -133,7 +150,60 @@ export class RentifyApiClient {
     );
   }
 
-  private async get<TResponse>(path: string, query?: QueryParams): Promise<TResponse> {
+  async getProtected<TResponse>(path: string, query?: QueryParams): Promise<TResponse> {
+    return this.get<TResponse>(path, query, {
+      requiresAuth: true,
+    });
+  }
+
+  private async get<TResponse>(
+    path: string,
+    query?: QueryParams,
+    requestOptions: RequestOptions = {},
+  ): Promise<TResponse> {
+    return this.request<TResponse>({
+      method: "GET",
+      path,
+      query,
+      requestOptions,
+    });
+  }
+
+  private async request<TResponse>({
+    method,
+    path,
+    query,
+    body: requestBody,
+    requestOptions = {},
+  }: {
+    method: "GET" | "POST";
+    path: string;
+    query?: QueryParams;
+    body?: JsonObject;
+    requestOptions?: RequestOptions;
+  }): Promise<TResponse> {
+    return this.executeRequest<TResponse>({
+      method,
+      path,
+      query,
+      body: requestBody,
+      requestOptions,
+    });
+  }
+
+  private async executeRequest<TResponse>({
+    method,
+    path,
+    query,
+    body,
+    requestOptions,
+  }: {
+    method: "GET" | "POST";
+    path: string;
+    query?: QueryParams;
+    body?: JsonObject;
+    requestOptions: RequestOptions;
+  }): Promise<TResponse> {
     const url = buildApiUrl(this.options.baseUrl, path, query);
     const abortController = new AbortController();
     const timeout = setTimeout(() => {
@@ -141,17 +211,18 @@ export class RentifyApiClient {
     }, this.options.timeoutMs);
 
     try {
+      const headers = this.createHeaders(requestOptions.requiresAuth ?? false, body);
       const response = await this.fetchImplementation(url, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-        },
+        method,
+        headers,
         signal: abortController.signal,
+        ...(body ? { body: JSON.stringify(body) } : {}),
       });
-      const body = await parseResponseBody(response);
+      const parsedBody = await parseResponseBody(response);
 
       if (!response.ok) {
-        const payload = (body ?? {}) as ErrorPayload;
+        const payload = (parsedBody ?? {}) as ErrorPayload;
+
         throw new BackendApiError(
           response.status,
           payload.code ?? "BACKEND_ERROR",
@@ -160,8 +231,12 @@ export class RentifyApiClient {
         );
       }
 
-      return body as TResponse;
+      return parsedBody as TResponse;
     } catch (error) {
+      if (error instanceof AuthNotConfiguredError) {
+        throw error;
+      }
+
       if (error instanceof BackendApiError) {
         throw error;
       }
@@ -181,5 +256,31 @@ export class RentifyApiClient {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private createHeaders(
+    requiresAuth: boolean,
+    body?: JsonObject,
+  ): Record<string, string> {
+    const headers: Record<string, string> = {
+      accept: "application/json",
+    };
+
+    if (body) {
+      headers["content-type"] = "application/json";
+    }
+
+    if (!requiresAuth) {
+      return headers;
+    }
+
+    const accessToken = this.personalAccessToken;
+
+    if (!accessToken) {
+      throw new AuthNotConfiguredError();
+    }
+
+    headers.authorization = `Bearer ${accessToken}`;
+    return headers;
   }
 }

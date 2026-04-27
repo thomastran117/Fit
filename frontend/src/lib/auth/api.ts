@@ -9,6 +9,9 @@ import {
   type ForgotPasswordAcceptedResult,
   type LinkedOAuthProvidersResult,
   type OAuthProvider,
+  type PersonalAccessTokenListResult,
+  type CreatePersonalAccessTokenResult,
+  type RevokePersonalAccessTokenResult,
   type SignupVerificationPendingResult,
 } from "@/lib/auth/types";
 
@@ -75,6 +78,11 @@ interface ChangePasswordInput {
   currentPassword: string;
   newPassword: string;
   deviceId?: string;
+}
+
+interface CreatePersonalAccessTokenInput {
+  name: string;
+  expiresInDays: number;
 }
 
 let refreshSessionPromise: Promise<AuthResponseBody | null> | null = null;
@@ -334,5 +342,22 @@ export const authApi = {
       ...input,
       deviceId: input.deviceId ?? getDeviceId(),
     });
+  },
+  listPersonalAccessTokens(): Promise<PersonalAccessTokenListResult> {
+    return getAuthenticatedJson<PersonalAccessTokenListResult>("/auth/personal-access-tokens");
+  },
+  createPersonalAccessToken(
+    input: CreatePersonalAccessTokenInput,
+  ): Promise<CreatePersonalAccessTokenResult> {
+    return postAuthenticatedJson<CreatePersonalAccessTokenResult>("/auth/personal-access-tokens", {
+      name: input.name,
+      scopes: ["mcp:read"],
+      expiresInDays: input.expiresInDays,
+    });
+  },
+  revokePersonalAccessToken(tokenId: string): Promise<RevokePersonalAccessTokenResult> {
+    return deleteAuthenticatedJson<RevokePersonalAccessTokenResult>(
+      `/auth/personal-access-tokens/${tokenId}`,
+    );
   },
 };

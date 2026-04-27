@@ -7,6 +7,7 @@ import {
   type ServiceToken,
 } from "@/configuration/bootstrap/container";
 import type { AuthController } from "@/features/auth/auth.controller";
+import type { PersonalAccessTokenController } from "@/features/auth/personal-access-token/personal-access-token.controller";
 import type { BlobController } from "@/features/blob/blob.controller";
 import type { BookingsController } from "@/features/bookings/bookings.controller";
 import type { PaymentsController } from "@/features/payments/payments.controller";
@@ -150,6 +151,27 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.post(
     "/auth/device/verify",
     resolveHandler<AuthController>(containerTokens.authController, "deviceVerify"),
+  );
+  app.get(
+    "/auth/personal-access-tokens",
+    resolveHandler<PersonalAccessTokenController>(
+      containerTokens.personalAccessTokenController,
+      "list",
+    ),
+  );
+  app.post(
+    "/auth/personal-access-tokens",
+    resolveHandler<PersonalAccessTokenController>(
+      containerTokens.personalAccessTokenController,
+      "create",
+    ),
+  );
+  app.delete(
+    "/auth/personal-access-tokens/:id",
+    resolveHandler<PersonalAccessTokenController>(
+      containerTokens.personalAccessTokenController,
+      "revoke",
+    ),
   );
   app.get(
     "/auth/devices",

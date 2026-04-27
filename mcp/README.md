@@ -1,10 +1,10 @@
 # Rentify MCP Server
 
-This package exposes a local `stdio` MCP server for Rentify's public marketplace read APIs.
+This package exposes a local `stdio` MCP server for Rentify's marketplace APIs.
 
 ## What It Does
 
-The first version is intentionally read-only. It wraps the live backend HTTP API and exposes these tools:
+The current tool surface is intentionally read-only. It wraps the live backend HTTP API and exposes these tools:
 
 - `search_postings`
 - `get_posting`
@@ -12,6 +12,8 @@ The first version is intentionally read-only. It wraps the live backend HTTP API
 - `list_posting_reviews`
 
 The backend API must already be running before this MCP server starts.
+
+Protected MCP integrations can use a Rentify personal access token through `RENTIFY_PAT`. No `auth_*` MCP tools are exposed by this package.
 
 ## Configuration
 
@@ -21,10 +23,14 @@ Environment variables:
   - Default: `http://127.0.0.1:8040`
 - `RENTIFY_API_TIMEOUT_MS`
   - Default: `5000`
+- `RENTIFY_PAT`
+  - Optional personal access token for protected MCP requests
 - `RENTIFY_MCP_NAME`
   - Optional override for the MCP server name
 - `RENTIFY_MCP_VERSION`
   - Optional override for the MCP server version
+
+Public marketplace tools remain unauthenticated. Protected MCP calls, when added, should send `Authorization: Bearer <RENTIFY_PAT>`.
 
 ## Local Development
 
@@ -56,7 +62,8 @@ Example desktop-style MCP config on Windows:
       ],
       "env": {
         "RENTIFY_API_BASE_URL": "http://127.0.0.1:8040",
-        "RENTIFY_API_TIMEOUT_MS": "5000"
+        "RENTIFY_API_TIMEOUT_MS": "5000",
+        "RENTIFY_PAT": "rpat_your_public_id_your_secret"
       }
     }
   }

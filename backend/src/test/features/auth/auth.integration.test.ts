@@ -57,6 +57,13 @@ function createClaims(overrides: Partial<JwtClaims> = {}): JwtClaims {
   };
 }
 
+function createJwtAuthPrincipal(overrides: Partial<JwtClaims> = {}) {
+  return {
+    ...createClaims(overrides),
+    authMethod: "jwt" as const,
+  };
+}
+
 class FakeRequestContainer implements ServiceContainer {
   private readonly contentSanitizationService = new ContentSanitizationService();
 
@@ -336,7 +343,7 @@ describe("Auth integration", () => {
 
     expect(tokenService.verifyAccessToken).toHaveBeenCalledWith("good-token");
     expect(authService.localVerify).toHaveBeenCalledWith({
-      auth: createClaims(),
+      auth: createJwtAuthPrincipal(),
       client: {
         ip: "198.51.100.5",
         device: {
@@ -504,7 +511,7 @@ describe("Auth integration", () => {
     });
 
     expect(authService.logout).toHaveBeenCalledWith({
-      auth: createClaims(),
+      auth: createJwtAuthPrincipal(),
       client: {
         ip: "203.0.113.77",
         device: {

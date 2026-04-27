@@ -128,7 +128,14 @@ describe("createMarketplaceToolHandlers", () => {
     const apiClient = {
       getPosting: jest
         .fn()
-        .mockRejectedValue(new BackendApiError(404, "RESOURCE_NOT_FOUND", { id: "missing" }, "Posting could not be found.")),
+        .mockRejectedValue(
+          new BackendApiError(
+            404,
+            "RESOURCE_NOT_FOUND",
+            { id: "missing" },
+            "Posting could not be found.",
+          ),
+        ),
     } as never;
     const handlers = createMarketplaceToolHandlers(apiClient);
 

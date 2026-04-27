@@ -37,10 +37,11 @@ import { AppleOAuthService } from "@/features/auth/oauth/apple.service";
 import { GoogleOAuthService } from "@/features/auth/oauth/google.service";
 import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
 import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
-import { TokenService, type JwtClaims } from "@/features/auth/token/token.service";
+import { TokenService } from "@/features/auth/token/token.service";
+import type { AuthPrincipal } from "@/features/auth/auth.principal";
 
 interface AuthRequestContext {
-  auth: JwtClaims;
+  auth: AuthPrincipal;
   client: ClientRequestContext;
   refreshToken?: string;
 }
