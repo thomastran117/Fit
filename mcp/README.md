@@ -1,10 +1,10 @@
 # Rentify MCP Server
 
-This package exposes a local `stdio` MCP server for Rentify's postings APIs.
+This package exposes a local `stdio` MCP server for Rentify's marketplace, postings, bookings, and rentings APIs.
 
 ## What It Does
 
-It wraps the live backend HTTP API and exposes public marketplace tools plus authenticated postings-management tools.
+It wraps the live backend HTTP API and exposes public marketplace tools plus authenticated owner workflow tools.
 
 Public marketplace tools:
 
@@ -35,9 +35,25 @@ Authenticated postings tools:
 - `create_posting_review`
 - `update_my_posting_review`
 
+Authenticated bookings tools:
+
+- `quote_booking_for_posting`
+- `create_booking_request`
+- `list_my_booking_requests`
+- `list_posting_booking_requests`
+- `get_booking_request`
+- `update_booking_request`
+- `approve_booking_request`
+- `decline_booking_request`
+
+Authenticated rentings tools:
+
+- `list_my_rentings`
+- `get_renting`
+
 The backend API must already be running before this MCP server starts.
 
-Protected MCP integrations can use a Rentify personal access token through `RENTIFY_PAT`. No `auth_*` MCP tools are exposed by this package.
+Protected MCP integrations can use a Rentify personal access token through `RENTIFY_PAT`. No `auth_*` MCP tools are exposed by this package, and this MCP intentionally does not expose payment-session or direct payment-creation tools.
 
 ## Configuration
 
@@ -54,12 +70,12 @@ Environment variables:
 - `RENTIFY_MCP_VERSION`
   - Optional override for the MCP server version
 
-Public marketplace tools remain unauthenticated. Protected postings tools send `Authorization: Bearer <RENTIFY_PAT>`.
+Public marketplace tools remain unauthenticated. Protected owner tools send `Authorization: Bearer <RENTIFY_PAT>`.
 
 Use a PAT with:
 
-- `mcp:read` for owner posting reads and analytics
-- `mcp:write` for posting mutations, availability-block writes, and posting review writes
+- `mcp:read` for owner reads, booking quotes, analytics, and renting lookups
+- `mcp:write` for posting mutations, availability-block writes, posting review writes, and booking-request mutations
 
 ## Local Development
 
