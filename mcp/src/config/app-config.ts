@@ -55,7 +55,7 @@ function readOptionalConfiguredString(
   const trimmedValue = rawValue.trim();
 
   if (!trimmedValue) {
-    throw new Error(`${name} must not be empty when configured.`);
+    return undefined;
   }
 
   return trimmedValue;

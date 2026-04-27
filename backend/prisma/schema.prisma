@@ -424,10 +424,10 @@ model PostingSearchOutbox {
   posting      Posting?                   @relation(fields: [postingId], references: [id], onDelete: Cascade)
   reindexRun   SearchReindexRun?          @relation(fields: [reindexRunId], references: [id], onDelete: SetNull)
 
-  @@index([availableAt, processedAt, deadLetteredAt, processingAt])
+  @@index([availableAt, processedAt, deadLetteredAt, processingAt], map: "ps_outbox_ready_idx")
   @@index([postingId, operation])
-  @@index([reindexRunId, indexedAt, deadLetteredAt])
-  @@index([targetIndexName, indexedAt, deadLetteredAt])
+  @@index([reindexRunId, indexedAt, deadLetteredAt], map: "ps_outbox_reindex_idx")
+  @@index([targetIndexName, indexedAt, deadLetteredAt], map: "ps_outbox_target_idx")
   @@map("posting_search_outbox")
 }
 

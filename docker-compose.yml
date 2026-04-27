@@ -69,6 +69,7 @@ services:
   mysql:
     image: mysql:8.4
     container_name: rent-mysql
+    attach: false
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: rent
@@ -76,7 +77,7 @@ services:
       MYSQL_PASSWORD: rent
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -89,9 +90,10 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: rent-redis
+    attach: false
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -103,13 +105,14 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
     container_name: rent-elasticsearch
+    attach: false
     restart: unless-stopped
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "9201:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -122,6 +125,7 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: rent-rabbitmq
+    attach: false
     restart: unless-stopped
     ports:
       - "5672:5672"

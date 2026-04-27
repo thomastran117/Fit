@@ -38,13 +38,13 @@ CREATE TABLE `search_reindex_runs` (
 ALTER TABLE `search_reindex_runs`
   MODIFY `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6);
 
-CREATE INDEX `posting_search_outbox_available_at_processed_at_dead_lettered_a_idx`
+CREATE INDEX `ps_outbox_ready_idx`
   ON `posting_search_outbox`(`available_at`, `processed_at`, `dead_lettered_at`, `processing_at`);
 
-CREATE INDEX `posting_search_outbox_reindex_run_id_indexed_at_dead_lette_idx`
+CREATE INDEX `ps_outbox_reindex_idx`
   ON `posting_search_outbox`(`reindex_run_id`, `indexed_at`, `dead_lettered_at`);
 
-CREATE INDEX `posting_search_outbox_target_index_name_indexed_at_dead_l_idx`
+CREATE INDEX `ps_outbox_target_idx`
   ON `posting_search_outbox`(`target_index_name`, `indexed_at`, `dead_lettered_at`);
 
 ALTER TABLE `posting_search_outbox`
