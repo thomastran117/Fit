@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { PackageMetadata } from "./config.js";
+import type { PackageMetadata } from "./app-config.js";
 
 const PACKAGE_JSON_URL = new URL("../package.json", import.meta.url);
 

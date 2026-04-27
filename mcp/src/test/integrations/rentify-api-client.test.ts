@@ -3,7 +3,7 @@ import {
   BackendUnavailableError,
   RentifyApiClient,
   buildApiUrl,
-} from "../backend-api-client.js";
+} from "../../integrations/rentify-api/index.js";
 
 function createFetchMock(): jest.MockedFunction<typeof fetch> {
   return jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();

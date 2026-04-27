@@ -1,8 +1,8 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { RentifyApiClient } from "./backend-api-client.js";
-import { createConfig } from "./config.js";
-import { loadPackageMetadata } from "./package-metadata.js";
-import { createServer } from "./server.js";
+import { createConfig } from "./config/index.js";
+import { loadPackageMetadata } from "./config/package-metadata.js";
+import { RentifyApiClient } from "./integrations/rentify-api/index.js";
+import { createServer } from "./server/index.js";
 
 async function main(): Promise<void> {
   const packageMetadata = await loadPackageMetadata();

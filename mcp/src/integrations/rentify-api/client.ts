@@ -3,7 +3,7 @@ import type {
   GetPostingResponse,
   ListPostingReviewsResponse,
   SearchPostingsResponse,
-} from "./rentify-api-types.js";
+} from "./types.js";
 
 type QueryScalar = string | number | boolean;
 type QueryValue = QueryScalar | QueryScalar[] | null | undefined;

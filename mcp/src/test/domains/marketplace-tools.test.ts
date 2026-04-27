@@ -1,5 +1,8 @@
-import { BackendApiError, BackendUnavailableError } from "../backend-api-client.js";
-import { createMarketplaceToolHandlers } from "../marketplace-tools.js";
+import {
+  BackendApiError,
+  BackendUnavailableError,
+} from "../../integrations/rentify-api/index.js";
+import { createMarketplaceToolHandlers } from "../../domains/marketplace/index.js";
 
 function readFirstText(result: { content: Array<{ type: string } & Record<string, unknown>> }): string {
   const textBlock = result.content.find(

@@ -6,7 +6,7 @@ import {
   BackendUnavailableError,
   RentifyApiClient,
   type SearchPostingsQuery,
-} from "./backend-api-client.js";
+} from "../../integrations/rentify-api/client.js";
 
 export interface SearchPostingsToolArgs extends SearchPostingsQuery {}
 

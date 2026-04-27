@@ -2,9 +2,9 @@ import { createServer as createHttpServer, type Server as HttpServer } from "nod
 import { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { RentifyApiClient } from "../backend-api-client.js";
-import { createConfig } from "../config.js";
-import { createServer } from "../server.js";
+import { createConfig } from "../../config/index.js";
+import { RentifyApiClient } from "../../integrations/rentify-api/index.js";
+import { createServer } from "../../server/index.js";
 
 function startBackendStub(): Promise<{ server: HttpServer; baseUrl: string }> {
   const server = createHttpServer((request, response) => {
