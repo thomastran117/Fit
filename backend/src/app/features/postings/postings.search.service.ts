@@ -1,6 +1,7 @@
 import {
   ElasticsearchCircuitOpenError,
   ElasticsearchUnavailableError,
+  ElasticsearchRequestError,
   getElasticsearchClient,
   type ElasticsearchCircuitBreakerState,
   type ElasticsearchClient,
@@ -45,6 +46,14 @@ interface ElasticsearchSearchResponse {
 interface ElasticsearchBulkResponseItem {
   index?: {
     status: number;
+    error?: {
+      reason?: string;
+      type?: string;
+    };
+  };
+  delete?: {
+    status: number;
+    result?: string;
     error?: {
       reason?: string;
       type?: string;
@@ -181,13 +190,38 @@ export class PostingsSearchService {
       },
     );
 
-    if (response.errors) {
-      const firstError = response.items?.find((item) => item.index?.error)?.index?.error;
+    this.throwOnBulkErrors(response, "index");
+  }
 
-      throw new ElasticsearchUnavailableError(
-        `Bulk indexing failed: ${firstError?.type ?? "unknown"} ${firstError?.reason ?? ""}`.trim(),
-      );
+  async bulkDeleteDocuments(ids: string[], targetIndexName: string): Promise<void> {
+    if (ids.length === 0) {
+      return;
     }
+
+    const payload = ids
+      .map((id) =>
+        JSON.stringify({
+          delete: {
+            _index: targetIndexName,
+            _id: id,
+          },
+        }),
+      )
+      .join("\n")
+      .concat("\n");
+
+    const response = await this.elasticsearch.requestJson<ElasticsearchBulkResponse>(
+      "/_bulk",
+      {
+        method: "POST",
+        body: payload,
+      },
+      {
+        contentType: "application/x-ndjson",
+      },
+    );
+
+    this.throwOnBulkErrors(response, "delete");
   }
 
   async deleteDocument(id: string, targetIndexName?: string): Promise<void> {
@@ -970,5 +1004,38 @@ export class PostingsSearchService {
     }
 
     return clauses;
+  }
+
+  private throwOnBulkErrors(
+    response: ElasticsearchBulkResponse,
+    operation: "index" | "delete",
+  ): void {
+    if (!response.errors) {
+      return;
+    }
+
+    const firstFailure = response.items?.find((item) => {
+      const result = operation === "index" ? item.index : item.delete;
+
+      if (!result?.error) {
+        return false;
+      }
+
+      return !(operation === "delete" && result.status === 404);
+    });
+    const firstError = operation === "index" ? firstFailure?.index : firstFailure?.delete;
+
+    if (!firstError?.error) {
+      return;
+    }
+
+    const message =
+      `Bulk ${operation} failed with status ${firstError.status}: ${firstError.error.type ?? "unknown"} ${firstError.error.reason ?? ""}`.trim();
+
+    if (firstError.status >= 500) {
+      throw new ElasticsearchUnavailableError(message);
+    }
+
+    throw new ElasticsearchRequestError(firstError.status, message);
   }
 }

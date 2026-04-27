@@ -36,6 +36,16 @@ export class ElasticsearchUnavailableError extends Error {
   }
 }
 
+export class ElasticsearchRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ElasticsearchRequestError";
+  }
+}
+
 export class ElasticsearchCircuitOpenError extends ElasticsearchUnavailableError {
   constructor(openedUntil: Date) {
     super(`Elasticsearch circuit breaker is open until ${openedUntil.toISOString()}.`);
@@ -133,9 +143,14 @@ export class ElasticsearchClient {
             body: text.slice(0, 500),
           });
         }
-        throw new ElasticsearchUnavailableError(
-          `Elasticsearch request failed with status ${response.status}: ${text.slice(0, 500)}`,
-        );
+        throw response.status >= 500
+          ? new ElasticsearchUnavailableError(
+              `Elasticsearch request failed with status ${response.status}: ${text.slice(0, 500)}`,
+            )
+          : new ElasticsearchRequestError(
+              response.status,
+              `Elasticsearch request failed with status ${response.status}: ${text.slice(0, 500)}`,
+            );
       }
 
       if (response.status === 204) {
@@ -150,13 +165,16 @@ export class ElasticsearchClient {
       if (error instanceof Error && error.name === "AbortError") {
         recordElasticsearchTimeout();
         this.recordFailure();
-      } else if (!(error instanceof ElasticsearchUnavailableError)) {
+      } else if (
+        !(error instanceof ElasticsearchUnavailableError) &&
+        !(error instanceof ElasticsearchRequestError)
+      ) {
         recordElasticsearchTransportError();
         this.recordFailure();
       }
 
       const wrappedError =
-        error instanceof ElasticsearchUnavailableError
+        error instanceof ElasticsearchUnavailableError || error instanceof ElasticsearchRequestError
           ? error
           : new ElasticsearchUnavailableError(
               error instanceof Error ? error.message : "Elasticsearch request failed.",

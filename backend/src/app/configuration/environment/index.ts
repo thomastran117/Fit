@@ -56,7 +56,11 @@ type RawEnvironmentValues = {
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
+  POSTINGS_SEARCH_INDEXER_BATCH_SIZE?: string;
+  POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS?: string;
   POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS?: string;
+  POSTINGS_SEARCH_RECONCILE_BATCH_SIZE?: string;
+  POSTINGS_SEARCH_RECONCILE_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_REINDEX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_REINDEX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_RELAY_BATCH_SIZE?: string;
@@ -185,7 +189,13 @@ export interface AppEnvironment {
     };
     searchIndexer: {
       prefetch: number;
+      batchSize: number;
+      flushIntervalMs: number;
       maxAttempts: number;
+    };
+    searchReconcile: {
+      pollIntervalMs: number;
+      batchSize: number;
     };
     searchReindex: {
       pollIntervalMs: number;
@@ -296,7 +306,11 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE",
   "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_INDEXER_PREFETCH",
+  "POSTINGS_SEARCH_INDEXER_BATCH_SIZE",
+  "POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS",
   "POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS",
+  "POSTINGS_SEARCH_RECONCILE_BATCH_SIZE",
+  "POSTINGS_SEARCH_RECONCILE_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_REINDEX_BATCH_SIZE",
   "POSTINGS_SEARCH_REINDEX_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_RELAY_BATCH_SIZE",
@@ -788,7 +802,37 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           integer: true,
           min: 1,
         }),
+        batchSize: parseNumber(raw, "POSTINGS_SEARCH_INDEXER_BATCH_SIZE", 25, errors, {
+          integer: true,
+          min: 1,
+        }),
+        flushIntervalMs: parseNumber(
+          raw,
+          "POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS",
+          250,
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
         maxAttempts: parseNumber(raw, "POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS", 8, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
+      searchReconcile: {
+        pollIntervalMs: parseNumber(
+          raw,
+          "POSTINGS_SEARCH_RECONCILE_POLL_INTERVAL_MS",
+          60_000,
+          errors,
+          {
+            integer: true,
+            min: 1,
+          },
+        ),
+        batchSize: parseNumber(raw, "POSTINGS_SEARCH_RECONCILE_BATCH_SIZE", 50, errors, {
           integer: true,
           min: 1,
         }),
@@ -1060,6 +1104,10 @@ class EnvironmentManager {
 
   getSearchIndexerWorkerConfig(): AppEnvironment["workers"]["searchIndexer"] {
     return this.get().workers.searchIndexer;
+  }
+
+  getSearchReconcileWorkerConfig(): AppEnvironment["workers"]["searchReconcile"] {
+    return this.get().workers.searchReconcile;
   }
 
   getSearchReindexWorkerConfig(): AppEnvironment["workers"]["searchReindex"] {

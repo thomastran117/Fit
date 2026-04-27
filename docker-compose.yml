@@ -231,6 +231,15 @@ services:
     environment: *backend-environment
     command: ["node", "dist/workers/search/search-indexer.worker.js"]
 
+  search-reconcile-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-search-reconcile-worker
+    restart: unless-stopped
+    depends_on: *search-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/search/search-reconcile.worker.js"]
+
   search-reindex-worker:
     build: *backend-build
     image: rent-backend:local

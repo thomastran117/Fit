@@ -1,6 +1,7 @@
 import {
   ElasticsearchCircuitOpenError,
   ElasticsearchClient,
+  ElasticsearchRequestError,
   ElasticsearchUnavailableError,
   type ElasticsearchConfig,
 } from "@/configuration/resources/elasticsearch";
@@ -53,10 +54,10 @@ describe("ElasticsearchClient circuit breaker", () => {
     const client = new ElasticsearchClient(createConfig());
 
     await expect(client.requestJson("/postings/_search", { method: "GET" })).rejects.toBeInstanceOf(
-      ElasticsearchUnavailableError,
+      ElasticsearchRequestError,
     );
     await expect(client.requestJson("/postings/_search", { method: "GET" })).rejects.toBeInstanceOf(
-      ElasticsearchUnavailableError,
+      ElasticsearchRequestError,
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);

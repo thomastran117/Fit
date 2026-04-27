@@ -58,9 +58,16 @@ describe("SearchService", () => {
   it("reports queue inspection failures explicitly in status", async () => {
     const postingsRepository = {
       findActiveSearchReindexRun: jest.fn(async () => null),
-      getPendingSearchOutboxMetrics: jest.fn(async () => ({
-        count: 3,
-        oldestAgeMs: 1_500,
+      getSearchOutboxLagMetrics: jest.fn(async () => ({
+        unpublishedCount: 3,
+        unpublishedOldestAgeMs: 1_500,
+        publishedNotIndexedCount: 2,
+        publishedNotIndexedOldestAgeMs: 500,
+        deadLetteredByOperation: {
+          upsert: 1,
+          delete: 0,
+          barrier: 0,
+        },
       })),
     } as never;
     const postingsSearchService = {
@@ -97,6 +104,17 @@ describe("SearchService", () => {
     expect(status.queueCounts).toBeUndefined();
     expect(status.pendingOutboxCount).toBe(3);
     expect(status.pendingOutboxOldestAgeMs).toBe(1_500);
+    expect(status.lag).toEqual({
+      unpublishedCount: 3,
+      unpublishedOldestAgeMs: 1_500,
+      publishedNotIndexedCount: 2,
+      publishedNotIndexedOldestAgeMs: 500,
+      deadLetteredByOperation: {
+        upsert: 1,
+        delete: 0,
+        barrier: 0,
+      },
+    });
     expect(status.aliases.health.state).toBe("ready");
     expect(status.telemetry.queueInspectionFailures).toBe(1);
   });
@@ -263,5 +281,191 @@ describe("SearchService", () => {
 
     expect(touchSearchReindexRunProcessing).toHaveBeenCalled();
     expect(clearSearchReindexRunProcessing).toHaveBeenCalledWith("run-1");
+  });
+
+  it("retries transient reindex failures without failing the run", async () => {
+    const clearSearchReindexRunProcessing = jest.fn(async () => undefined);
+    const markSearchReindexRunFailed = jest.fn(async () => undefined);
+    const postingsRepository = {
+      claimNextSearchReindexRun: jest.fn(async () => ({
+        id: "run-1",
+        status: "running",
+        targetIndexName: "postings_v2",
+        sourceSnapshotAt: "2026-04-27T00:00:00.000Z",
+        totalPostings: 0,
+        indexedPostings: 0,
+        failedPostings: 0,
+        startedAt: "2026-04-27T00:00:00.000Z",
+        createdAt: "2026-04-27T00:00:00.000Z",
+        updatedAt: "2026-04-27T00:00:00.000Z",
+      })),
+      countPublishedPostingsForIndexing: jest.fn(async () => 1),
+      markSearchReindexRunRunning: jest.fn(async () => undefined),
+      listPublishedForIndexingBatch: jest
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            id: "posting-1",
+          },
+        ])
+        .mockResolvedValueOnce([]),
+      touchSearchReindexRunProcessing: jest.fn(async () => undefined),
+      clearSearchReindexRunProcessing,
+      markSearchReindexRunFailed,
+    } as never;
+    const postingsSearchService = {
+      ensureLiveIndex: jest.fn(async () => undefined),
+      bulkUpsertDocuments: jest.fn(async () => {
+        throw new Error("amqp broker unavailable");
+      }),
+    } as never;
+    const searchQueueService = {
+      ensureTopology: jest.fn(async () => undefined),
+    } as never;
+    const service = new SearchService(postingsRepository, postingsSearchService, searchQueueService);
+
+    const processed = await service.processReindexRuns(100);
+
+    expect(processed).toBe(0);
+    expect(clearSearchReindexRunProcessing).toHaveBeenCalledWith("run-1");
+    expect(markSearchReindexRunFailed).not.toHaveBeenCalled();
+  });
+
+  it("bulk-indexes live jobs and only falls back per message on failed groups", async () => {
+    const markSearchOutboxesIndexed = jest.fn(async () => undefined);
+    const postingsRepository = {
+      getSearchOutboxesByIds: jest.fn(async () => [
+        {
+          id: "outbox-1",
+          postingId: "posting-1",
+          operation: "upsert",
+          dedupeKey: "outbox-1",
+          attempts: 0,
+          publishAttempts: 0,
+          availableAt: "2026-04-27T00:00:00.000Z",
+          createdAt: "2026-04-27T00:00:00.000Z",
+          updatedAt: "2026-04-27T00:00:00.000Z",
+        },
+        {
+          id: "outbox-2",
+          postingId: "posting-2",
+          operation: "delete",
+          dedupeKey: "outbox-2",
+          attempts: 0,
+          publishAttempts: 0,
+          availableAt: "2026-04-27T00:00:01.000Z",
+          createdAt: "2026-04-27T00:00:01.000Z",
+          updatedAt: "2026-04-27T00:00:01.000Z",
+        },
+      ]),
+      hasNewerSearchOutboxJob: jest.fn(async () => false),
+      markSearchOutboxesIndexed,
+      findByIdsForIndexing: jest.fn(async () => [
+        {
+          id: "posting-1",
+          status: "published",
+          photos: [],
+          pricing: {
+            daily: {
+              amount: 100,
+              currency: "CAD",
+            },
+          },
+        },
+      ]),
+    } as never;
+    const postingsSearchService = {
+      getWriteAliasName: () => "postings-write",
+      bulkUpsertDocuments: jest.fn(async () => undefined),
+      bulkDeleteDocuments: jest.fn(async () => undefined),
+    } as never;
+    const service = new SearchService(postingsRepository, postingsSearchService, {} as never);
+
+    await service.processIndexJobsBatch(
+      [
+        {
+          outboxId: "outbox-1",
+          eventId: "outbox-1",
+          dedupeKey: "outbox-1",
+          operation: "upsert",
+          jobType: "upsert",
+          postingId: "posting-1",
+          targetIndexScope: "live",
+          occurredAt: "2026-04-27T00:00:00.000Z",
+          attempt: 0,
+        },
+        {
+          outboxId: "outbox-2",
+          eventId: "outbox-2",
+          dedupeKey: "outbox-2",
+          operation: "delete",
+          jobType: "delete",
+          postingId: "posting-2",
+          targetIndexScope: "live",
+          occurredAt: "2026-04-27T00:00:01.000Z",
+          attempt: 0,
+        },
+      ],
+      3,
+    );
+
+    expect(postingsSearchService.bulkUpsertDocuments).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: "posting-1" })]),
+      "postings-write",
+    );
+    expect(postingsSearchService.bulkDeleteDocuments).toHaveBeenCalledWith(
+      ["posting-2"],
+      "postings-write",
+    );
+    expect(markSearchOutboxesIndexed).toHaveBeenCalledTimes(2);
+  });
+
+  it("reconciles recent postings back into the live index", async () => {
+    const postingsRepository = {
+      listRecentForIndexReconciliation: jest.fn(async () => [
+        {
+          id: "posting-1",
+          status: "published",
+          photos: [],
+          pricing: {
+            daily: {
+              amount: 100,
+              currency: "CAD",
+            },
+          },
+        },
+        {
+          id: "posting-2",
+          status: "archived",
+          photos: [],
+          pricing: {
+            daily: {
+              amount: 50,
+              currency: "CAD",
+            },
+          },
+        },
+      ]),
+    } as never;
+    const postingsSearchService = {
+      isElasticsearchEnabled: () => true,
+      ensureLiveIndex: jest.fn(async () => undefined),
+      getWriteAliasName: () => "postings-write",
+      bulkUpsertDocuments: jest.fn(async () => undefined),
+      bulkDeleteDocuments: jest.fn(async () => undefined),
+    } as never;
+    const service = new SearchService(postingsRepository, postingsSearchService, {} as never);
+
+    const processed = await service.processReconciliationBatch(25);
+
+    expect(processed).toBe(2);
+    expect(postingsSearchService.bulkUpsertDocuments).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: "posting-1" })]),
+      "postings-write",
+    );
+    expect(postingsSearchService.bulkDeleteDocuments).toHaveBeenCalledWith(
+      ["posting-2"],
+      "postings-write",
+    );
   });
 });

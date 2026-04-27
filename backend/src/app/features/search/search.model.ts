@@ -50,6 +50,14 @@ export interface SearchQueueInspectionResult {
   error?: string;
 }
 
+export interface SearchOutboxLagMetrics {
+  unpublishedCount: number;
+  unpublishedOldestAgeMs?: number;
+  publishedNotIndexedCount: number;
+  publishedNotIndexedOldestAgeMs?: number;
+  deadLetteredByOperation: Record<SearchIndexJobOperation, number>;
+}
+
 export interface SearchAliasStatus {
   state:
     | "disabled"
@@ -115,6 +123,7 @@ export interface SearchStatusResult {
   currentReindexRun?: SearchReindexRunRecord;
   pendingOutboxCount: number;
   pendingOutboxOldestAgeMs?: number;
+  lag: SearchOutboxLagMetrics;
   queueInspection: SearchQueueInspectionResult;
   queueCounts?: {
     main: SearchQueueCounts;

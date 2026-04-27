@@ -115,4 +115,61 @@ describe("SearchQueueService", () => {
     expect(mockCreateRabbitMqChannel).toHaveBeenCalledTimes(1);
     expect(channel.publish).toHaveBeenCalledTimes(2);
   });
+
+  it("buffers valid messages into batches before handing them to the worker", async () => {
+    jest.useFakeTimers();
+    const { channel, getConsumeHandler } = createMockChannel();
+    mockCreateRabbitMqChannel.mockResolvedValue(channel);
+    const service = new SearchQueueService("postings");
+    const onBatch = jest.fn(async () => undefined);
+
+    try {
+      await service.consumeIndexJobBatches(5, 2, 50, onBatch);
+
+      const handler = getConsumeHandler();
+      expect(handler).toBeDefined();
+
+      await handler!({
+        content: Buffer.from(
+          JSON.stringify({
+            outboxId: "outbox-1",
+            eventId: "outbox-1",
+            dedupeKey: "outbox-1",
+            operation: "upsert",
+            jobType: "upsert",
+            postingId: "posting-1",
+            targetIndexScope: "live",
+            occurredAt: "2026-04-27T00:00:00.000Z",
+            attempt: 0,
+          }),
+          "utf8",
+        ),
+        properties: {},
+      });
+      await handler!({
+        content: Buffer.from(
+          JSON.stringify({
+            outboxId: "outbox-2",
+            eventId: "outbox-2",
+            dedupeKey: "outbox-2",
+            operation: "delete",
+            jobType: "delete",
+            postingId: "posting-1",
+            targetIndexScope: "live",
+            occurredAt: "2026-04-27T00:00:01.000Z",
+            attempt: 0,
+          }),
+          "utf8",
+        ),
+        properties: {},
+      });
+
+      await Promise.resolve();
+
+      expect(onBatch).toHaveBeenCalledTimes(1);
+      expect(onBatch.mock.calls[0]?.[0]).toHaveLength(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

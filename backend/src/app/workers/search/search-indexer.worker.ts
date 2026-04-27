@@ -20,21 +20,31 @@ export async function bootstrapSearchIndexerWorker(): Promise<void> {
       const scope = container.createScope();
       const searchQueueService = scope.resolve(containerTokens.searchQueueService);
       const searchService = scope.resolve(containerTokens.searchService);
-      const { prefetch, maxAttempts } = environment.getSearchIndexerWorkerConfig();
+      const { prefetch, batchSize, flushIntervalMs, maxAttempts } =
+        environment.getSearchIndexerWorkerConfig();
 
-      const stopConsuming = await searchQueueService.consumeIndexJobs(
+      const stopConsuming = await searchQueueService.consumeIndexJobBatches(
         prefetch,
-        async (payload, message, channel) => {
+        batchSize,
+        flushIntervalMs,
+        async (entries, channel) => {
           try {
-            await searchService.processIndexJob(payload, maxAttempts);
-            channel.ack(message);
+            await searchService.processIndexJobsBatch(
+              entries.map((entry) => entry.payload),
+              maxAttempts,
+            );
+            for (const entry of entries) {
+              channel.ack(entry.message);
+            }
           } catch (error) {
-            console.error("Failed to process search index job", {
-              outboxId: payload.outboxId,
-              postingId: payload.postingId,
+            console.error("Failed to process search index job batch", {
+              outboxIds: entries.map((entry) => entry.payload.outboxId),
+              postingIds: entries.map((entry) => entry.payload.postingId),
               error,
             });
-            channel.nack(message, false, true);
+            for (const entry of entries) {
+              channel.nack(entry.message, false, true);
+            }
           }
         },
       );

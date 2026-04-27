@@ -1,5 +1,9 @@
 import ConflictError from "@/errors/http/conflict.error";
-import type { PostingSearchOutboxRecord } from "@/features/postings/postings.model";
+import { ElasticsearchUnavailableError } from "@/configuration/resources/elasticsearch";
+import type {
+  PostingSearchDocument,
+  PostingSearchOutboxRecord,
+} from "@/features/postings/postings.model";
 import { isPostingSearchIndexable } from "@/features/postings/postings.model";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
@@ -25,6 +29,30 @@ function createEmptyQueueCounts(): SearchQueueCounts {
 }
 
 const REINDEX_HEARTBEAT_BULK_CHUNK_SIZE = 100;
+const TRANSIENT_REINDEX_ERROR_CODES = new Set([
+  "EAI_AGAIN",
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+  "ETIMEDOUT",
+]);
+
+type BatchedIndexEntry = {
+  job: PostingSearchOutboxRecord;
+  payload: SearchIndexJobPayload;
+};
+
+type BatchedUpsertGroup = {
+  documents: PostingSearchDocument[];
+  entries: BatchedIndexEntry[];
+};
+
+type BatchedDeleteGroup = {
+  ids: string[];
+  entries: BatchedIndexEntry[];
+};
 
 export class SearchService {
   constructor(
@@ -60,13 +88,13 @@ export class SearchService {
   }
 
   async getStatus(): Promise<SearchStatusResult> {
-    const [aliasHealth, currentReindexRun, pendingOutboxMetrics, queueInspection] =
+    const [aliasHealth, currentReindexRun, lagMetrics, queueInspection] =
       await Promise.all([
         this.postingsSearchService.isElasticsearchEnabled()
           ? this.postingsSearchService.getAliasStatus()
           : Promise.resolve(this.createDisabledAliasHealth()),
         this.postingsRepository.findActiveSearchReindexRun(),
-        this.postingsRepository.getPendingSearchOutboxMetrics(),
+        this.postingsRepository.getSearchOutboxLagMetrics(),
         this.postingsSearchService.isElasticsearchEnabled()
           ? this.searchQueueService
               .getQueueCounts()
@@ -117,8 +145,9 @@ export class SearchService {
         },
       },
       currentReindexRun: currentReindexRun ?? undefined,
-      pendingOutboxCount: pendingOutboxMetrics.count,
-      pendingOutboxOldestAgeMs: pendingOutboxMetrics.oldestAgeMs,
+      pendingOutboxCount: lagMetrics.unpublishedCount,
+      pendingOutboxOldestAgeMs: lagMetrics.unpublishedOldestAgeMs,
+      lag: lagMetrics,
       queueInspection: queueInspection.inspection,
       ...("counts" in queueInspection ? { queueCounts: queueInspection.counts } : {}),
       telemetry: {
@@ -189,29 +218,25 @@ export class SearchService {
       return;
     }
 
-      if (job.operation === "barrier") {
+    if (job.operation === "barrier") {
+      await this.postingsRepository.markSearchOutboxIndexed(job.id);
+      return;
+    }
+
+    try {
+      if (!job.postingId) {
+        throw new Error("Search outbox job is missing a posting id.");
+      }
+
+      if (await this.postingsRepository.hasNewerSearchOutboxJob(job)) {
+        this.logStaleOutboxJob(job);
         await this.postingsRepository.markSearchOutboxIndexed(job.id);
         return;
       }
 
-      try {
-        if (!job.postingId) {
-          throw new Error("Search outbox job is missing a posting id.");
-        }
-
-        if (await this.postingsRepository.hasNewerSearchOutboxJob(job)) {
-          console.info("Skipping stale search outbox job because a newer job exists.", {
-            outboxId: job.id,
-            postingId: job.postingId,
-            targetIndexName: job.targetIndexName,
-          });
-          await this.postingsRepository.markSearchOutboxIndexed(job.id);
-          return;
-        }
-
-        if (job.operation === "delete") {
-          await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
-        } else {
+      if (job.operation === "delete") {
+        await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
+      } else {
         const documents = await this.postingsRepository.findByIdsForIndexing([job.postingId]);
         const document = documents[0];
 
@@ -224,20 +249,141 @@ export class SearchService {
 
       await this.postingsRepository.markSearchOutboxIndexed(job.id);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown indexing error.";
-      const attempt = await this.postingsRepository.incrementSearchOutboxAttempt(job.id, errorMessage);
-      const nextPayload = {
-        ...payload,
-        attempt,
-      };
+      await this.handleIndexJobFailure(job, payload, maxAttempts, error);
+    }
+  }
 
-      if (attempt >= maxAttempts) {
-        await this.searchQueueService.publishDeadLetterJob(nextPayload);
-        await this.postingsRepository.markSearchOutboxDeadLettered(job.id, errorMessage);
-        return;
+  async processIndexJobsBatch(
+    payloads: SearchIndexJobPayload[],
+    maxAttempts: number,
+  ): Promise<void> {
+    if (payloads.length === 0) {
+      return;
+    }
+
+    const uniquePayloads = Array.from(
+      new Map(payloads.map((payload) => [payload.outboxId, payload])).values(),
+    );
+    const jobs = await this.postingsRepository.getSearchOutboxesByIds(
+      uniquePayloads.map((payload) => payload.outboxId),
+    );
+    const jobsById = new Map(jobs.map((job) => [job.id, job]));
+    const immediateIndexIds: string[] = [];
+    const fallbackPayloads: SearchIndexJobPayload[] = [];
+    const upsertCandidates: BatchedIndexEntry[] = [];
+    const deleteCandidates: BatchedIndexEntry[] = [];
+
+    for (const payload of uniquePayloads) {
+      const job = jobsById.get(payload.outboxId);
+
+      if (!job || job.deadLetteredAt || job.indexedAt) {
+        continue;
       }
 
-      await this.searchQueueService.publishRetryJob(nextPayload, attempt);
+      if (job.operation === "barrier") {
+        immediateIndexIds.push(job.id);
+        continue;
+      }
+
+      try {
+        if (!job.postingId) {
+          throw new Error("Search outbox job is missing a posting id.");
+        }
+
+        if (await this.postingsRepository.hasNewerSearchOutboxJob(job)) {
+          this.logStaleOutboxJob(job);
+          immediateIndexIds.push(job.id);
+          continue;
+        }
+
+        if (job.operation === "delete") {
+          deleteCandidates.push({
+            job,
+            payload,
+          });
+          continue;
+        }
+
+        upsertCandidates.push({
+          job,
+          payload,
+        });
+      } catch (error) {
+        await this.handleIndexJobFailure(job, payload, maxAttempts, error);
+      }
+    }
+
+    if (immediateIndexIds.length > 0) {
+      await this.postingsRepository.markSearchOutboxesIndexed(immediateIndexIds);
+    }
+
+    const documents = await this.postingsRepository.findByIdsForIndexing(
+      upsertCandidates.map(({ job }) => job.postingId!).filter(Boolean),
+    );
+    const documentsById = new Map(documents.map((document) => [document.id, document]));
+    const upsertGroups = new Map<string, BatchedUpsertGroup>();
+    const deleteGroups = new Map<string, BatchedDeleteGroup>();
+
+    for (const entry of upsertCandidates) {
+      const document = documentsById.get(entry.job.postingId!);
+
+      if (!document || !isPostingSearchIndexable(document.status)) {
+        const deleteGroup = this.getOrCreateDeleteGroup(
+          deleteGroups,
+          this.resolveIndexTargetName(entry.job),
+        );
+        deleteGroup.ids.push(entry.job.postingId!);
+        deleteGroup.entries.push(entry);
+        continue;
+      }
+
+      const upsertGroup = this.getOrCreateUpsertGroup(
+        upsertGroups,
+        this.resolveIndexTargetName(entry.job),
+      );
+      upsertGroup.documents.push(document);
+      upsertGroup.entries.push(entry);
+    }
+
+    for (const entry of deleteCandidates) {
+      const deleteGroup = this.getOrCreateDeleteGroup(
+        deleteGroups,
+        this.resolveIndexTargetName(entry.job),
+      );
+      deleteGroup.ids.push(entry.job.postingId!);
+      deleteGroup.entries.push(entry);
+    }
+
+    for (const [targetIndexName, group] of upsertGroups) {
+      try {
+        await this.postingsSearchService.bulkUpsertDocuments(group.documents, targetIndexName);
+        await this.postingsRepository.markSearchOutboxesIndexed(group.entries.map(({ job }) => job.id));
+      } catch (error) {
+        console.warn("Falling back to per-job upsert processing after bulk indexing failed.", {
+          targetIndexName,
+          jobIds: group.entries.map(({ job }) => job.id),
+          error,
+        });
+        fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
+      }
+    }
+
+    for (const [targetIndexName, group] of deleteGroups) {
+      try {
+        await this.postingsSearchService.bulkDeleteDocuments(group.ids, targetIndexName);
+        await this.postingsRepository.markSearchOutboxesIndexed(group.entries.map(({ job }) => job.id));
+      } catch (error) {
+        console.warn("Falling back to per-job delete processing after bulk delete failed.", {
+          targetIndexName,
+          jobIds: group.entries.map(({ job }) => job.id),
+          error,
+        });
+        fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
+      }
+    }
+
+    for (const payload of fallbackPayloads) {
+      await this.processIndexJob(payload, maxAttempts);
     }
   }
 
@@ -276,6 +422,16 @@ export class SearchService {
 
       return 1;
     } catch (error) {
+      if (this.isTransientReindexError(error)) {
+        await this.postingsRepository.clearSearchReindexRunProcessing(run.id);
+        console.warn("Search reindex run hit a transient infrastructure error and will be retried.", {
+          runId: run.id,
+          targetIndexName: run.targetIndexName,
+          error,
+        });
+        return 0;
+      }
+
       await this.postingsRepository.markSearchReindexRunFailed(
         run.id,
         error instanceof Error ? error.message : "Unknown reindex error.",
@@ -324,6 +480,57 @@ export class SearchService {
     }
 
     await this.postingsRepository.enqueueSearchReindexBarrier(run.id, run.targetIndexName);
+  }
+
+  async processReconciliationBatch(limit: number): Promise<number> {
+    if (!this.postingsSearchService.isElasticsearchEnabled()) {
+      return 0;
+    }
+
+    await this.postingsSearchService.ensureLiveIndex();
+    const documents = await this.postingsRepository.listRecentForIndexReconciliation(limit);
+
+    if (documents.length === 0) {
+      return 0;
+    }
+
+    const targetIndexName = this.postingsSearchService.getWriteAliasName();
+    const upserts = documents.filter((document) => isPostingSearchIndexable(document.status));
+    const deletes = documents
+      .filter((document) => !isPostingSearchIndexable(document.status))
+      .map((document) => document.id);
+
+    if (upserts.length > 0) {
+      try {
+        await this.postingsSearchService.bulkUpsertDocuments(upserts, targetIndexName);
+      } catch (error) {
+        console.warn("Search reconciliation bulk upsert failed; falling back to per-document sync.", {
+          targetIndexName,
+          documentIds: upserts.map((document) => document.id),
+          error,
+        });
+        for (const document of upserts) {
+          await this.postingsSearchService.upsertDocument(document);
+        }
+      }
+    }
+
+    if (deletes.length > 0) {
+      try {
+        await this.postingsSearchService.bulkDeleteDocuments(deletes, targetIndexName);
+      } catch (error) {
+        console.warn("Search reconciliation bulk delete failed; falling back to per-document sync.", {
+          targetIndexName,
+          documentIds: deletes,
+          error,
+        });
+        for (const id of deletes) {
+          await this.postingsSearchService.deleteDocument(id);
+        }
+      }
+    }
+
+    return documents.length;
   }
 
   private toIndexJob(job: PostingSearchOutboxRecord): SearchIndexJobPayload {
@@ -421,5 +628,101 @@ export class SearchService {
     }
 
     return chunks;
+  }
+
+  private async handleIndexJobFailure(
+    job: PostingSearchOutboxRecord,
+    payload: SearchIndexJobPayload,
+    maxAttempts: number,
+    error: unknown,
+  ): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : "Unknown indexing error.";
+    const attempt = await this.postingsRepository.incrementSearchOutboxAttempt(job.id, errorMessage);
+    const nextPayload = {
+      ...payload,
+      attempt,
+    };
+
+    if (attempt >= maxAttempts) {
+      await this.searchQueueService.publishDeadLetterJob(nextPayload);
+      await this.postingsRepository.markSearchOutboxDeadLettered(job.id, errorMessage);
+      return;
+    }
+
+    await this.searchQueueService.publishRetryJob(nextPayload, attempt);
+  }
+
+  private logStaleOutboxJob(job: PostingSearchOutboxRecord): void {
+    console.info("Skipping stale search outbox job because a newer job exists.", {
+      outboxId: job.id,
+      postingId: job.postingId,
+      targetIndexName: job.targetIndexName,
+    });
+  }
+
+  private resolveIndexTargetName(job: PostingSearchOutboxRecord): string {
+    return job.targetIndexName ?? this.postingsSearchService.getWriteAliasName();
+  }
+
+  private getOrCreateUpsertGroup(
+    groups: Map<string, BatchedUpsertGroup>,
+    targetIndexName: string,
+  ): BatchedUpsertGroup {
+    const existing = groups.get(targetIndexName);
+
+    if (existing) {
+      return existing;
+    }
+
+    const created: BatchedUpsertGroup = {
+      documents: [],
+      entries: [],
+    };
+    groups.set(targetIndexName, created);
+    return created;
+  }
+
+  private getOrCreateDeleteGroup(
+    groups: Map<string, BatchedDeleteGroup>,
+    targetIndexName: string,
+  ): BatchedDeleteGroup {
+    const existing = groups.get(targetIndexName);
+
+    if (existing) {
+      return existing;
+    }
+
+    const created: BatchedDeleteGroup = {
+      ids: [],
+      entries: [],
+    };
+    groups.set(targetIndexName, created);
+    return created;
+  }
+
+  private isTransientReindexError(error: unknown): boolean {
+    if (error instanceof ElasticsearchUnavailableError) {
+      return true;
+    }
+
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const code = (error as NodeJS.ErrnoException).code;
+
+    if (code && TRANSIENT_REINDEX_ERROR_CODES.has(code)) {
+      return true;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("rabbitmq") ||
+      message.includes("amqp") ||
+      message.includes("broker") ||
+      message.includes("connection closed") ||
+      message.includes("socket closed") ||
+      message.includes("timed out")
+    );
   }
 }

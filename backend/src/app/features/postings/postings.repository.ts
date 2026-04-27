@@ -28,6 +28,7 @@ import type {
   UpsertPostingInput,
 } from "@/features/postings/postings.model";
 import type {
+  SearchOutboxLagMetrics,
   SearchReindexRunRecord,
   SearchReindexStatus,
 } from "@/features/search/search.model";
@@ -87,6 +88,20 @@ interface SearchIdRow {
 interface PendingSearchOutboxMetrics {
   count: number;
   oldestAgeMs?: number;
+}
+
+interface SearchOutboxIdRow {
+  id: string;
+}
+
+interface SearchOutboxLagRow {
+  unpublishedCount?: bigint | number | null;
+  unpublishedOldestCreatedAt?: Date | null;
+  publishedNotIndexedCount?: bigint | number | null;
+  publishedNotIndexedOldestProcessedAt?: Date | null;
+  upsertDeadLetteredCount?: bigint | number | null;
+  deleteDeadLetteredCount?: bigint | number | null;
+  barrierDeadLetteredCount?: bigint | number | null;
 }
 
 interface LockRow {
@@ -839,69 +854,75 @@ export class PostingsRepository extends BaseRepository {
     return postings.map((posting) => this.mapSearchDocument(posting));
   }
 
+  async listRecentForIndexReconciliation(limit: number): Promise<PostingSearchDocument[]> {
+    const postings = await this.executeAsync(() =>
+      this.prisma.posting.findMany({
+        orderBy: [
+          {
+            updatedAt: "desc",
+          },
+          {
+            id: "asc",
+          },
+        ],
+        take: limit,
+        include: postingInclude,
+      }),
+    );
+
+    return postings.map((posting) => this.mapSearchDocument(posting));
+  }
+
   async claimSearchOutboxBatch(limit: number): Promise<PostingSearchOutboxRecord[]> {
     return this.executeAsync(async () => {
       const now = new Date();
       const staleProcessingThreshold = new Date(now.getTime() - 5 * 60 * 1000);
-      const candidates = await this.prisma.postingSearchOutbox.findMany({
-        where: {
-          processedAt: null,
-          deadLetteredAt: null,
-          availableAt: {
-            lte: now,
-          },
-          OR: [
-            {
-              processingAt: null,
-            },
-            {
-              processingAt: {
-                lt: staleProcessingThreshold,
-              },
-            },
-          ],
-        },
-        orderBy: [
-          {
-            availableAt: "asc",
-          },
-          {
-            createdAt: "asc",
-          },
-        ],
-        take: limit,
-      });
+      const claimedRows = await this.prisma.$transaction(async (transaction) => {
+        const idRows = await transaction.$queryRaw<SearchOutboxIdRow[]>(
+          Prisma.sql`
+            SELECT id
+            FROM posting_search_outbox
+            WHERE processed_at IS NULL
+              AND dead_lettered_at IS NULL
+              AND available_at <= ${now}
+              AND (processing_at IS NULL OR processing_at < ${staleProcessingThreshold})
+            ORDER BY available_at ASC, created_at ASC
+            LIMIT ${limit}
+            FOR UPDATE SKIP LOCKED
+          `,
+        );
+        const ids = idRows.map((row) => row.id);
 
-      const claimed: PostingSearchOutboxRecord[] = [];
+        if (ids.length === 0) {
+          return [];
+        }
 
-      for (const candidate of candidates) {
-        const result = await this.prisma.postingSearchOutbox.updateMany({
+        await transaction.postingSearchOutbox.updateMany({
           where: {
-            id: candidate.id,
-            processedAt: null,
-            deadLetteredAt: null,
-            OR: [
-              {
-                processingAt: null,
-              },
-              {
-                processingAt: {
-                  lt: staleProcessingThreshold,
-                },
-              },
-            ],
+            id: {
+              in: ids,
+            },
           },
           data: {
             processingAt: now,
           },
         });
 
-        if (result.count === 1) {
-          claimed.push(this.mapOutbox(candidate, now));
-        }
-      }
+        const rows = await transaction.postingSearchOutbox.findMany({
+          where: {
+            id: {
+              in: ids,
+            },
+          },
+        });
+        const byId = new Map(rows.map((row) => [row.id, row]));
 
-      return claimed;
+        return ids
+          .map((id) => byId.get(id))
+          .filter((row): row is NonNullable<typeof row> => Boolean(row));
+      });
+
+      return claimedRows.map((row) => this.mapOutbox(row, now));
     });
   }
 
@@ -997,6 +1018,27 @@ export class PostingsRepository extends BaseRepository {
     );
 
     return outbox ? this.mapOutbox(outbox) : null;
+  }
+
+  async getSearchOutboxesByIds(ids: string[]): Promise<PostingSearchOutboxRecord[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.executeAsync(() =>
+      this.prisma.postingSearchOutbox.findMany({
+        where: {
+          id: {
+            in: ids,
+          },
+        },
+      }),
+    );
+    const byId = new Map(rows.map((row) => [row.id, this.mapOutbox(row)]));
+
+    return ids
+      .map((id) => byId.get(id))
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
   }
 
   async hasNewerSearchOutboxJob(
@@ -1354,6 +1396,26 @@ export class PostingsRepository extends BaseRepository {
     );
   }
 
+  async markSearchOutboxesIndexed(ids: string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    await this.executeAsync(() =>
+      this.prisma.postingSearchOutbox.updateMany({
+        where: {
+          id: {
+            in: ids,
+          },
+        },
+        data: {
+          indexedAt: new Date(),
+          lastError: null,
+        },
+      }),
+    );
+  }
+
   async touchSearchReindexRunProcessing(id: string): Promise<void> {
     await this.executeAsync(() =>
       this.prisma.searchReindexRun.update({
@@ -1426,35 +1488,56 @@ export class PostingsRepository extends BaseRepository {
   }
 
   async getPendingSearchOutboxMetrics(): Promise<PendingSearchOutboxMetrics> {
+    const lag = await this.getSearchOutboxLagMetrics();
+
+    return {
+      count: lag.unpublishedCount,
+      ...(lag.unpublishedOldestAgeMs !== undefined
+        ? {
+            oldestAgeMs: lag.unpublishedOldestAgeMs,
+          }
+        : {}),
+    };
+  }
+
+  async getSearchOutboxLagMetrics(): Promise<SearchOutboxLagMetrics> {
     return this.executeAsync(async () => {
-      const [count, oldest] = await Promise.all([
-        this.prisma.postingSearchOutbox.count({
-          where: {
-            indexedAt: null,
-            deadLetteredAt: null,
-          },
-        }),
-        this.prisma.postingSearchOutbox.findFirst({
-          where: {
-            indexedAt: null,
-            deadLetteredAt: null,
-          },
-          orderBy: {
-            createdAt: "asc",
-          },
-          select: {
-            createdAt: true,
-          },
-        }),
-      ]);
+      const [row] = await this.prisma.$queryRaw<SearchOutboxLagRow[]>(Prisma.sql`
+        SELECT
+          SUM(CASE WHEN processed_at IS NULL AND dead_lettered_at IS NULL THEN 1 ELSE 0 END) AS unpublishedCount,
+          MIN(CASE WHEN processed_at IS NULL AND dead_lettered_at IS NULL THEN created_at ELSE NULL END) AS unpublishedOldestCreatedAt,
+          SUM(CASE WHEN processed_at IS NOT NULL AND indexed_at IS NULL AND dead_lettered_at IS NULL THEN 1 ELSE 0 END) AS publishedNotIndexedCount,
+          MIN(CASE WHEN processed_at IS NOT NULL AND indexed_at IS NULL AND dead_lettered_at IS NULL THEN processed_at ELSE NULL END) AS publishedNotIndexedOldestProcessedAt,
+          SUM(CASE WHEN dead_lettered_at IS NOT NULL AND operation = 'upsert' THEN 1 ELSE 0 END) AS upsertDeadLetteredCount,
+          SUM(CASE WHEN dead_lettered_at IS NOT NULL AND operation = 'delete' THEN 1 ELSE 0 END) AS deleteDeadLetteredCount,
+          SUM(CASE WHEN dead_lettered_at IS NOT NULL AND operation = 'barrier' THEN 1 ELSE 0 END) AS barrierDeadLetteredCount
+        FROM posting_search_outbox
+      `);
 
       return {
-        count,
-        ...(oldest
+        unpublishedCount: this.readNumberLike(row?.unpublishedCount),
+        ...(row?.unpublishedOldestCreatedAt
           ? {
-              oldestAgeMs: Math.max(0, Date.now() - oldest.createdAt.getTime()),
+              unpublishedOldestAgeMs: Math.max(
+                0,
+                Date.now() - row.unpublishedOldestCreatedAt.getTime(),
+              ),
             }
           : {}),
+        publishedNotIndexedCount: this.readNumberLike(row?.publishedNotIndexedCount),
+        ...(row?.publishedNotIndexedOldestProcessedAt
+          ? {
+              publishedNotIndexedOldestAgeMs: Math.max(
+                0,
+                Date.now() - row.publishedNotIndexedOldestProcessedAt.getTime(),
+              ),
+            }
+          : {}),
+        deadLetteredByOperation: {
+          upsert: this.readNumberLike(row?.upsertDeadLetteredCount),
+          delete: this.readNumberLike(row?.deleteDeadLetteredCount),
+          barrier: this.readNumberLike(row?.barrierDeadLetteredCount),
+        },
       };
     });
   }
@@ -2034,6 +2117,18 @@ export class PostingsRepository extends BaseRepository {
     }
 
     return value === true;
+  }
+
+  private readNumberLike(value: bigint | number | null | undefined): number {
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+
+    if (typeof value === "number") {
+      return value;
+    }
+
+    return 0;
   }
 }
 

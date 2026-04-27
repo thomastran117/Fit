@@ -12,6 +12,11 @@ import type {
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
 
+interface SearchQueueBatchEntry {
+  payload: SearchIndexJobPayload;
+  message: ConsumeMessage;
+}
+
 export class SearchQueueService {
   private readonly exchangeName: string;
   private readonly mainQueueName: string;
@@ -93,6 +98,122 @@ export class SearchQueueService {
 
     return async () => {
       await channel.cancel(consumeResult.consumerTag);
+      await channel.close();
+    };
+  }
+
+  async consumeIndexJobBatches(
+    prefetch: number,
+    batchSize: number,
+    flushIntervalMs: number,
+    onBatch: (entries: SearchQueueBatchEntry[], channel: Channel) => Promise<void>,
+  ): Promise<() => Promise<void>> {
+    const channel = await createRabbitMqChannel();
+    await this.assertTopology(channel);
+    await channel.prefetch(prefetch);
+
+    let pendingEntries: SearchQueueBatchEntry[] = [];
+    let flushTimer: NodeJS.Timeout | null = null;
+    let activeFlush: Promise<void> | null = null;
+
+    const clearFlushTimer = () => {
+      if (!flushTimer) {
+        return;
+      }
+
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer || pendingEntries.length === 0) {
+        return;
+      }
+
+      flushTimer = setTimeout(() => {
+        void flushPending();
+      }, flushIntervalMs);
+    };
+
+    const flushPending = async (): Promise<void> => {
+      if (activeFlush) {
+        return activeFlush;
+      }
+
+      if (pendingEntries.length === 0) {
+        clearFlushTimer();
+        return;
+      }
+
+      clearFlushTimer();
+      const batch = pendingEntries.splice(0, batchSize);
+
+      activeFlush = (async () => {
+        try {
+          await onBatch(batch, channel);
+        } catch (error) {
+          console.error("Search index batch consumer failed before ack/nack handling", error);
+          for (const entry of batch) {
+            channel.nack(entry.message, false, true);
+          }
+        } finally {
+          activeFlush = null;
+
+          if (pendingEntries.length >= batchSize) {
+            void flushPending();
+          } else {
+            scheduleFlush();
+          }
+        }
+      })();
+
+      await activeFlush;
+    };
+
+    const consumeResult = await channel.consume(this.mainQueueName, async (message) => {
+      if (!message) {
+        return;
+      }
+
+      try {
+        let payload: SearchIndexJobPayload;
+
+        try {
+          payload = JSON.parse(message.content.toString("utf8")) as SearchIndexJobPayload;
+        } catch (error) {
+          console.error("Search index consumer received an invalid JSON payload.", {
+            error,
+            messageId: message.properties.messageId,
+          });
+          await this.publishMalformedMessage(channel, message, error);
+          channel.ack(message);
+          return;
+        }
+
+        pendingEntries.push({
+          payload,
+          message,
+        });
+
+        if (pendingEntries.length >= batchSize) {
+          void flushPending();
+        } else {
+          scheduleFlush();
+        }
+      } catch (error) {
+        console.error("Search index consumer failed before ack/nack handling", error);
+        channel.nack(message, false, true);
+      }
+    });
+
+    return async () => {
+      clearFlushTimer();
+      await channel.cancel(consumeResult.consumerTag);
+
+      while (pendingEntries.length > 0 || activeFlush) {
+        await flushPending();
+      }
+
       await channel.close();
     };
   }
