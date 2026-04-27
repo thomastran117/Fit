@@ -20,13 +20,15 @@ export async function bootstrapSearchIndexerWorker(): Promise<void> {
       const scope = container.createScope();
       const searchQueueService = scope.resolve(containerTokens.searchQueueService);
       const searchService = scope.resolve(containerTokens.searchService);
-      const { prefetch, batchSize, flushIntervalMs, maxAttempts } =
+      const { prefetch, batchSize, flushIntervalMs, concurrency, maxAttempts } =
         environment.getSearchIndexerWorkerConfig();
+      const effectivePrefetch = Math.max(prefetch, batchSize * concurrency);
 
       const stopConsuming = await searchQueueService.consumeIndexJobBatches(
-        prefetch,
+        effectivePrefetch,
         batchSize,
         flushIntervalMs,
+        concurrency,
         async (entries, channel) => {
           try {
             await searchService.processIndexJobsBatch(

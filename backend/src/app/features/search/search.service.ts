@@ -354,33 +354,44 @@ export class SearchService {
       deleteGroup.entries.push(entry);
     }
 
-    for (const [targetIndexName, group] of upsertGroups) {
-      try {
-        await this.postingsSearchService.bulkUpsertDocuments(group.documents, targetIndexName);
-        await this.postingsRepository.markSearchOutboxesIndexed(group.entries.map(({ job }) => job.id));
-      } catch (error) {
-        console.warn("Falling back to per-job upsert processing after bulk indexing failed.", {
-          targetIndexName,
-          jobIds: group.entries.map(({ job }) => job.id),
-          error,
-        });
-        fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
-      }
-    }
+    await Promise.all(
+      Array.from(upsertGroups.entries(), async ([targetIndexName, group]) => {
+        try {
+          await this.postingsSearchService.bulkUpsertDocuments(group.documents, targetIndexName);
+          await this.postingsRepository.markSearchOutboxesIndexed(
+            group.entries.map(({ job }) => job.id),
+          );
+        } catch (error) {
+          console.warn("Falling back to per-job upsert processing after bulk indexing failed.", {
+            targetIndexName,
+            jobIds: group.entries.map(({ job }) => job.id),
+            error,
+          });
+          fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
+        }
+      }),
+    );
 
-    for (const [targetIndexName, group] of deleteGroups) {
-      try {
-        await this.postingsSearchService.bulkDeleteDocuments(group.ids, targetIndexName);
-        await this.postingsRepository.markSearchOutboxesIndexed(group.entries.map(({ job }) => job.id));
-      } catch (error) {
-        console.warn("Falling back to per-job delete processing after bulk delete failed.", {
-          targetIndexName,
-          jobIds: group.entries.map(({ job }) => job.id),
-          error,
-        });
-        fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
-      }
-    }
+    await Promise.all(
+      Array.from(deleteGroups.entries(), async ([targetIndexName, group]) => {
+        try {
+          await this.postingsSearchService.bulkDeleteDocuments(
+            Array.from(new Set(group.ids)),
+            targetIndexName,
+          );
+          await this.postingsRepository.markSearchOutboxesIndexed(
+            group.entries.map(({ job }) => job.id),
+          );
+        } catch (error) {
+          console.warn("Falling back to per-job delete processing after bulk delete failed.", {
+            targetIndexName,
+            jobIds: group.entries.map(({ job }) => job.id),
+            error,
+          });
+          fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
+        }
+      }),
+    );
 
     for (const payload of fallbackPayloads) {
       await this.processIndexJob(payload, maxAttempts);

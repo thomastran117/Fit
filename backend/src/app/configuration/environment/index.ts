@@ -58,6 +58,7 @@ type RawEnvironmentValues = {
   POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
   POSTINGS_SEARCH_INDEXER_BATCH_SIZE?: string;
   POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS?: string;
+  POSTINGS_SEARCH_INDEXER_CONCURRENCY?: string;
   POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS?: string;
   POSTINGS_SEARCH_RECONCILE_BATCH_SIZE?: string;
   POSTINGS_SEARCH_RECONCILE_POLL_INTERVAL_MS?: string;
@@ -191,6 +192,7 @@ export interface AppEnvironment {
       prefetch: number;
       batchSize: number;
       flushIntervalMs: number;
+      concurrency: number;
       maxAttempts: number;
     };
     searchReconcile: {
@@ -308,6 +310,7 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "POSTINGS_SEARCH_INDEXER_PREFETCH",
   "POSTINGS_SEARCH_INDEXER_BATCH_SIZE",
   "POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS",
+  "POSTINGS_SEARCH_INDEXER_CONCURRENCY",
   "POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS",
   "POSTINGS_SEARCH_RECONCILE_BATCH_SIZE",
   "POSTINGS_SEARCH_RECONCILE_POLL_INTERVAL_MS",
@@ -816,6 +819,10 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
             min: 1,
           },
         ),
+        concurrency: parseNumber(raw, "POSTINGS_SEARCH_INDEXER_CONCURRENCY", 2, errors, {
+          integer: true,
+          min: 1,
+        }),
         maxAttempts: parseNumber(raw, "POSTINGS_SEARCH_INDEX_MAX_ATTEMPTS", 8, errors, {
           integer: true,
           min: 1,

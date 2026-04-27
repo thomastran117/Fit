@@ -106,6 +106,7 @@ export class SearchQueueService {
     prefetch: number,
     batchSize: number,
     flushIntervalMs: number,
+    maxConcurrentBatches: number,
     onBatch: (entries: SearchQueueBatchEntry[], channel: Channel) => Promise<void>,
   ): Promise<() => Promise<void>> {
     const channel = await createRabbitMqChannel();
@@ -114,7 +115,7 @@ export class SearchQueueService {
 
     let pendingEntries: SearchQueueBatchEntry[] = [];
     let flushTimer: NodeJS.Timeout | null = null;
-    let activeFlush: Promise<void> | null = null;
+    const activeFlushes = new Set<Promise<void>>();
 
     const clearFlushTimer = () => {
       if (!flushTimer) {
@@ -126,7 +127,7 @@ export class SearchQueueService {
     };
 
     const scheduleFlush = () => {
-      if (flushTimer || pendingEntries.length === 0) {
+      if (flushTimer || pendingEntries.length === 0 || activeFlushes.size >= maxConcurrentBatches) {
         return;
       }
 
@@ -136,11 +137,7 @@ export class SearchQueueService {
     };
 
     const flushPending = async (): Promise<void> => {
-      if (activeFlush) {
-        return activeFlush;
-      }
-
-      if (pendingEntries.length === 0) {
+      if (pendingEntries.length === 0 || activeFlushes.size >= maxConcurrentBatches) {
         clearFlushTimer();
         return;
       }
@@ -148,7 +145,10 @@ export class SearchQueueService {
       clearFlushTimer();
       const batch = pendingEntries.splice(0, batchSize);
 
-      activeFlush = (async () => {
+      const flushState: { promise: Promise<void> | null } = {
+        promise: null,
+      };
+      flushState.promise = (async () => {
         try {
           await onBatch(batch, channel);
         } catch (error) {
@@ -157,17 +157,20 @@ export class SearchQueueService {
             channel.nack(entry.message, false, true);
           }
         } finally {
-          activeFlush = null;
+          if (flushState.promise) {
+            activeFlushes.delete(flushState.promise);
+          }
 
-          if (pendingEntries.length >= batchSize) {
+          if (pendingEntries.length >= batchSize && activeFlushes.size < maxConcurrentBatches) {
             void flushPending();
           } else {
             scheduleFlush();
           }
         }
       })();
+      activeFlushes.add(flushState.promise);
 
-      await activeFlush;
+      await flushState.promise;
     };
 
     const consumeResult = await channel.consume(this.mainQueueName, async (message) => {
@@ -195,7 +198,7 @@ export class SearchQueueService {
           message,
         });
 
-        if (pendingEntries.length >= batchSize) {
+        if (pendingEntries.length >= batchSize && activeFlushes.size < maxConcurrentBatches) {
           void flushPending();
         } else {
           scheduleFlush();
@@ -210,8 +213,15 @@ export class SearchQueueService {
       clearFlushTimer();
       await channel.cancel(consumeResult.consumerTag);
 
-      while (pendingEntries.length > 0 || activeFlush) {
-        await flushPending();
+      while (pendingEntries.length > 0 || activeFlushes.size > 0) {
+        if (pendingEntries.length > 0 && activeFlushes.size < maxConcurrentBatches) {
+          await flushPending();
+          continue;
+        }
+
+        if (activeFlushes.size > 0) {
+          await Promise.race(Array.from(activeFlushes));
+        }
       }
 
       await channel.close();

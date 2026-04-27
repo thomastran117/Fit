@@ -42,6 +42,26 @@ function createMockChannel() {
   };
 }
 
+function createJobMessage(outboxId: string, operation: "upsert" | "delete" = "upsert") {
+  return {
+    content: Buffer.from(
+      JSON.stringify({
+        outboxId,
+        eventId: outboxId,
+        dedupeKey: outboxId,
+        operation,
+        jobType: operation,
+        postingId: `posting-${outboxId}`,
+        targetIndexScope: "live",
+        occurredAt: "2026-04-27T00:00:00.000Z",
+        attempt: 0,
+      }),
+      "utf8",
+    ),
+    properties: {},
+  };
+}
+
 describe("SearchQueueService", () => {
   beforeEach(() => {
     mockCreateRabbitMqChannel.mockReset();
@@ -124,45 +144,13 @@ describe("SearchQueueService", () => {
     const onBatch = jest.fn(async () => undefined);
 
     try {
-      await service.consumeIndexJobBatches(5, 2, 50, onBatch);
+      await service.consumeIndexJobBatches(5, 2, 50, 1, onBatch);
 
       const handler = getConsumeHandler();
       expect(handler).toBeDefined();
 
-      await handler!({
-        content: Buffer.from(
-          JSON.stringify({
-            outboxId: "outbox-1",
-            eventId: "outbox-1",
-            dedupeKey: "outbox-1",
-            operation: "upsert",
-            jobType: "upsert",
-            postingId: "posting-1",
-            targetIndexScope: "live",
-            occurredAt: "2026-04-27T00:00:00.000Z",
-            attempt: 0,
-          }),
-          "utf8",
-        ),
-        properties: {},
-      });
-      await handler!({
-        content: Buffer.from(
-          JSON.stringify({
-            outboxId: "outbox-2",
-            eventId: "outbox-2",
-            dedupeKey: "outbox-2",
-            operation: "delete",
-            jobType: "delete",
-            postingId: "posting-1",
-            targetIndexScope: "live",
-            occurredAt: "2026-04-27T00:00:01.000Z",
-            attempt: 0,
-          }),
-          "utf8",
-        ),
-        properties: {},
-      });
+      await handler!(createJobMessage("outbox-1"));
+      await handler!(createJobMessage("outbox-2", "delete"));
 
       await Promise.resolve();
 
@@ -172,4 +160,63 @@ describe("SearchQueueService", () => {
       jest.useRealTimers();
     }
   });
+
+  it("can keep multiple batches in flight when concurrency is enabled", async () => {
+    jest.useFakeTimers();
+    const { channel, getConsumeHandler } = createMockChannel();
+    mockCreateRabbitMqChannel.mockResolvedValue(channel);
+    const service = new SearchQueueService("postings");
+    const releaseFirstBatch = createDeferred<void>();
+    const releaseSecondBatch = createDeferred<void>();
+    const startedBatches: string[][] = [];
+    const onBatch = jest
+      .fn()
+      .mockImplementationOnce(async (entries) => {
+        startedBatches.push(entries.map((entry) => entry.payload.outboxId));
+        await releaseFirstBatch.promise;
+      })
+      .mockImplementationOnce(async (entries) => {
+        startedBatches.push(entries.map((entry) => entry.payload.outboxId));
+        await releaseSecondBatch.promise;
+      });
+
+    try {
+      const stop = await service.consumeIndexJobBatches(10, 2, 50, 2, onBatch);
+
+      const handler = getConsumeHandler();
+      expect(handler).toBeDefined();
+
+      await handler!(createJobMessage("outbox-1"));
+      await handler!(createJobMessage("outbox-2"));
+      await handler!(createJobMessage("outbox-3"));
+      await handler!(createJobMessage("outbox-4"));
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(onBatch).toHaveBeenCalledTimes(2);
+      expect(startedBatches).toEqual([
+        ["outbox-1", "outbox-2"],
+        ["outbox-3", "outbox-4"],
+      ]);
+
+      releaseFirstBatch.resolve();
+      releaseSecondBatch.resolve();
+      await stop();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+
+  return {
+    promise,
+    resolve,
+  };
+}
