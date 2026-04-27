@@ -2,11 +2,15 @@ x-backend-build: &backend-build
   context: ./backend
   dockerfile: Dockerfile
 
+x-mcp-build: &mcp-build
+  context: ./mcp
+  dockerfile: Dockerfile
+
 x-backend-environment: &backend-environment
   NODE_ENV: production
-  DATABASE_URL: mysql://rent:rent@mysql:3306/rent
+  DATABASE_URL: mysql://rent:rent@mysql:3307/rent
   REDIS_HOST: redis
-  REDIS_PORT: 6379
+  REDIS_PORT: 6380
   ELASTICSEARCH_ENABLED: "true"
   ELASTICSEARCH_URL: http://elasticsearch:9200
   ELASTICSEARCH_POSTINGS_INDEX: postings
@@ -17,10 +21,17 @@ x-backend-environment: &backend-environment
   GMAIL_APP_PASSWORD: change-me
   ACCESS_TOKEN_SECRET: change-me-access-token-secret
   REFRESH_TOKEN_SECRET: change-me-refresh-token-secret
+  PERSONAL_ACCESS_TOKEN_SECRET: change-me-personal-access-token-secret
   SQUARE_ACCESS_TOKEN: change-me-square-access-token
   SQUARE_LOCATION_ID: change-me-square-location-id
   SQUARE_WEBHOOK_SIGNATURE_KEY: change-me-square-webhook-signature-key
   SQUARE_WEBHOOK_NOTIFICATION_URL: http://localhost:8040/payments/webhooks/square
+
+x-mcp-environment: &mcp-environment
+  NODE_ENV: production
+  RENTIFY_API_BASE_URL: http://backend:8040
+  RENTIFY_API_TIMEOUT_MS: 5000
+  RENTIFY_PAT: ${RENTIFY_PAT:-}
 
 x-api-depends-on: &api-depends-on
   backend-migrate:
@@ -65,7 +76,7 @@ services:
       MYSQL_PASSWORD: rent
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -80,7 +91,7 @@ services:
     container_name: rent-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -98,7 +109,7 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "9201:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -254,6 +265,18 @@ services:
       NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT: consumers
     ports:
       - "3040:3040"
+
+  mcp:
+    build: *mcp-build
+    image: rent-mcp:local
+    container_name: rent-mcp
+    profiles: ["mcp"]
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_started
+    environment: *mcp-environment
+    stdin_open: true
 
 volumes:
   mysql_data:

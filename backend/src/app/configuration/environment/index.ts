@@ -82,6 +82,7 @@ type RawEnvironmentValues = {
   REFRESH_TOKEN_CACHE_PREFIX?: string;
   REFRESH_TOKEN_MODE?: string;
   REFRESH_TOKEN_SECRET?: string;
+  PERSONAL_ACCESS_TOKEN_SECRET?: string;
   REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS?: string;
   REFRESH_TOKEN_TTL_SECONDS?: string;
   SQUARE_ACCESS_TOKEN?: string;
@@ -120,6 +121,7 @@ export interface AppEnvironment {
     audience?: string;
     refreshTokenMode: RefreshTokenMode;
     refreshTokenCachePrefix: string;
+    personalAccessTokenSecret: string;
   };
   email: {
     gmailUser: string;
@@ -318,6 +320,7 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "REFRESH_TOKEN_CACHE_PREFIX",
   "REFRESH_TOKEN_MODE",
   "REFRESH_TOKEN_SECRET",
+  "PERSONAL_ACCESS_TOKEN_SECRET",
   "REMEMBER_ME_REFRESH_TOKEN_TTL_SECONDS",
   "REFRESH_TOKEN_TTL_SECONDS",
   "SQUARE_ACCESS_TOKEN",
@@ -494,6 +497,11 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
   const databaseUrl = readRequiredString(raw, "DATABASE_URL", errors);
   const accessTokenSecret = readRequiredString(raw, "ACCESS_TOKEN_SECRET", errors);
   const refreshTokenSecret = readRequiredString(raw, "REFRESH_TOKEN_SECRET", errors);
+  const personalAccessTokenSecret = readRequiredString(
+    raw,
+    "PERSONAL_ACCESS_TOKEN_SECRET",
+    errors,
+  );
   const gmailUser = readRequiredString(raw, "GMAIL_USER", errors);
   const gmailAppPassword = readRequiredString(raw, "GMAIL_APP_PASSWORD", errors);
   const squareAccessToken = readRequiredString(raw, "SQUARE_ACCESS_TOKEN", errors);
@@ -653,6 +661,7 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
       refreshTokenMode,
       refreshTokenCachePrefix:
         raw.REFRESH_TOKEN_CACHE_PREFIX ?? DEFAULT_REFRESH_TOKEN_CACHE_PREFIX,
+      personalAccessTokenSecret,
     },
     email: {
       gmailUser,

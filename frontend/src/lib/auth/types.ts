@@ -42,6 +42,33 @@ export interface LinkedOAuthProvidersResult {
   }>;
 }
 
+export type PersonalAccessTokenScope = "mcp:read" | "mcp:write";
+
+export interface PersonalAccessTokenSummary {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  scopes: PersonalAccessTokenScope[];
+  lastUsedAt?: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonalAccessTokenListResult {
+  tokens: PersonalAccessTokenSummary[];
+}
+
+export interface CreatePersonalAccessTokenResult extends PersonalAccessTokenSummary {
+  token: string;
+}
+
+export interface RevokePersonalAccessTokenResult {
+  revoked: true;
+  tokenId: string;
+}
+
 export interface ApiErrorResponse {
   error: string;
   code: string;

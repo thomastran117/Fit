@@ -66,21 +66,37 @@ export function serializeToXml(body: unknown, rootElement = "response"): string 
 }
 
 function parseAcceptHeader(acceptHeader: string | null): OutputFormat {
-  const accept = acceptHeader?.toLowerCase() ?? "";
+  const accept = acceptHeader?.toLowerCase().trim();
 
-  if (
-    accept.includes("application/xml") ||
-    accept.includes("text/xml")
-  ) {
-    return "xml";
+  if (!accept) {
+    return DEFAULT_OUTPUT_FORMAT;
   }
 
-  if (
-    accept.includes("application/json") ||
-    accept.includes("text/json") ||
-    accept.includes("*/*")
-  ) {
-    return "json";
+  const acceptedTypes = accept
+    .split(",")
+    .map((part) => {
+      const [mediaType, ...params] = part.trim().split(";");
+
+      const qualityParam = params.find((param) =>
+        param.trim().startsWith("q="),
+      );
+
+      const quality = qualityParam
+        ? Number.parseFloat(qualityParam.trim().slice(2))
+        : 1;
+
+      return {
+        mediaType: mediaType.trim(),
+        quality: Number.isFinite(quality) ? quality : 1,
+      };
+    })
+    .filter((item) => item.quality > 0)
+    .sort((a, b) => b.quality - a.quality);
+
+  const preferred = acceptedTypes[0]?.mediaType;
+
+  if (preferred === "application/xml" || preferred === "text/xml") {
+    return "xml";
   }
 
   return DEFAULT_OUTPUT_FORMAT;

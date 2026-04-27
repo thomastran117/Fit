@@ -1,4 +1,4 @@
-import type { JwtClaims } from "@/features/auth/token/token.service";
+import type { AuthPrincipal } from "@/features/auth/auth.principal";
 import type { ServiceContainer } from "@/configuration/bootstrap/container";
 
 export type OutputFormat = "json" | "xml";
@@ -25,7 +25,7 @@ export interface ClientRequestContext {
 
 export interface AppBindings {
   Variables: {
-    auth: JwtClaims;
+    auth: AuthPrincipal;
     client: ClientRequestContext;
     clientSignature: ClientSignatureContext;
     container: ServiceContainer;
