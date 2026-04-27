@@ -82,7 +82,9 @@ At the moment, the backend workspace is under `backend/`.
 Useful backend scripts:
 
 - `npm run dev`
+- `npm run seed`
 - `npm run seed:dev`
+- `npm run seed:refresh`
 - `npm run build`
 - `npm run check`
 - `npm run prisma:generate`
@@ -124,7 +126,9 @@ Notes:
 - The backend container runs `prisma migrate deploy` before starting the server.
 - In `development` and `test`, the backend now auto-seeds when the database is empty.
 - Set `DATABASE_AUTO_SEED_REFRESH=true` to force a refresh of fixture-owned records on startup.
-- You can also run `npm run seed:dev` manually, or `npm run seed:dev -- --refresh` to force a refresh.
+- You can manually invoke the orchestrator with `npm run seed`.
+- Use `npm run seed:refresh` or `npm run seed -- --refresh` to force a refresh.
+- Use `npm run seed -- --only-if-empty` if you want a one-off guarded manual run.
 - The local Docker stack now runs the backend in `development` mode, so startup seeding follows the same rules there.
 - Local fixture accounts include:
   - `owner1@rentify.local` / `Rentify123!`
