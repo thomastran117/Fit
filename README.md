@@ -82,6 +82,7 @@ At the moment, the backend workspace is under `backend/`.
 Useful backend scripts:
 
 - `npm run dev`
+- `npm run dev:seed-users`
 - `npm run build`
 - `npm run check`
 - `npm run prisma:generate`
@@ -113,13 +114,19 @@ Exposed ports:
 
 - frontend: `http://localhost:3040`
 - backend: `http://localhost:8040`
-- MySQL: `localhost:3306`
-- Redis: `localhost:6379`
-- Elasticsearch: `http://localhost:9200`
+- MySQL: `localhost:3307`
+- Redis: `localhost:6380`
+- Elasticsearch: `http://localhost:9201`
 
 Notes:
 
 - The backend container runs `prisma migrate deploy` before starting the server.
+- The Docker stack also runs a dev-only seed step that guarantees four local fixture accounts:
+  - `owner1@rentify.local` / `Rentify123!`
+  - `owner2@rentify.local` / `Rentify123!`
+  - `user1@rentify.local` / `Rentify123!`
+  - `admin1@rentify.local` / `Rentify123!`
+- Those fixture owners also receive 20 seeded postings total, with 10 listings per owner for search, booking, and MCP testing.
 - The current `docker-compose.yml` includes placeholder values for `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
 - Replace those placeholders before using the stack for anything beyond local bootstrapping.
 

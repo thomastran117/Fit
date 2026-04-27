@@ -8,9 +8,9 @@ x-mcp-build: &mcp-build
 
 x-backend-environment: &backend-environment
   NODE_ENV: production
-  DATABASE_URL: mysql://rent:rent@mysql:3306/rent
+  DATABASE_URL: mysql://rent:rent@mysql:3307/rent
   REDIS_HOST: redis
-  REDIS_PORT: 6379
+  REDIS_PORT: 6380
   ELASTICSEARCH_ENABLED: "true"
   ELASTICSEARCH_URL: http://elasticsearch:9200
   ELASTICSEARCH_POSTINGS_INDEX: postings
@@ -69,7 +69,6 @@ services:
   mysql:
     image: mysql:8.4
     container_name: rent-mysql
-    attach: false
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: rent
@@ -90,7 +89,6 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: rent-redis
-    attach: false
     restart: unless-stopped
     ports:
       - "6380:6379"
@@ -105,7 +103,6 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
     container_name: rent-elasticsearch
-    attach: false
     restart: unless-stopped
     environment:
       discovery.type: single-node
@@ -125,7 +122,6 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: rent-rabbitmq
-    attach: false
     restart: unless-stopped
     ports:
       - "5672:5672"
