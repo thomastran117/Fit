@@ -2,6 +2,7 @@ import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
+import { RequestValidationError } from "@/configuration/validation/request";
 import type { BlobService } from "@/features/blob/blob.service";
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLock } from "@/features/cache/cache-locks";
@@ -21,6 +22,7 @@ import {
   type PostingPhotoInput,
   type PostingPricing,
   type PostingRecord,
+  type SearchAttributeFilterInput,
   type PostingSubtype,
   type SearchPostingsInput,
   type SearchPostingsResult,
@@ -30,6 +32,7 @@ import {
 import {
   getPostingSearchableAttributeDefinitions,
   getPostingVariantDefinition,
+  type SearchablePostingAttributeDefinition,
 } from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
@@ -315,6 +318,11 @@ export class PostingsService {
       ...input,
       query: input.query?.trim() || undefined,
       tags: input.tags?.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
+      attributeFilters: this.normalizeSearchAttributeFilters(
+        input.attributeFilters,
+        input.family,
+        input.subtype,
+      ),
     });
   }
 
@@ -764,6 +772,15 @@ export class PostingsService {
       this.assertValidVariantSelection(input.family, input.subtype);
     }
 
+    if (input.attributeFilters && input.attributeFilters.length > 0 && (!input.family || !input.subtype)) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path: "attr",
+          message: "Attribute filters require both family and subtype.",
+        },
+      ]);
+    }
+
     if (
       input.minDailyPrice !== undefined &&
       input.maxDailyPrice !== undefined &&
@@ -784,6 +801,247 @@ export class PostingsService {
         throw new BadRequestError("Availability window must define a valid, non-empty range.");
       }
     }
+  }
+
+  private normalizeSearchAttributeFilters(
+    filters: SearchAttributeFilterInput[] | undefined,
+    family?: PostingFamily,
+    subtype?: PostingSubtype,
+  ): SearchAttributeFilterInput[] | undefined {
+    if (!filters || filters.length === 0) {
+      return undefined;
+    }
+
+    if (!family || !subtype) {
+      return undefined;
+    }
+
+    const definitions = getPostingSearchableAttributeDefinitions(family, subtype);
+
+    if (!definitions) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path: "attr",
+          message: "Attribute filters require a valid family and subtype.",
+        },
+      ]);
+    }
+
+    return filters.map((filter) => {
+      const definition = definitions[filter.key];
+
+      if (!definition) {
+        throw new RequestValidationError("Request query validation failed.", [
+          {
+            path: `attr.${filter.key}`,
+            message: "Attribute is not valid for the selected family and subtype.",
+          },
+        ]);
+      }
+
+      return this.normalizeSearchAttributeFilter(filter, definition);
+    });
+  }
+
+  private normalizeSearchAttributeFilter(
+    filter: SearchAttributeFilterInput,
+    definition: SearchablePostingAttributeDefinition,
+  ): SearchAttributeFilterInput {
+    const path = `attr.${filter.key}`;
+    const hasExactValue = filter.value !== undefined;
+    const hasRange = filter.min !== undefined || filter.max !== undefined;
+
+    if (hasExactValue && hasRange) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path,
+          message: "Exact attribute filters cannot be combined with min/max range filters.",
+        },
+      ]);
+    }
+
+    if (
+      filter.min !== undefined &&
+      filter.max !== undefined &&
+      Number.isFinite(filter.min) &&
+      Number.isFinite(filter.max) &&
+      filter.min > filter.max
+    ) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path,
+          message: "Attribute minimum cannot exceed attribute maximum.",
+        },
+      ]);
+    }
+
+    switch (definition.kind) {
+      case "string": {
+        if (hasRange || Array.isArray(filter.value)) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "String attributes support a single exact value only.",
+            },
+          ]);
+        }
+
+        if (typeof filter.value !== "string") {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "String attributes require a string value.",
+            },
+          ]);
+        }
+
+        return {
+          key: filter.key,
+          value: filter.value.trim(),
+        };
+      }
+      case "stringArray": {
+        if (hasRange || filter.value === undefined) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "Array attributes require one or more exact values.",
+            },
+          ]);
+        }
+
+        const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+
+        if (!values.every((value) => typeof value === "string")) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "Array attributes require string values.",
+            },
+          ]);
+        }
+
+        return {
+          key: filter.key,
+          value: Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))),
+        };
+      }
+      case "boolean": {
+        if (hasRange) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "Boolean attributes support an exact true/false value only.",
+            },
+          ]);
+        }
+
+        return {
+          key: filter.key,
+          value: this.parseBooleanSearchAttributeValue(filter.value, path),
+        };
+      }
+      case "integer":
+      case "number": {
+        if (Array.isArray(filter.value)) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "Numeric attributes support a single exact value or a min/max range.",
+            },
+          ]);
+        }
+
+        const exactValue =
+          filter.value !== undefined
+            ? this.parseNumericSearchAttributeValue(filter.value, path, definition.kind === "integer")
+            : undefined;
+        const min =
+          filter.min !== undefined
+            ? this.parseNumericSearchAttributeValue(filter.min, `${path}.min`, definition.kind === "integer")
+            : undefined;
+        const max =
+          filter.max !== undefined
+            ? this.parseNumericSearchAttributeValue(filter.max, `${path}.max`, definition.kind === "integer")
+            : undefined;
+
+        if (exactValue === undefined && min === undefined && max === undefined) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path,
+              message: "Numeric attributes require an exact value or a min/max range.",
+            },
+          ]);
+        }
+
+        return {
+          key: filter.key,
+          ...(exactValue !== undefined ? { value: exactValue } : {}),
+          ...(min !== undefined ? { min } : {}),
+          ...(max !== undefined ? { max } : {}),
+        };
+      }
+      default:
+        return filter;
+    }
+  }
+
+  private parseBooleanSearchAttributeValue(
+    value: SearchAttributeFilterInput["value"],
+    path: string,
+  ): boolean {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+
+      if (["1", "true", "yes", "on"].includes(normalized)) {
+        return true;
+      }
+
+      if (["0", "false", "no", "off"].includes(normalized)) {
+        return false;
+      }
+    }
+
+    throw new RequestValidationError("Request query validation failed.", [
+      {
+        path,
+        message: "Boolean attributes must be true or false.",
+      },
+    ]);
+  }
+
+  private parseNumericSearchAttributeValue(
+    value: string | number | boolean,
+    path: string,
+    integerOnly: boolean,
+  ): number {
+    if (typeof value === "boolean") {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path,
+          message: "Numeric attributes must be valid numbers.",
+        },
+      ]);
+    }
+
+    const parsed = typeof value === "number" ? value : Number(value.trim());
+
+    if (!Number.isFinite(parsed) || (integerOnly && !Number.isInteger(parsed))) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path,
+          message: integerOnly
+            ? "Integer attributes must be whole numbers."
+            : "Numeric attributes must be valid numbers.",
+        },
+      ]);
+    }
+
+    return parsed;
   }
 
   private async requireOwnerPosting(id: string, ownerId: string): Promise<PostingRecord> {

@@ -194,6 +194,13 @@ export type OwnerAvailabilityBlockRequestBody = z.infer<
 export type ListOwnerPostingsQuery = z.infer<typeof listOwnerPostingsQuerySchema>;
 export type PublicSearchPostingsQuery = z.infer<typeof publicSearchPostingsQuerySchema>;
 
+export interface SearchAttributeFilterInput {
+  key: string;
+  value?: string | number | boolean | string[];
+  min?: number;
+  max?: number;
+}
+
 export interface PostingPhotoRecord {
   id: string;
   blobUrl: string;
@@ -356,6 +363,7 @@ export interface SearchPostingsInput {
     startAt: string;
     endAt: string;
   };
+  attributeFilters?: SearchAttributeFilterInput[];
   sort: PostingSort;
 }
 

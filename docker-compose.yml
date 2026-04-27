@@ -213,14 +213,14 @@ services:
     environment: *backend-environment
     command: ["node", "dist/workers/payments/payout-release.worker.js"]
 
-  search-outbox-relay-worker:
+  search-maintainer-worker:
     build: *backend-build
     image: rent-backend:local
-    container_name: rent-search-outbox-relay-worker
+    container_name: rent-search-maintainer-worker
     restart: unless-stopped
     depends_on: *search-worker-depends-on
     environment: *backend-environment
-    command: ["node", "dist/workers/search/search-outbox-relay.worker.js"]
+    command: ["node", "dist/workers/search/search-maintainer.worker.js"]
 
   search-indexer-worker:
     build: *backend-build
@@ -230,15 +230,6 @@ services:
     depends_on: *search-worker-depends-on
     environment: *backend-environment
     command: ["node", "dist/workers/search/search-indexer.worker.js"]
-
-  search-reindex-worker:
-    build: *backend-build
-    image: rent-backend:local
-    container_name: rent-search-reindex-worker
-    restart: unless-stopped
-    depends_on: *search-worker-depends-on
-    environment: *backend-environment
-    command: ["node", "dist/workers/search/search-reindex.worker.js"]
 
   frontend:
     build:

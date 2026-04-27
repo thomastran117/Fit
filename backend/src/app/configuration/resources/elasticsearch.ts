@@ -1,6 +1,14 @@
 import {
   getOptionalEnvironmentVariable,
 } from "@/configuration/environment/index";
+import {
+  recordCircuitBreakerOpened,
+  recordCircuitBreakerShortCircuit,
+  recordElasticsearchRequest,
+  recordElasticsearchServerError,
+  recordElasticsearchTimeout,
+  recordElasticsearchTransportError,
+} from "@/features/search/search.telemetry";
 
 export interface ElasticsearchConfig {
   enabled: boolean;
@@ -25,6 +33,16 @@ export class ElasticsearchUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ElasticsearchUnavailableError";
+  }
+}
+
+export class ElasticsearchRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ElasticsearchRequestError";
   }
 }
 
@@ -78,8 +96,10 @@ export class ElasticsearchClient {
     } = {},
   ): Promise<TResponse> {
     const config = this.requireConfig();
+    const startedAt = performance.now();
 
     if (this.isCircuitOpen() && this.openedUntil) {
+      recordCircuitBreakerShortCircuit();
       throw new ElasticsearchCircuitOpenError(this.openedUntil);
     }
 
@@ -112,9 +132,25 @@ export class ElasticsearchClient {
 
       if (!response.ok) {
         const text = await response.text();
-        throw new ElasticsearchUnavailableError(
-          `Elasticsearch request failed with status ${response.status}: ${text.slice(0, 500)}`,
-        );
+        if (response.status >= 500) {
+          recordElasticsearchServerError();
+          this.recordFailure();
+        } else {
+          console.error("Elasticsearch request returned a client error.", {
+            method: init.method ?? "GET",
+            path,
+            status: response.status,
+            body: text.slice(0, 500),
+          });
+        }
+        throw response.status >= 500
+          ? new ElasticsearchUnavailableError(
+              `Elasticsearch request failed with status ${response.status}: ${text.slice(0, 500)}`,
+            )
+          : new ElasticsearchRequestError(
+              response.status,
+              `Elasticsearch request failed with status ${response.status}: ${text.slice(0, 500)}`,
+            );
       }
 
       if (response.status === 204) {
@@ -126,16 +162,26 @@ export class ElasticsearchClient {
       this.recordSuccess();
       return json;
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        recordElasticsearchTimeout();
+        this.recordFailure();
+      } else if (
+        !(error instanceof ElasticsearchUnavailableError) &&
+        !(error instanceof ElasticsearchRequestError)
+      ) {
+        recordElasticsearchTransportError();
+        this.recordFailure();
+      }
+
       const wrappedError =
-        error instanceof ElasticsearchUnavailableError
+        error instanceof ElasticsearchUnavailableError || error instanceof ElasticsearchRequestError
           ? error
           : new ElasticsearchUnavailableError(
               error instanceof Error ? error.message : "Elasticsearch request failed.",
             );
-
-      this.recordFailure();
       throw wrappedError;
     } finally {
+      recordElasticsearchRequest(Math.round((performance.now() - startedAt) * 100) / 100);
       clearTimeout(timeout);
     }
   }
@@ -148,8 +194,12 @@ export class ElasticsearchClient {
   private recordFailure(): void {
     this.consecutiveFailures += 1;
 
-    if (this.consecutiveFailures >= this.config.circuitBreakerFailureThreshold) {
+    if (
+      this.consecutiveFailures >= this.config.circuitBreakerFailureThreshold &&
+      !this.isCircuitOpen()
+    ) {
       this.openedUntil = new Date(Date.now() + this.config.circuitBreakerCooldownMs);
+      recordCircuitBreakerOpened();
     }
   }
 

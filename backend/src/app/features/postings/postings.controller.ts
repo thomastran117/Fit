@@ -37,6 +37,7 @@ import {
   type ListOwnerPostingsQuery,
   type OwnerAvailabilityBlockRequestBody,
   type PublicSearchPostingsQuery,
+  type SearchAttributeFilterInput,
   type SearchPostingsInput,
   type UpdatePostingRequestBody,
   type UpsertPostingInput,
@@ -339,8 +340,9 @@ export class PostingsController {
         endAt: url.searchParams.get("endAt") ?? undefined,
         sort: url.searchParams.get("sort") ?? undefined,
       });
+      const attributeFilters = this.readAttributeFilters(url.searchParams);
 
-      return this.toSearchPostingsInput(query);
+      return this.toSearchPostingsInput(query, attributeFilters);
     } catch (error) {
       throw this.toValidationError(error, "Request query validation failed.");
     }
@@ -423,7 +425,10 @@ export class PostingsController {
     };
   }
 
-  private toSearchPostingsInput(query: PublicSearchPostingsQuery): SearchPostingsInput {
+  private toSearchPostingsInput(
+    query: PublicSearchPostingsQuery,
+    attributeFilters?: SearchAttributeFilterInput[],
+  ): SearchPostingsInput {
     if ((query.startAt === undefined) !== (query.endAt === undefined)) {
       throw new RequestValidationError("Request query validation failed.", [
         {
@@ -458,8 +463,83 @@ export class PostingsController {
               endAt: query.endAt,
             }
           : undefined,
+      attributeFilters,
       sort: query.sort,
     };
+  }
+
+  private readAttributeFilters(searchParams: URLSearchParams): SearchAttributeFilterInput[] | undefined {
+    const filters = new Map<
+      string,
+      {
+        values: string[];
+        min?: number;
+        max?: number;
+      }
+    >();
+
+    for (const [key, rawValue] of searchParams.entries()) {
+      if (!key.startsWith("attr.")) {
+        continue;
+      }
+
+      const attributeKey = key.slice("attr.".length);
+      let targetKey = attributeKey;
+      let bound: "min" | "max" | null = null;
+
+      if (attributeKey.endsWith(".min")) {
+        targetKey = attributeKey.slice(0, -4);
+        bound = "min";
+      } else if (attributeKey.endsWith(".max")) {
+        targetKey = attributeKey.slice(0, -4);
+        bound = "max";
+      }
+
+      if (!/^[a-z][a-z0-9_]*$/i.test(targetKey)) {
+        throw new RequestValidationError("Request query validation failed.", [
+          {
+            path: key,
+            message: "Attribute keys must start with a letter and contain only letters, numbers, and underscores.",
+          },
+        ]);
+      }
+
+      const filter = filters.get(targetKey) ?? { values: [] };
+
+      if (bound) {
+        const parsed = Number(rawValue);
+
+        if (!Number.isFinite(parsed)) {
+          throw new RequestValidationError("Request query validation failed.", [
+            {
+              path: key,
+              message: "Attribute range values must be valid numbers.",
+            },
+          ]);
+        }
+
+        filter[bound] = parsed;
+      } else {
+        filter.values.push(rawValue);
+      }
+
+      filters.set(targetKey, filter);
+    }
+
+    if (filters.size === 0) {
+      return undefined;
+    }
+
+    return Array.from(filters.entries()).map(([key, filter]) => ({
+      key,
+      ...(filter.values.length === 0
+        ? {}
+        : {
+            value: filter.values.length === 1 ? filter.values[0] : filter.values,
+          }),
+      ...(filter.min !== undefined ? { min: filter.min } : {}),
+      ...(filter.max !== undefined ? { max: filter.max } : {}),
+    }));
   }
 
   private toListPostingAnalyticsInput(

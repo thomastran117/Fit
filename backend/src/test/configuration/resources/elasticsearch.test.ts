@@ -1,6 +1,7 @@
 import {
   ElasticsearchCircuitOpenError,
   ElasticsearchClient,
+  ElasticsearchRequestError,
   ElasticsearchUnavailableError,
   type ElasticsearchConfig,
 } from "@/configuration/resources/elasticsearch";
@@ -44,6 +45,25 @@ describe("ElasticsearchClient circuit breaker", () => {
       state: "open",
       consecutiveFailures: 2,
       failureThreshold: 2,
+    });
+  });
+
+  it("does not open the circuit for repeated client-side 4xx failures", async () => {
+    const fetchMock = jest.fn(async () => new Response("bad request", { status: 400 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const client = new ElasticsearchClient(createConfig());
+
+    await expect(client.requestJson("/postings/_search", { method: "GET" })).rejects.toBeInstanceOf(
+      ElasticsearchRequestError,
+    );
+    await expect(client.requestJson("/postings/_search", { method: "GET" })).rejects.toBeInstanceOf(
+      ElasticsearchRequestError,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(client.getCircuitBreakerState()).toMatchObject({
+      state: "closed",
+      consecutiveFailures: 0,
     });
   });
 });
