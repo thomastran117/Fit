@@ -17,6 +17,8 @@ const captchaConfig = {
 };
 
 const databaseConfig = {
+  autoSeedEnabled: true,
+  autoSeedRefresh: false,
   operationLoggingEnabled: false,
   queryLoggingEnabled: false,
   slowOperationThresholdMs: 500,
@@ -37,6 +39,18 @@ export const environment = {
   isProduction(): boolean {
     return false;
   },
+  isDevelopment(): boolean {
+    return true;
+  },
+  isTest(): boolean {
+    return false;
+  },
+  getNodeEnvironment() {
+    return "development" as const;
+  },
+  getServerPort() {
+    return 8040;
+  },
   getDatabaseConfig() {
     return databaseConfig;
   },
@@ -56,6 +70,7 @@ export const environment = {
       database: databaseConfig,
       rateLimiter: rateLimiterConfig,
       server: {
+        nodeEnv: "development",
         isProduction: false,
       },
     };

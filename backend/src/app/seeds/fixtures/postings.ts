@@ -1,53 +1,32 @@
-import { randomUUID } from "node:crypto";
-import { getDatabaseClient } from "@/configuration/resources/database";
+import { createFixtureId, type SeedAvailabilityBlockFixture, type SeedPostingFixture, type SeedPostingPhotoFixture } from "@/seeds/types";
 
-interface DevFixturePosting {
-  id: string;
-  ownerEmail: string;
-  status: "draft" | "published" | "paused";
-  family: "place" | "equipment" | "vehicle";
-  subtype:
-    | "entire_place"
-    | "private_room"
-    | "workspace"
-    | "storage_space"
-    | "camera"
-    | "tool"
-    | "audio"
-    | "general_equipment"
-    | "bike"
-    | "car";
-  name: string;
-  description: string;
-  pricingCurrency: string;
-  pricing: Record<string, unknown>;
-  tags: string[];
-  attributes: Record<string, string | number | boolean | string[]>;
-  availabilityStatus: "available" | "limited" | "unavailable";
-  availabilityNotes?: string | null;
-  maxBookingDurationDays?: number | null;
-  latitude: number;
-  longitude: number;
-  city: string;
-  region: string;
-  country: string;
-  postalCode?: string | null;
-  photo: {
-    id: string;
-    blobUrl: string;
-    blobName: string;
+function createPhoto(index: number, slug: string): SeedPostingPhotoFixture {
+  return {
+    id: createFixtureId(2100, index),
+    blobUrl: `https://example.com/dev-seed/postings/${slug}/main.jpg`,
+    blobName: `dev-seed/postings/${slug}/main.jpg`,
+    position: 0,
   };
-  availabilityBlocks: Array<{
-    id: string;
-    startAt: string;
-    endAt: string;
-    note?: string | null;
-  }>;
 }
 
-const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
+function createOwnerBlock(
+  index: number,
+  startAt: string,
+  endAt: string,
+  note: string,
+): SeedAvailabilityBlockFixture {
+  return {
+    id: createFixtureId(2200, index),
+    startAt,
+    endAt,
+    note,
+    source: "owner",
+  };
+}
+
+export const SEED_POSTINGS: SeedPostingFixture[] = [
   {
-    id: "aaaaaaa1-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+    id: createFixtureId(2000, 1),
     ownerEmail: "owner1@rentify.local",
     status: "published",
     family: "place",
@@ -75,22 +54,13 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M5V1K4",
-    photo: {
-      id: "bbbbbbb1-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
-      blobUrl: "https://example.com/dev-seed/postings/toronto-loft/main.jpg",
-      blobName: "dev-seed/postings/toronto-loft/main.jpg",
-    },
+    photos: [createPhoto(1, "toronto-loft")],
     availabilityBlocks: [
-      {
-        id: "ccccccc1-cccc-cccc-cccc-ccccccccccc1",
-        startAt: "2026-06-15T14:00:00.000Z",
-        endAt: "2026-06-18T14:00:00.000Z",
-        note: "Owner blocked for maintenance.",
-      },
+      createOwnerBlock(1, "2026-06-15T14:00:00.000Z", "2026-06-18T14:00:00.000Z", "Owner blocked for maintenance."),
     ],
   },
   {
-    id: "aaaaaaa2-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
+    id: createFixtureId(2000, 2),
     ownerEmail: "owner1@rentify.local",
     status: "draft",
     family: "equipment",
@@ -116,15 +86,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M5V1K4",
-    photo: {
-      id: "bbbbbbb2-bbbb-bbbb-bbbb-bbbbbbbbbbb2",
-      blobUrl: "https://example.com/dev-seed/postings/camera-kit/main.jpg",
-      blobName: "dev-seed/postings/camera-kit/main.jpg",
-    },
+    photos: [createPhoto(2, "camera-kit")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaaa5-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
+    id: createFixtureId(2000, 3),
     ownerEmail: "owner1@rentify.local",
     status: "published",
     family: "place",
@@ -152,15 +118,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M5R2M8",
-    photo: {
-      id: "bbbbbbb5-bbbb-bbbb-bbbb-bbbbbbbbbbb5",
-      blobUrl: "https://example.com/dev-seed/postings/annex-room/main.jpg",
-      blobName: "dev-seed/postings/annex-room/main.jpg",
-    },
+    photos: [createPhoto(3, "annex-room")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaaa6-aaaa-aaaa-aaaa-aaaaaaaaaaa6",
+    id: createFixtureId(2000, 4),
     ownerEmail: "owner1@rentify.local",
     status: "published",
     family: "equipment",
@@ -187,22 +149,13 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M4N2L3",
-    photo: {
-      id: "bbbbbbb6-bbbb-bbbb-bbbb-bbbbbbbbbbb6",
-      blobUrl: "https://example.com/dev-seed/postings/tool-pack/main.jpg",
-      blobName: "dev-seed/postings/tool-pack/main.jpg",
-    },
+    photos: [createPhoto(4, "tool-pack")],
     availabilityBlocks: [
-      {
-        id: "ccccccc6-cccc-cccc-cccc-ccccccccccc6",
-        startAt: "2026-07-04T12:00:00.000Z",
-        endAt: "2026-07-06T12:00:00.000Z",
-        note: "Already reserved for a personal project.",
-      },
+      createOwnerBlock(4, "2026-07-04T12:00:00.000Z", "2026-07-06T12:00:00.000Z", "Already reserved for a personal project."),
     ],
   },
   {
-    id: "aaaaaaa7-aaaa-aaaa-aaaa-aaaaaaaaaaa7",
+    id: createFixtureId(2000, 5),
     ownerEmail: "owner1@rentify.local",
     status: "paused",
     family: "place",
@@ -230,15 +183,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M9R3A4",
-    photo: {
-      id: "bbbbbbb7-bbbb-bbbb-bbbb-bbbbbbbbbbb7",
-      blobUrl: "https://example.com/dev-seed/postings/storage-bay/main.jpg",
-      blobName: "dev-seed/postings/storage-bay/main.jpg",
-    },
+    photos: [createPhoto(5, "storage-bay")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa11-aaaa-aaaa-aaaa-aaaaaaaaaa11",
+    id: createFixtureId(2000, 6),
     ownerEmail: "owner1@rentify.local",
     status: "published",
     family: "vehicle",
@@ -266,15 +215,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M6R2N2",
-    photo: {
-      id: "bbbbbb11-bbbb-bbbb-bbbb-bbbbbbbbbb11",
-      blobUrl: "https://example.com/dev-seed/postings/trail-ebike/main.jpg",
-      blobName: "dev-seed/postings/trail-ebike/main.jpg",
-    },
+    photos: [createPhoto(6, "trail-ebike")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa12-aaaa-aaaa-aaaa-aaaaaaaaaa12",
+    id: createFixtureId(2000, 7),
     ownerEmail: "owner1@rentify.local",
     status: "draft",
     family: "equipment",
@@ -301,15 +246,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M5S2V6",
-    photo: {
-      id: "bbbbbb12-bbbb-bbbb-bbbb-bbbbbbbbbb12",
-      blobUrl: "https://example.com/dev-seed/postings/pa-rack/main.jpg",
-      blobName: "dev-seed/postings/pa-rack/main.jpg",
-    },
+    photos: [createPhoto(7, "pa-rack")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa13-aaaa-aaaa-aaaa-aaaaaaaaaa13",
+    id: createFixtureId(2000, 8),
     ownerEmail: "owner1@rentify.local",
     status: "published",
     family: "place",
@@ -337,22 +278,13 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M6P1N4",
-    photo: {
-      id: "bbbbbb13-bbbb-bbbb-bbbb-bbbbbbbbbb13",
-      blobUrl: "https://example.com/dev-seed/postings/junction-offsite-loft/main.jpg",
-      blobName: "dev-seed/postings/junction-offsite-loft/main.jpg",
-    },
+    photos: [createPhoto(8, "junction-offsite-loft")],
     availabilityBlocks: [
-      {
-        id: "cccccc13-cccc-cccc-cccc-cccccccccc13",
-        startAt: "2026-08-03T13:00:00.000Z",
-        endAt: "2026-08-03T23:00:00.000Z",
-        note: "Owner workshop day.",
-      },
+      createOwnerBlock(8, "2026-08-03T13:00:00.000Z", "2026-08-03T23:00:00.000Z", "Owner workshop day."),
     ],
   },
   {
-    id: "aaaaaa14-aaaa-aaaa-aaaa-aaaaaaaaaa14",
+    id: createFixtureId(2000, 9),
     ownerEmail: "owner1@rentify.local",
     status: "published",
     family: "equipment",
@@ -379,15 +311,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M6K1X9",
-    photo: {
-      id: "bbbbbb14-bbbb-bbbb-bbbb-bbbbbbbbbb14",
-      blobUrl: "https://example.com/dev-seed/postings/market-display/main.jpg",
-      blobName: "dev-seed/postings/market-display/main.jpg",
-    },
+    photos: [createPhoto(9, "market-display")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa15-aaaa-aaaa-aaaa-aaaaaaaaaa15",
+    id: createFixtureId(2000, 10),
     ownerEmail: "owner1@rentify.local",
     status: "paused",
     family: "vehicle",
@@ -415,15 +343,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "M5V2B7",
-    photo: {
-      id: "bbbbbb15-bbbb-bbbb-bbbb-bbbbbbbbbb15",
-      blobUrl: "https://example.com/dev-seed/postings/cargo-van/main.jpg",
-      blobName: "dev-seed/postings/cargo-van/main.jpg",
-    },
+    photos: [createPhoto(10, "cargo-van")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaaa3-aaaa-aaaa-aaaa-aaaaaaaaaaa3",
+    id: createFixtureId(2000, 11),
     ownerEmail: "owner2@rentify.local",
     status: "published",
     family: "place",
@@ -451,22 +375,13 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1P1J1",
-    photo: {
-      id: "bbbbbbb3-bbbb-bbbb-bbbb-bbbbbbbbbbb3",
-      blobUrl: "https://example.com/dev-seed/postings/workshop-studio/main.jpg",
-      blobName: "dev-seed/postings/workshop-studio/main.jpg",
-    },
+    photos: [createPhoto(11, "workshop-studio")],
     availabilityBlocks: [
-      {
-        id: "ccccccc3-cccc-cccc-cccc-ccccccccccc3",
-        startAt: "2026-06-21T13:00:00.000Z",
-        endAt: "2026-06-22T01:00:00.000Z",
-        note: "Reserved for owner event setup.",
-      },
+      createOwnerBlock(11, "2026-06-21T13:00:00.000Z", "2026-06-22T01:00:00.000Z", "Reserved for owner event setup."),
     ],
   },
   {
-    id: "aaaaaaa4-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
+    id: createFixtureId(2000, 12),
     ownerEmail: "owner2@rentify.local",
     status: "paused",
     family: "vehicle",
@@ -494,15 +409,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1P1J1",
-    photo: {
-      id: "bbbbbbb4-bbbb-bbbb-bbbb-bbbbbbbbbbb4",
-      blobUrl: "https://example.com/dev-seed/postings/ebike/main.jpg",
-      blobName: "dev-seed/postings/ebike/main.jpg",
-    },
+    photos: [createPhoto(12, "ebike")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaaa8-aaaa-aaaa-aaaa-aaaaaaaaaaa8",
+    id: createFixtureId(2000, 13),
     ownerEmail: "owner2@rentify.local",
     status: "published",
     family: "vehicle",
@@ -530,15 +441,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1N5Y5",
-    photo: {
-      id: "bbbbbbb8-bbbb-bbbb-bbbb-bbbbbbbbbbb8",
-      blobUrl: "https://example.com/dev-seed/postings/hybrid-hatchback/main.jpg",
-      blobName: "dev-seed/postings/hybrid-hatchback/main.jpg",
-    },
+    photos: [createPhoto(13, "hybrid-hatchback")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaaa9-aaaa-aaaa-aaaa-aaaaaaaaaaa9",
+    id: createFixtureId(2000, 14),
     ownerEmail: "owner2@rentify.local",
     status: "draft",
     family: "equipment",
@@ -565,15 +472,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1P5G4",
-    photo: {
-      id: "bbbbbbb9-bbbb-bbbb-bbbb-bbbbbbbbbbb9",
-      blobUrl: "https://example.com/dev-seed/postings/podcast-bundle/main.jpg",
-      blobName: "dev-seed/postings/podcast-bundle/main.jpg",
-    },
+    photos: [createPhoto(14, "podcast-bundle")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa10-aaaa-aaaa-aaaa-aaaaaaaaaa10",
+    id: createFixtureId(2000, 15),
     ownerEmail: "owner2@rentify.local",
     status: "published",
     family: "equipment",
@@ -600,22 +503,13 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1S3W7",
-    photo: {
-      id: "bbbbbb10-bbbb-bbbb-bbbb-bbbbbbbbbb10",
-      blobUrl: "https://example.com/dev-seed/postings/popup-event-kit/main.jpg",
-      blobName: "dev-seed/postings/popup-event-kit/main.jpg",
-    },
+    photos: [createPhoto(15, "popup-event-kit")],
     availabilityBlocks: [
-      {
-        id: "cccccc10-cccc-cccc-cccc-cccccccccc10",
-        startAt: "2026-07-11T12:00:00.000Z",
-        endAt: "2026-07-13T12:00:00.000Z",
-        note: "Held for a vendor market weekend.",
-      },
+      createOwnerBlock(15, "2026-07-11T12:00:00.000Z", "2026-07-13T12:00:00.000Z", "Held for a vendor market weekend."),
     ],
   },
   {
-    id: "aaaaaa16-aaaa-aaaa-aaaa-aaaaaaaaaa16",
+    id: createFixtureId(2000, 16),
     ownerEmail: "owner2@rentify.local",
     status: "published",
     family: "place",
@@ -643,15 +537,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1S5H3",
-    photo: {
-      id: "bbbbbb16-bbbb-bbbb-bbbb-bbbbbbbbbb16",
-      blobUrl: "https://example.com/dev-seed/postings/canal-flat/main.jpg",
-      blobName: "dev-seed/postings/canal-flat/main.jpg",
-    },
+    photos: [createPhoto(16, "canal-flat")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa17-aaaa-aaaa-aaaa-aaaaaaaaaa17",
+    id: createFixtureId(2000, 17),
     ownerEmail: "owner2@rentify.local",
     status: "draft",
     family: "place",
@@ -679,15 +569,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1N8Y1",
-    photo: {
-      id: "bbbbbb17-bbbb-bbbb-bbbb-bbbbbbbbbb17",
-      blobUrl: "https://example.com/dev-seed/postings/storage-locker/main.jpg",
-      blobName: "dev-seed/postings/storage-locker/main.jpg",
-    },
+    photos: [createPhoto(17, "storage-locker")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa18-aaaa-aaaa-aaaa-aaaaaaaaaa18",
+    id: createFixtureId(2000, 18),
     ownerEmail: "owner2@rentify.local",
     status: "published",
     family: "equipment",
@@ -713,22 +599,13 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1M1M4",
-    photo: {
-      id: "bbbbbb18-bbbb-bbbb-bbbb-bbbbbbbbbb18",
-      blobUrl: "https://example.com/dev-seed/postings/documentary-camera/main.jpg",
-      blobName: "dev-seed/postings/documentary-camera/main.jpg",
-    },
+    photos: [createPhoto(18, "documentary-camera")],
     availabilityBlocks: [
-      {
-        id: "cccccc18-cccc-cccc-cccc-cccccccccc18",
-        startAt: "2026-08-12T12:00:00.000Z",
-        endAt: "2026-08-15T12:00:00.000Z",
-        note: "Blocked for owner production use.",
-      },
+      createOwnerBlock(18, "2026-08-12T12:00:00.000Z", "2026-08-15T12:00:00.000Z", "Blocked for owner production use."),
     ],
   },
   {
-    id: "aaaaaa19-aaaa-aaaa-aaaa-aaaaaaaaaa19",
+    id: createFixtureId(2000, 19),
     ownerEmail: "owner2@rentify.local",
     status: "paused",
     family: "equipment",
@@ -755,15 +632,11 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K2C0M7",
-    photo: {
-      id: "bbbbbb19-bbbb-bbbb-bbbb-bbbbbbbbbb19",
-      blobUrl: "https://example.com/dev-seed/postings/landscaping-tools/main.jpg",
-      blobName: "dev-seed/postings/landscaping-tools/main.jpg",
-    },
+    photos: [createPhoto(19, "landscaping-tools")],
     availabilityBlocks: [],
   },
   {
-    id: "aaaaaa20-aaaa-aaaa-aaaa-aaaaaaaaaa20",
+    id: createFixtureId(2000, 20),
     ownerEmail: "owner2@rentify.local",
     status: "published",
     family: "vehicle",
@@ -791,199 +664,390 @@ const DEV_FIXTURE_POSTINGS: DevFixturePosting[] = [
     region: "Ontario",
     country: "Canada",
     postalCode: "K1R5V9",
-    photo: {
-      id: "bbbbbb20-bbbb-bbbb-bbbb-bbbbbbbbbb20",
-      blobUrl: "https://example.com/dev-seed/postings/family-cargo-bike/main.jpg",
-      blobName: "dev-seed/postings/family-cargo-bike/main.jpg",
+    photos: [createPhoto(20, "family-cargo-bike")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 21),
+    ownerEmail: "owner3@rentify.local",
+    status: "published",
+    family: "place",
+    subtype: "workspace",
+    name: "Gastown Production Loft",
+    description: "Industrial loft with daylight, freight elevator access, and flexible furniture.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 210 }, hourly: { amount: 34 } },
+    tags: ["vancouver", "loft", "production"],
+    attributes: {
+      guest_capacity: 14,
+      bedrooms: 0,
+      bathrooms: 1,
+      property_type: "loft",
+      amenities: ["wifi", "freight_elevator", "lighting_grid"],
+      pet_friendly: false,
+      parking: false,
     },
+    availabilityStatus: "available",
+    availabilityNotes: "Popular for weekday creative bookings.",
+    maxBookingDurationDays: 7,
+    latitude: 49.2831,
+    longitude: -123.1087,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V6B1A1",
+    photos: [createPhoto(21, "gastown-loft")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 22),
+    ownerEmail: "owner3@rentify.local",
+    status: "published",
+    family: "equipment",
+    subtype: "camera",
+    name: "Cinema Interview Kit",
+    description: "Two-camera interview package with lights, audio, and wireless monitoring.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 145 }, weekend: { amount: 360 } },
+    tags: ["cinema", "interview", "video"],
+    attributes: {
+      brand: "Blackmagic",
+      model: "Pocket 6K Pair",
+      condition: "excellent",
+      power_source: "mixed",
+      weight_lb: 16,
+      includes_delivery: true,
+    },
+    availabilityStatus: "limited",
+    availabilityNotes: "Requires prep day for full package.",
+    maxBookingDurationDays: 4,
+    latitude: 49.2809,
+    longitude: -123.1235,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V6C2T7",
+    photos: [createPhoto(22, "cinema-interview-kit")],
+    availabilityBlocks: [
+      createOwnerBlock(22, "2026-06-09T16:00:00.000Z", "2026-06-10T18:00:00.000Z", "Prep and cleanup buffer."),
+    ],
+  },
+  {
+    id: createFixtureId(2000, 23),
+    ownerEmail: "owner3@rentify.local",
+    status: "published",
+    family: "vehicle",
+    subtype: "car",
+    name: "Electric City Runabout",
+    description: "Compact EV with easy downtown pickup and included charging card.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 96 }, weekly: { amount: 540 } },
+    tags: ["ev", "city", "vancouver"],
+    attributes: {
+      make: "Nissan",
+      model: "Leaf",
+      year: 2024,
+      seats: 5,
+      transmission: "automatic",
+      fuel_type: "electric",
+      license_class: "Class 5",
+    },
+    availabilityStatus: "available",
+    availabilityNotes: "Ideal for city errands and short trips.",
+    maxBookingDurationDays: 5,
+    latitude: 49.2669,
+    longitude: -123.1154,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V5Y1K3",
+    photos: [createPhoto(23, "electric-runabout")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 24),
+    ownerEmail: "owner3@rentify.local",
+    status: "draft",
+    family: "place",
+    subtype: "private_room",
+    name: "Mount Pleasant Guest Suite",
+    description: "Private guest suite with a dedicated desk and easy SkyTrain access.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 92 }, weekly: { amount: 540 } },
+    tags: ["suite", "guest", "mountpleasant"],
+    attributes: {
+      guest_capacity: 2,
+      bedrooms: 1,
+      bathrooms: 1,
+      property_type: "suite",
+      amenities: ["wifi", "desk", "laundry"],
+      pet_friendly: false,
+      parking: false,
+    },
+    availabilityStatus: "available",
+    availabilityNotes: "Draft while final photos are uploaded.",
+    maxBookingDurationDays: 14,
+    latitude: 49.2625,
+    longitude: -123.1016,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V5T2C1",
+    photos: [createPhoto(24, "mount-pleasant-suite")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 25),
+    ownerEmail: "owner3@rentify.local",
+    status: "published",
+    family: "equipment",
+    subtype: "tool",
+    name: "Woodworking Weekend Bench Kit",
+    description: "Portable workshop kit with bench, clamps, routers, and finish tools.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 88 }, weekly: { amount: 475 } },
+    tags: ["woodworking", "tools", "maker"],
+    attributes: {
+      brand: "Festool",
+      model: "Bench Pack",
+      condition: "excellent",
+      power_source: "wall",
+      weight_lb: 48,
+      includes_delivery: false,
+    },
+    availabilityStatus: "limited",
+    availabilityNotes: "Pickup by appointment only.",
+    maxBookingDurationDays: 5,
+    latitude: 49.2484,
+    longitude: -123.1031,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V5V3C2",
+    photos: [createPhoto(25, "bench-kit")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 26),
+    ownerEmail: "owner3@rentify.local",
+    status: "paused",
+    family: "equipment",
+    subtype: "general_equipment",
+    name: "Trade Show Display Walls",
+    description: "Modular display walls and plinths for brand activations and convention booths.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 135 }, weekly: { amount: 690 } },
+    tags: ["trade-show", "display", "activation"],
+    attributes: {
+      brand: "ExpoForm",
+      model: "Mod Wall",
+      condition: "good",
+      power_source: "none",
+      weight_lb: 78,
+      includes_delivery: true,
+    },
+    availabilityStatus: "unavailable",
+    availabilityNotes: "Paused during panel replacement.",
+    maxBookingDurationDays: 10,
+    latitude: 49.2766,
+    longitude: -123.1326,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V6J1P4",
+    photos: [createPhoto(26, "display-walls")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 27),
+    ownerEmail: "owner3@rentify.local",
+    status: "published",
+    family: "vehicle",
+    subtype: "bike",
+    name: "Seawall Adventure Bikes",
+    description: "Pair of hybrid bikes with locks, lights, and waterproof panniers.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 54 }, weekend: { amount: 126 } },
+    tags: ["bike", "seawall", "pair"],
+    attributes: {
+      make: "Trek",
+      model: "FX 3",
+      year: 2025,
+      seats: 1,
+      transmission: "multi-speed",
+      fuel_type: "human",
+      license_class: "none",
+    },
+    availabilityStatus: "available",
+    availabilityNotes: "Two-bike set, price shown per bike.",
+    maxBookingDurationDays: 4,
+    latitude: 49.2891,
+    longitude: -123.1207,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V6G1Z4",
+    photos: [createPhoto(27, "seawall-bikes")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 28),
+    ownerEmail: "owner3@rentify.local",
+    status: "published",
+    family: "place",
+    subtype: "storage_space",
+    name: "Commercial Loading Bay Storage",
+    description: "Short-term inventory storage with pallet jack access and loading bay entry.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 46 }, monthly: { amount: 790 } },
+    tags: ["storage", "loading-bay", "commercial"],
+    attributes: {
+      guest_capacity: 2,
+      bedrooms: 0,
+      bathrooms: 0,
+      property_type: "warehouse",
+      amenities: ["loading_dock", "security_camera", "ground_access"],
+      pet_friendly: false,
+      parking: true,
+    },
+    availabilityStatus: "limited",
+    availabilityNotes: "Best for weekday daytime access.",
+    maxBookingDurationDays: 20,
+    latitude: 49.2722,
+    longitude: -123.0817,
+    city: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    postalCode: "V5K1A1",
+    photos: [createPhoto(28, "loading-bay-storage")],
+    availabilityBlocks: [
+      createOwnerBlock(28, "2026-09-02T14:00:00.000Z", "2026-09-05T02:00:00.000Z", "Inventory turnover window."),
+    ],
+  },
+  {
+    id: createFixtureId(2000, 29),
+    ownerEmail: "owner4@rentify.local",
+    status: "published",
+    family: "place",
+    subtype: "entire_place",
+    name: "Plateau Content Apartment",
+    description: "Styled apartment with natural light, suited for still photography and short stays.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 172 }, weekly: { amount: 980 } },
+    tags: ["montreal", "plateau", "content"],
+    attributes: {
+      guest_capacity: 4,
+      bedrooms: 2,
+      bathrooms: 1,
+      property_type: "apartment",
+      amenities: ["wifi", "kitchen", "balcony"],
+      pet_friendly: true,
+      parking: false,
+    },
+    availabilityStatus: "available",
+    availabilityNotes: "Great morning light.",
+    maxBookingDurationDays: 10,
+    latitude: 45.5274,
+    longitude: -73.5747,
+    city: "Montreal",
+    region: "Quebec",
+    country: "Canada",
+    postalCode: "H2J2K9",
+    photos: [createPhoto(29, "plateau-apartment")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 30),
+    ownerEmail: "owner4@rentify.local",
+    status: "published",
+    family: "equipment",
+    subtype: "audio",
+    name: "Live Recording Session Pack",
+    description: "Podcast and live session bundle with interface, mics, and portable acoustic treatment.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 84 }, weekend: { amount: 190 } },
+    tags: ["audio", "recording", "session"],
+    attributes: {
+      brand: "Universal Audio",
+      model: "Session Pack",
+      condition: "excellent",
+      power_source: "wall",
+      weight_lb: 18,
+      includes_delivery: false,
+    },
+    availabilityStatus: "available",
+    availabilityNotes: "Works well for voiceover sessions.",
+    maxBookingDurationDays: 5,
+    latitude: 45.5143,
+    longitude: -73.5617,
+    city: "Montreal",
+    region: "Quebec",
+    country: "Canada",
+    postalCode: "H2Y1C6",
+    photos: [createPhoto(30, "recording-pack")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 31),
+    ownerEmail: "owner4@rentify.local",
+    status: "draft",
+    family: "vehicle",
+    subtype: "bike",
+    name: "Canal Cruiser Bike Pair",
+    description: "Relaxed city bikes with baskets and locks for exploring the Lachine Canal.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 44 }, weekend: { amount: 104 } },
+    tags: ["bike", "montreal", "canal"],
+    attributes: {
+      make: "Linus",
+      model: "Mixte Pair",
+      year: 2025,
+      seats: 1,
+      transmission: "multi-speed",
+      fuel_type: "human",
+      license_class: "none",
+    },
+    availabilityStatus: "available",
+    availabilityNotes: "Draft while adding second set of photos.",
+    maxBookingDurationDays: 4,
+    latitude: 45.4894,
+    longitude: -73.5633,
+    city: "Montreal",
+    region: "Quebec",
+    country: "Canada",
+    postalCode: "H3K1H7",
+    photos: [createPhoto(31, "canal-cruisers")],
+    availabilityBlocks: [],
+  },
+  {
+    id: createFixtureId(2000, 32),
+    ownerEmail: "owner4@rentify.local",
+    status: "paused",
+    family: "equipment",
+    subtype: "general_equipment",
+    name: "Festival Vendor Pop-Up Buildout",
+    description: "Tent, counters, menu boards, battery lights, and queue barriers for food events.",
+    pricingCurrency: "CAD",
+    pricing: { currency: "CAD", daily: { amount: 128 }, weekly: { amount: 710 } },
+    tags: ["festival", "vendor", "popup"],
+    attributes: {
+      brand: "EventGrid",
+      model: "Vendor Buildout",
+      condition: "good",
+      power_source: "mixed",
+      weight_lb: 64,
+      includes_delivery: true,
+    },
+    availabilityStatus: "unavailable",
+    availabilityNotes: "Paused while canopy fabric is repaired.",
+    maxBookingDurationDays: 8,
+    latitude: 45.5007,
+    longitude: -73.5673,
+    city: "Montreal",
+    region: "Quebec",
+    country: "Canada",
+    postalCode: "H3B1A7",
+    photos: [createPhoto(32, "festival-buildout")],
     availabilityBlocks: [],
   },
 ];
-
-export async function ensureDevFixturePostings(userIdsByEmail: Map<string, string>): Promise<void> {
-  const prisma = getDatabaseClient();
-
-  for (const fixturePosting of DEV_FIXTURE_POSTINGS) {
-    const ownerId = userIdsByEmail.get(fixturePosting.ownerEmail);
-
-    if (!ownerId) {
-      throw new Error(`Missing fixture owner for posting seed: ${fixturePosting.ownerEmail}`);
-    }
-
-    await prisma.$transaction(async (transaction) => {
-      const existingPosting = await transaction.posting.findUnique({
-        where: {
-          id: fixturePosting.id,
-        },
-        select: {
-          createdAt: true,
-        },
-      });
-
-      const publishedAt =
-        fixturePosting.status === "published" ? existingPosting?.createdAt ?? new Date() : null;
-      const pausedAt =
-        fixturePosting.status === "paused" ? existingPosting?.createdAt ?? new Date() : null;
-
-      await transaction.posting.upsert({
-        where: {
-          id: fixturePosting.id,
-        },
-        update: {
-          ownerId,
-          status: fixturePosting.status,
-          family: fixturePosting.family,
-          subtype: fixturePosting.subtype,
-          name: fixturePosting.name,
-          description: fixturePosting.description,
-          pricingCurrency: fixturePosting.pricingCurrency,
-          pricing: fixturePosting.pricing as never,
-          tags: fixturePosting.tags as never,
-          attributes: fixturePosting.attributes as never,
-          availabilityStatus: fixturePosting.availabilityStatus,
-          availabilityNotes: fixturePosting.availabilityNotes ?? null,
-          maxBookingDurationDays: fixturePosting.maxBookingDurationDays ?? null,
-          latitude: fixturePosting.latitude,
-          longitude: fixturePosting.longitude,
-          city: fixturePosting.city,
-          region: fixturePosting.region,
-          country: fixturePosting.country,
-          postalCode: fixturePosting.postalCode ?? null,
-          publishedAt,
-          pausedAt,
-          archivedAt: null,
-        },
-        create: {
-          id: fixturePosting.id,
-          ownerId,
-          status: fixturePosting.status,
-          family: fixturePosting.family,
-          subtype: fixturePosting.subtype,
-          name: fixturePosting.name,
-          description: fixturePosting.description,
-          pricingCurrency: fixturePosting.pricingCurrency,
-          pricing: fixturePosting.pricing as never,
-          tags: fixturePosting.tags as never,
-          attributes: fixturePosting.attributes as never,
-          availabilityStatus: fixturePosting.availabilityStatus,
-          availabilityNotes: fixturePosting.availabilityNotes ?? null,
-          maxBookingDurationDays: fixturePosting.maxBookingDurationDays ?? null,
-          latitude: fixturePosting.latitude,
-          longitude: fixturePosting.longitude,
-          city: fixturePosting.city,
-          region: fixturePosting.region,
-          country: fixturePosting.country,
-          postalCode: fixturePosting.postalCode ?? null,
-          publishedAt,
-          pausedAt,
-          archivedAt: null,
-        },
-      });
-
-      await transaction.postingPhoto.deleteMany({
-        where: {
-          postingId: fixturePosting.id,
-        },
-      });
-
-      await transaction.postingPhoto.create({
-        data: {
-          id: fixturePosting.photo.id,
-          postingId: fixturePosting.id,
-          blobUrl: fixturePosting.photo.blobUrl,
-          blobName: fixturePosting.photo.blobName,
-          position: 0,
-        },
-      });
-
-      await transaction.postingAvailabilityBlock.deleteMany({
-        where: {
-          postingId: fixturePosting.id,
-          source: "owner",
-        },
-      });
-
-      if (fixturePosting.availabilityBlocks.length > 0) {
-        await transaction.postingAvailabilityBlock.createMany({
-          data: fixturePosting.availabilityBlocks.map((block) => ({
-            id: block.id,
-            postingId: fixturePosting.id,
-            startAt: new Date(block.startAt),
-            endAt: new Date(block.endAt),
-            note: block.note ?? null,
-            source: "owner",
-          })),
-        });
-      }
-
-      await transaction.postingSearchOutbox.deleteMany({
-        where: {
-          postingId: fixturePosting.id,
-          indexedAt: null,
-          deadLetteredAt: null,
-        },
-      });
-
-      await transaction.postingSearchOutbox.create({
-        data: {
-          id: randomUUID(),
-          postingId: fixturePosting.id,
-          operation: fixturePosting.status === "published" ? "upsert" : "delete",
-          dedupeKey: `dev-seed:${fixturePosting.id}:${Date.now()}`,
-        },
-      });
-    });
-
-    console.info(
-      `Ensured dev fixture posting ${fixturePosting.name} for ${fixturePosting.ownerEmail} (${fixturePosting.status}).`,
-    );
-  }
-
-  await syncOwnerProfilePostingCounts(userIdsByEmail);
-  console.info(`Ensured ${DEV_FIXTURE_POSTINGS.length} dev fixture postings.`);
-}
-
-async function syncOwnerProfilePostingCounts(userIdsByEmail: Map<string, string>): Promise<void> {
-  const prisma = getDatabaseClient();
-  const ownerEmails = Array.from(
-    new Set(DEV_FIXTURE_POSTINGS.map((posting) => posting.ownerEmail)),
-  );
-
-  for (const ownerEmail of ownerEmails) {
-    const ownerId = userIdsByEmail.get(ownerEmail);
-
-    if (!ownerId) {
-      continue;
-    }
-
-    const [rentPostingsCount, availableRentPostingsCount] = await Promise.all([
-      prisma.posting.count({
-        where: {
-          ownerId,
-          status: {
-            in: ["draft", "published", "paused"],
-          },
-        },
-      }),
-      prisma.posting.count({
-        where: {
-          ownerId,
-          status: "published",
-          availabilityStatus: {
-            in: ["available", "limited"],
-          },
-        },
-      }),
-    ]);
-
-    await prisma.profile.update({
-      where: {
-        userId: ownerId,
-      },
-      data: {
-        rentPostingsCount,
-        availableRentPostingsCount,
-      },
-    });
-  }
-}
