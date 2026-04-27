@@ -8,9 +8,9 @@ x-mcp-build: &mcp-build
 
 x-backend-environment: &backend-environment
   NODE_ENV: development
-  DATABASE_URL: mysql://rent:rent@mysql:3307/rent
+  DATABASE_URL: mysql://rent:rent@mysql:3306/rent
   REDIS_HOST: redis
-  REDIS_PORT: 6380
+  REDIS_PORT: 6379
   ELASTICSEARCH_ENABLED: "true"
   ELASTICSEARCH_URL: http://elasticsearch:9200
   ELASTICSEARCH_POSTINGS_INDEX: postings

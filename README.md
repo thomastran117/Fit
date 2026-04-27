@@ -140,7 +140,7 @@ Notes:
   - `user3@rentify.local` / `Rentify123!`
   - `user4@rentify.local` / `Rentify123!`
   - `admin1@rentify.local` / `Rentify123!`
-- The seed set includes 32 postings and 27 bookings, along with related payments, rentings, reviews, search rows, and analytics fixtures for local browsing and testing.
+- The seed set includes 62 postings and 27 bookings, along with related payments, rentings, reviews across 5 reviewed postings, search rows, and analytics fixtures for local browsing and testing.
 - The current `docker-compose.yml` includes placeholder values for `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
 - Replace those placeholders before using the stack for anything beyond local bootstrapping.
 

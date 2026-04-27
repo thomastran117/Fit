@@ -259,15 +259,13 @@ function createPayoutFixture(
     return undefined;
   }
 
-  const released = index % 2 === 0;
-
   return {
     id: createFixtureId(3330, index),
-    status: released ? "released" : "scheduled",
+    status: "released",
     amount: subtotal,
     dueAt: addDays(`2026-04-04T09:00:00.000Z`, index),
-    releasedAt: released ? addDays(`2026-04-05T09:00:00.000Z`, index) : undefined,
-    squarePayoutId: released ? `sq-payout-${index}` : undefined,
+    releasedAt: addDays(`2026-04-05T09:00:00.000Z`, index),
+    squarePayoutId: `sq-payout-${index}`,
     createdAt: addHours(`2026-04-04T08:00:00.000Z`, index),
   };
 }
@@ -352,7 +350,7 @@ function createRentingFixture(
   lifecycle: BookingLifecycle,
   createdAt: string,
 ): SeedRentingFixture | undefined {
-  if (lifecycle !== "paid_confirmed") {
+  if (!["paid", "paid_confirmed"].includes(lifecycle)) {
     return undefined;
   }
 
@@ -473,7 +471,7 @@ function createBookingFixture(spec: BookingSpec): SeedBookingFixture {
     booking.decisionNote = "Refund issued after post-payment cancellation.";
   }
 
-  if (spec.lifecycle === "paid_confirmed") {
+  if (["paid", "paid_confirmed"].includes(spec.lifecycle)) {
     booking.convertedAt = addHours(createdAt, 9);
     booking.conversionReservedAt = addHours(createdAt, 7);
     booking.conversionReservationExpiresAt = addHours(createdAt, 11);
@@ -496,17 +494,17 @@ const BOOKING_SPECS: BookingSpec[] = [
   { index: 4, postingIndex: 3, renterEmail: "user4@rentify.local", lifecycle: "approved", startAt: "2026-05-14T19:00:00.000Z", endAt: "2026-05-17T19:00:00.000Z", guestCount: 2, dailyPriceAmount: 85, contactName: "Avery Kim", note: "Visiting for a short work trip." },
   { index: 5, postingIndex: 11, renterEmail: "user1@rentify.local", lifecycle: "approved", startAt: "2026-05-26T13:00:00.000Z", endAt: "2026-05-27T22:00:00.000Z", guestCount: 4, dailyPriceAmount: 120, contactName: "Jordan Lee", note: "Need a workshop for prototype review." },
   { index: 6, postingIndex: 21, renterEmail: "user2@rentify.local", lifecycle: "approved", startAt: "2026-05-30T15:00:00.000Z", endAt: "2026-06-01T15:00:00.000Z", guestCount: 5, dailyPriceAmount: 210, contactName: "Priya Nair", note: "Two-day brand shoot with client walkthroughs." },
-  { index: 7, postingIndex: 4, renterEmail: "user3@rentify.local", lifecycle: "awaiting_payment", startAt: "2026-06-04T14:00:00.000Z", endAt: "2026-06-07T14:00:00.000Z", guestCount: 1, dailyPriceAmount: 55, contactName: "Sam Turner", note: "Weekend renovation project." },
-  { index: 8, postingIndex: 13, renterEmail: "user4@rentify.local", lifecycle: "awaiting_payment", startAt: "2026-06-10T12:00:00.000Z", endAt: "2026-06-13T12:00:00.000Z", guestCount: 3, dailyPriceAmount: 78, contactName: "Avery Kim", note: "Family visit and errands." },
-  { index: 9, postingIndex: 29, renterEmail: "user1@rentify.local", lifecycle: "awaiting_payment", startAt: "2026-06-14T16:00:00.000Z", endAt: "2026-06-16T16:00:00.000Z", guestCount: 2, dailyPriceAmount: 172, contactName: "Jordan Lee", note: "Small editorial content shoot." },
-  { index: 10, postingIndex: 6, renterEmail: "user2@rentify.local", lifecycle: "processing", startAt: "2026-06-18T14:00:00.000Z", endAt: "2026-06-20T14:00:00.000Z", guestCount: 1, dailyPriceAmount: 58, contactName: "Priya Nair", note: "Testing a weekend trail ride." },
-  { index: 11, postingIndex: 15, renterEmail: "user3@rentify.local", lifecycle: "processing", startAt: "2026-06-22T12:00:00.000Z", endAt: "2026-06-24T12:00:00.000Z", guestCount: 2, dailyPriceAmount: 95, contactName: "Sam Turner", note: "Portable setup for a neighborhood event." },
+  { index: 7, postingIndex: 4, renterEmail: "user3@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-06-04T14:00:00.000Z", endAt: "2026-06-07T14:00:00.000Z", guestCount: 1, dailyPriceAmount: 55, contactName: "Sam Turner", note: "Weekend renovation project." },
+  { index: 8, postingIndex: 13, renterEmail: "user4@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-06-10T12:00:00.000Z", endAt: "2026-06-13T12:00:00.000Z", guestCount: 3, dailyPriceAmount: 78, contactName: "Avery Kim", note: "Family visit and errands." },
+  { index: 9, postingIndex: 29, renterEmail: "user1@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-06-14T16:00:00.000Z", endAt: "2026-06-16T16:00:00.000Z", guestCount: 2, dailyPriceAmount: 172, contactName: "Jordan Lee", note: "Small editorial content shoot." },
+  { index: 10, postingIndex: 6, renterEmail: "user2@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-06-18T14:00:00.000Z", endAt: "2026-06-20T14:00:00.000Z", guestCount: 1, dailyPriceAmount: 58, contactName: "Priya Nair", note: "Testing a weekend trail ride." },
+  { index: 11, postingIndex: 15, renterEmail: "user3@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-06-22T12:00:00.000Z", endAt: "2026-06-24T12:00:00.000Z", guestCount: 2, dailyPriceAmount: 95, contactName: "Sam Turner", note: "Portable setup for a neighborhood event." },
   { index: 12, postingIndex: 1, renterEmail: "user1@rentify.local", lifecycle: "paid", startAt: "2026-06-26T16:00:00.000Z", endAt: "2026-06-29T16:00:00.000Z", guestCount: 2, dailyPriceAmount: 180, contactName: "Jordan Lee", note: "Booked and paid for a weekend shoot." },
   { index: 13, postingIndex: 18, renterEmail: "user4@rentify.local", lifecycle: "paid", startAt: "2026-06-27T12:00:00.000Z", endAt: "2026-06-29T12:00:00.000Z", guestCount: 1, dailyPriceAmount: 72, contactName: "Avery Kim", note: "Field interview package secured." },
   { index: 14, postingIndex: 11, renterEmail: "user2@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-07-02T13:00:00.000Z", endAt: "2026-07-04T22:00:00.000Z", guestCount: 5, dailyPriceAmount: 120, contactName: "Priya Nair", note: "Confirmed team workshop rental." },
   { index: 15, postingIndex: 16, renterEmail: "user3@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-07-05T15:00:00.000Z", endAt: "2026-07-08T15:00:00.000Z", guestCount: 2, dailyPriceAmount: 165, contactName: "Sam Turner", note: "Confirmed stay for canal-side visit." },
   { index: 16, postingIndex: 21, renterEmail: "user4@rentify.local", lifecycle: "paid_confirmed", startAt: "2026-07-08T16:00:00.000Z", endAt: "2026-07-10T16:00:00.000Z", guestCount: 4, dailyPriceAmount: 210, contactName: "Avery Kim", note: "Confirmed production booking with client." },
-  { index: 17, postingIndex: 23, renterEmail: "user1@rentify.local", lifecycle: "failed_retryable", startAt: "2026-07-12T15:00:00.000Z", endAt: "2026-07-14T15:00:00.000Z", guestCount: 2, dailyPriceAmount: 96, contactName: "Jordan Lee", note: "Payment timed out during EV reservation." },
+  { index: 17, postingIndex: 23, renterEmail: "user1@rentify.local", lifecycle: "failed_final", startAt: "2026-07-12T15:00:00.000Z", endAt: "2026-07-14T15:00:00.000Z", guestCount: 2, dailyPriceAmount: 96, contactName: "Jordan Lee", note: "Payment timed out during EV reservation." },
   { index: 18, postingIndex: 27, renterEmail: "user2@rentify.local", lifecycle: "failed_final", startAt: "2026-07-16T13:00:00.000Z", endAt: "2026-07-18T13:00:00.000Z", guestCount: 2, dailyPriceAmount: 54, contactName: "Priya Nair", note: "Card declined for bike rental." },
   { index: 19, postingIndex: 30, renterEmail: "user3@rentify.local", lifecycle: "failed_final", startAt: "2026-07-19T12:00:00.000Z", endAt: "2026-07-21T12:00:00.000Z", guestCount: 3, dailyPriceAmount: 84, contactName: "Sam Turner", note: "Audio booking failed after issuer decline." },
   { index: 20, postingIndex: 20, renterEmail: "user4@rentify.local", lifecycle: "declined", startAt: "2026-07-23T14:00:00.000Z", endAt: "2026-07-25T14:00:00.000Z", guestCount: 2, dailyPriceAmount: 52, contactName: "Avery Kim", note: "Owner declined due to overlap with maintenance." },
