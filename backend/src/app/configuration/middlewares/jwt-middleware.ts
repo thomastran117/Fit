@@ -32,6 +32,49 @@ function createJwtPrincipal(claims: JwtClaims): JwtAuthPrincipal {
   };
 }
 
+type PatRoutePolicy = {
+  method: string;
+  pattern: RegExp;
+  requiredScope: "mcp:read" | "mcp:write";
+};
+
+const PAT_ROUTE_POLICIES: PatRoutePolicy[] = [
+  { method: "GET", pattern: /^\/profile\/me$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/batch$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/me$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/me\/batch$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/analytics\/summary$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/analytics\/postings$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/[^/]+$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/[^/]+\/analytics$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/[^/]+\/reviews$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/[^/]+\/availability-blocks$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/[^/]+\/booking-requests$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/booking-requests\/me$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/booking-requests\/[^/]+$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/payouts\/me$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/rentings\/me$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/rentings\/[^/]+$/, requiredScope: "mcp:read" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/booking-quote$/, requiredScope: "mcp:read" },
+  { method: "POST", pattern: /^\/postings$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/booking-requests$/, requiredScope: "mcp:write" },
+  { method: "PUT", pattern: /^\/postings\/[^/]+$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/duplicate$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/publish$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/pause$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/unpause$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/archive$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/availability-blocks$/, requiredScope: "mcp:write" },
+  { method: "PUT", pattern: /^\/postings\/[^/]+\/availability-blocks\/[^/]+$/, requiredScope: "mcp:write" },
+  { method: "DELETE", pattern: /^\/postings\/[^/]+\/availability-blocks\/[^/]+$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/reviews$/, requiredScope: "mcp:write" },
+  { method: "PUT", pattern: /^\/postings\/[^/]+\/reviews\/me$/, requiredScope: "mcp:write" },
+  { method: "PUT", pattern: /^\/booking-requests\/[^/]+$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/booking-requests\/[^/]+\/approve$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/booking-requests\/[^/]+\/decline$/, requiredScope: "mcp:write" },
+];
+
 function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: AuthPrincipal): void {
   if (auth.authMethod !== "pat") {
     return;
@@ -39,17 +82,9 @@ function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: Au
 
   const pathname = new URL(context.req.url).pathname;
   const requestMethod = context.req.method ?? "GET";
-  const policy = [
-    { method: "GET", pattern: /^\/profile\/me$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/postings\/me$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/postings\/me\/batch$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/booking-requests\/me$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/payouts\/me$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/rentings\/me$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/postings\/analytics\/summary$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/postings\/analytics\/postings$/, requiredScope: "mcp:read" },
-    { method: "GET", pattern: /^\/postings\/[^/]+\/analytics$/, requiredScope: "mcp:read" },
-  ].find((entry) => entry.method === requestMethod && entry.pattern.test(pathname));
+  const policy = PAT_ROUTE_POLICIES.find(
+    (entry) => entry.method === requestMethod && entry.pattern.test(pathname),
+  );
 
   if (!policy) {
     throw new ForbiddenError("Personal access tokens cannot access this endpoint.", {

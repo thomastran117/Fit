@@ -79,10 +79,29 @@ describe("Rentify MCP server smoke test", () => {
 
       const toolList = await client.listTools();
       expect(toolList.tools.map((tool) => tool.name).sort()).toEqual([
+        "archive_posting",
+        "batch_get_my_postings",
         "batch_get_postings",
+        "create_posting",
+        "create_posting_availability_block",
+        "create_posting_review",
+        "delete_posting_availability_block",
+        "duplicate_posting",
+        "get_my_posting",
         "get_posting",
+        "get_posting_analytics",
+        "get_postings_analytics_summary",
+        "list_my_postings",
+        "list_posting_availability_blocks",
         "list_posting_reviews",
+        "list_postings_analytics",
+        "pause_posting",
+        "publish_posting",
         "search_postings",
+        "unpause_posting",
+        "update_my_posting_review",
+        "update_posting",
+        "update_posting_availability_block",
       ]);
 
       const result = await client.callTool({

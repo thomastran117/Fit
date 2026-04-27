@@ -1,15 +1,39 @@
 # Rentify MCP Server
 
-This package exposes a local `stdio` MCP server for Rentify's marketplace APIs.
+This package exposes a local `stdio` MCP server for Rentify's postings APIs.
 
 ## What It Does
 
-The current tool surface is intentionally read-only. It wraps the live backend HTTP API and exposes these tools:
+It wraps the live backend HTTP API and exposes public marketplace tools plus authenticated postings-management tools.
+
+Public marketplace tools:
 
 - `search_postings`
 - `get_posting`
 - `batch_get_postings`
 - `list_posting_reviews`
+
+Authenticated postings tools:
+
+- `get_my_posting`
+- `list_my_postings`
+- `batch_get_my_postings`
+- `create_posting`
+- `update_posting`
+- `duplicate_posting`
+- `publish_posting`
+- `pause_posting`
+- `unpause_posting`
+- `archive_posting`
+- `list_posting_availability_blocks`
+- `create_posting_availability_block`
+- `update_posting_availability_block`
+- `delete_posting_availability_block`
+- `get_postings_analytics_summary`
+- `list_postings_analytics`
+- `get_posting_analytics`
+- `create_posting_review`
+- `update_my_posting_review`
 
 The backend API must already be running before this MCP server starts.
 
@@ -30,7 +54,12 @@ Environment variables:
 - `RENTIFY_MCP_VERSION`
   - Optional override for the MCP server version
 
-Public marketplace tools remain unauthenticated. Protected MCP calls, when added, should send `Authorization: Bearer <RENTIFY_PAT>`.
+Public marketplace tools remain unauthenticated. Protected postings tools send `Authorization: Bearer <RENTIFY_PAT>`.
+
+Use a PAT with:
+
+- `mcp:read` for owner posting reads and analytics
+- `mcp:write` for posting mutations, availability-block writes, and posting review writes
 
 ## Local Development
 

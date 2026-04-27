@@ -83,6 +83,7 @@ interface ChangePasswordInput {
 interface CreatePersonalAccessTokenInput {
   name: string;
   expiresInDays: number;
+  scopes: Array<"mcp:read" | "mcp:write">;
 }
 
 let refreshSessionPromise: Promise<AuthResponseBody | null> | null = null;
@@ -351,7 +352,7 @@ export const authApi = {
   ): Promise<CreatePersonalAccessTokenResult> {
     return postAuthenticatedJson<CreatePersonalAccessTokenResult>("/auth/personal-access-tokens", {
       name: input.name,
-      scopes: ["mcp:read"],
+      scopes: input.scopes,
       expiresInDays: input.expiresInDays,
     });
   },

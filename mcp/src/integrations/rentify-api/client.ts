@@ -1,7 +1,19 @@
 import type {
   BatchGetPostingsResponse,
+  BookingQuoteResponse,
+  BookingRequestRecord,
+  BookingRequestsListResponse,
   GetPostingResponse,
+  ListOwnerPostingsResponse,
+  ListPostingAvailabilityBlocksResponse,
   ListPostingReviewsResponse,
+  PostingAnalyticsDetailResponse,
+  PostingAnalyticsListResponse,
+  PostingAnalyticsSummaryResponse,
+  PostingAvailabilityBlockResponse,
+  RentingRecord,
+  RentingsListResponse,
+  RentifyPostingRecord,
   SearchPostingsResponse,
 } from "./types.js";
 
@@ -43,6 +55,130 @@ export interface SearchPostingsQuery extends QueryParams {
   startAt?: string;
   endAt?: string;
   sort?: "relevance" | "newest" | "oldest" | "dailyPrice" | "nearest" | "nameAsc" | "nameDesc";
+}
+
+export interface ListMyPostingsQuery extends QueryParams {
+  page?: number;
+  pageSize?: number;
+  status?: "draft" | "published" | "paused" | "archived";
+}
+
+export interface PostingAnalyticsListQuery extends QueryParams {
+  window?: "7d" | "30d" | "all";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PostingAnalyticsDetailQuery extends QueryParams {
+  window?: "7d" | "30d" | "all";
+  granularity?: "hour" | "day";
+}
+
+export interface PostingWriteBody extends JsonObject {
+  variant: {
+    family: "place" | "equipment" | "vehicle";
+    subtype: string;
+  };
+  name: string;
+  description: string;
+  pricing: {
+    currency: string;
+    daily: {
+      amount: number;
+    };
+    hourly?: {
+      amount: number;
+    };
+    weekly?: {
+      amount: number;
+    };
+    monthly?: {
+      amount: number;
+    };
+  };
+  photos: Array<{
+    blobUrl: string;
+    blobName: string;
+    position: number;
+  }>;
+  tags: string[];
+  attributes: Record<string, string | number | boolean | string[]>;
+  availabilityStatus: "available" | "limited" | "unavailable";
+  availabilityNotes?: string | null;
+  maxBookingDurationDays?: number | null;
+  location: {
+    latitude: number;
+    longitude: number;
+    city: string;
+    region: string;
+    country: string;
+    postalCode?: string | null;
+  };
+}
+
+export interface CreatePostingBody extends PostingWriteBody {
+  availabilityBlocks: Array<{
+    startAt: string;
+    endAt: string;
+    note?: string | null;
+  }>;
+}
+
+export interface UpdatePostingBody extends PostingWriteBody {}
+
+export interface PostingAvailabilityBlockBody extends JsonObject {
+  startAt: string;
+  endAt: string;
+  note?: string | null;
+}
+
+export interface PostingReviewBody extends JsonObject {
+  rating: number;
+  title?: string | null;
+  comment?: string | null;
+}
+
+export interface BookingRequestBody extends JsonObject {
+  startAt: string;
+  endAt: string;
+  guestCount: number;
+  note?: string | null;
+  contactName: string;
+  contactEmail: string;
+  contactPhoneNumber?: string | null;
+}
+
+export interface BookingQuoteBody extends JsonObject {
+  startAt: string;
+  endAt: string;
+  guestCount: number;
+  note?: string | null;
+}
+
+export interface BookingRequestDecisionBody extends JsonObject {
+  note?: string | null;
+}
+
+export interface ListBookingRequestsQuery extends QueryParams {
+  page?: number;
+  pageSize?: number;
+  status?:
+    | "pending"
+    | "approved"
+    | "awaiting_payment"
+    | "payment_processing"
+    | "paid"
+    | "payment_failed"
+    | "declined"
+    | "expired"
+    | "cancelled"
+    | "refunded";
+}
+
+export interface ListMyRentingsQuery extends QueryParams {
+  page?: number;
+  pageSize?: number;
+  status?: "confirmed";
 }
 
 export class BackendApiError extends Error {
@@ -150,6 +286,217 @@ export class RentifyApiClient {
     );
   }
 
+  async getMyPosting(id: string): Promise<GetPostingResponse> {
+    return this.getProtected<GetPostingResponse>(`/postings/${encodeURIComponent(id)}`);
+  }
+
+  async listMyPostings(query: ListMyPostingsQuery = {}): Promise<ListOwnerPostingsResponse> {
+    return this.getProtected<ListOwnerPostingsResponse>("/postings/me", query);
+  }
+
+  async batchGetMyPostings(ids: string[]): Promise<BatchGetPostingsResponse> {
+    return this.getProtected<BatchGetPostingsResponse>("/postings/me/batch", {
+      ids,
+    });
+  }
+
+  async createPosting(body: CreatePostingBody): Promise<RentifyPostingRecord> {
+    return this.postProtected<RentifyPostingRecord>("/postings", body);
+  }
+
+  async updatePosting(id: string, body: UpdatePostingBody): Promise<RentifyPostingRecord> {
+    return this.putProtected<RentifyPostingRecord>(`/postings/${encodeURIComponent(id)}`, body);
+  }
+
+  async duplicatePosting(id: string): Promise<RentifyPostingRecord> {
+    return this.postProtected<RentifyPostingRecord>(
+      `/postings/${encodeURIComponent(id)}/duplicate`,
+      {},
+    );
+  }
+
+  async publishPosting(id: string): Promise<RentifyPostingRecord> {
+    return this.postProtected<RentifyPostingRecord>(
+      `/postings/${encodeURIComponent(id)}/publish`,
+      {},
+    );
+  }
+
+  async pausePosting(id: string): Promise<RentifyPostingRecord> {
+    return this.postProtected<RentifyPostingRecord>(
+      `/postings/${encodeURIComponent(id)}/pause`,
+      {},
+    );
+  }
+
+  async unpausePosting(id: string): Promise<RentifyPostingRecord> {
+    return this.postProtected<RentifyPostingRecord>(
+      `/postings/${encodeURIComponent(id)}/unpause`,
+      {},
+    );
+  }
+
+  async archivePosting(id: string): Promise<RentifyPostingRecord> {
+    return this.postProtected<RentifyPostingRecord>(
+      `/postings/${encodeURIComponent(id)}/archive`,
+      {},
+    );
+  }
+
+  async listPostingAvailabilityBlocks(
+    postingId: string,
+  ): Promise<ListPostingAvailabilityBlocksResponse> {
+    return this.getProtected<ListPostingAvailabilityBlocksResponse>(
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks`,
+    );
+  }
+
+  async createPostingAvailabilityBlock(
+    postingId: string,
+    body: PostingAvailabilityBlockBody,
+  ): Promise<PostingAvailabilityBlockResponse> {
+    return this.postProtected<PostingAvailabilityBlockResponse>(
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks`,
+      body,
+    );
+  }
+
+  async updatePostingAvailabilityBlock(
+    postingId: string,
+    blockId: string,
+    body: PostingAvailabilityBlockBody,
+  ): Promise<PostingAvailabilityBlockResponse> {
+    return this.putProtected<PostingAvailabilityBlockResponse>(
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks/${encodeURIComponent(blockId)}`,
+      body,
+    );
+  }
+
+  async deletePostingAvailabilityBlock(postingId: string, blockId: string): Promise<void> {
+    await this.deleteProtected<void>(
+      `/postings/${encodeURIComponent(postingId)}/availability-blocks/${encodeURIComponent(blockId)}`,
+    );
+  }
+
+  async getPostingsAnalyticsSummary(
+    window?: "7d" | "30d" | "all",
+  ): Promise<PostingAnalyticsSummaryResponse> {
+    return this.getProtected<PostingAnalyticsSummaryResponse>("/postings/analytics/summary", {
+      window,
+    });
+  }
+
+  async listPostingsAnalytics(
+    query: PostingAnalyticsListQuery = {},
+  ): Promise<PostingAnalyticsListResponse> {
+    return this.getProtected<PostingAnalyticsListResponse>("/postings/analytics/postings", query);
+  }
+
+  async getPostingAnalytics(
+    postingId: string,
+    query: PostingAnalyticsDetailQuery = {},
+  ): Promise<PostingAnalyticsDetailResponse> {
+    return this.getProtected<PostingAnalyticsDetailResponse>(
+      `/postings/${encodeURIComponent(postingId)}/analytics`,
+      query,
+    );
+  }
+
+  async createPostingReview(
+    postingId: string,
+    body: PostingReviewBody,
+  ): Promise<Record<string, unknown>> {
+    return this.postProtected<Record<string, unknown>>(
+      `/postings/${encodeURIComponent(postingId)}/reviews`,
+      body,
+    );
+  }
+
+  async updateMyPostingReview(
+    postingId: string,
+    body: PostingReviewBody,
+  ): Promise<Record<string, unknown>> {
+    return this.putProtected<Record<string, unknown>>(
+      `/postings/${encodeURIComponent(postingId)}/reviews/me`,
+      body,
+    );
+  }
+
+  async quoteBookingForPosting(
+    postingId: string,
+    body: BookingQuoteBody,
+  ): Promise<BookingQuoteResponse> {
+    return this.postProtected<BookingQuoteResponse>(
+      `/postings/${encodeURIComponent(postingId)}/booking-quote`,
+      body,
+    );
+  }
+
+  async createBookingRequest(
+    postingId: string,
+    body: BookingRequestBody,
+  ): Promise<BookingRequestRecord> {
+    return this.postProtected<BookingRequestRecord>(
+      `/postings/${encodeURIComponent(postingId)}/booking-requests`,
+      body,
+    );
+  }
+
+  async listMyBookingRequests(
+    query: ListBookingRequestsQuery = {},
+  ): Promise<BookingRequestsListResponse> {
+    return this.getProtected<BookingRequestsListResponse>("/booking-requests/me", query);
+  }
+
+  async listPostingBookingRequests(
+    postingId: string,
+    query: ListBookingRequestsQuery = {},
+  ): Promise<BookingRequestsListResponse> {
+    return this.getProtected<BookingRequestsListResponse>(
+      `/postings/${encodeURIComponent(postingId)}/booking-requests`,
+      query,
+    );
+  }
+
+  async getBookingRequest(id: string): Promise<BookingRequestRecord> {
+    return this.getProtected<BookingRequestRecord>(`/booking-requests/${encodeURIComponent(id)}`);
+  }
+
+  async updateBookingRequest(id: string, body: BookingRequestBody): Promise<BookingRequestRecord> {
+    return this.putProtected<BookingRequestRecord>(
+      `/booking-requests/${encodeURIComponent(id)}`,
+      body,
+    );
+  }
+
+  async approveBookingRequest(
+    id: string,
+    body: BookingRequestDecisionBody = {},
+  ): Promise<BookingRequestRecord> {
+    return this.postProtected<BookingRequestRecord>(
+      `/booking-requests/${encodeURIComponent(id)}/approve`,
+      body,
+    );
+  }
+
+  async declineBookingRequest(
+    id: string,
+    body: BookingRequestDecisionBody = {},
+  ): Promise<BookingRequestRecord> {
+    return this.postProtected<BookingRequestRecord>(
+      `/booking-requests/${encodeURIComponent(id)}/decline`,
+      body,
+    );
+  }
+
+  async listMyRentings(query: ListMyRentingsQuery = {}): Promise<RentingsListResponse> {
+    return this.getProtected<RentingsListResponse>("/rentings/me", query);
+  }
+
+  async getRenting(id: string): Promise<RentingRecord> {
+    return this.getProtected<RentingRecord>(`/rentings/${encodeURIComponent(id)}`);
+  }
+
   async getProtected<TResponse>(path: string, query?: QueryParams): Promise<TResponse> {
     return this.get<TResponse>(path, query, {
       requiresAuth: true,
@@ -169,6 +516,38 @@ export class RentifyApiClient {
     });
   }
 
+  private async postProtected<TResponse>(path: string, body: JsonObject): Promise<TResponse> {
+    return this.request<TResponse>({
+      method: "POST",
+      path,
+      body,
+      requestOptions: {
+        requiresAuth: true,
+      },
+    });
+  }
+
+  private async putProtected<TResponse>(path: string, body: JsonObject): Promise<TResponse> {
+    return this.request<TResponse>({
+      method: "PUT",
+      path,
+      body,
+      requestOptions: {
+        requiresAuth: true,
+      },
+    });
+  }
+
+  private async deleteProtected<TResponse>(path: string): Promise<TResponse> {
+    return this.request<TResponse>({
+      method: "DELETE",
+      path,
+      requestOptions: {
+        requiresAuth: true,
+      },
+    });
+  }
+
   private async request<TResponse>({
     method,
     path,
@@ -176,7 +555,7 @@ export class RentifyApiClient {
     body: requestBody,
     requestOptions = {},
   }: {
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PUT" | "DELETE";
     path: string;
     query?: QueryParams;
     body?: JsonObject;
@@ -198,7 +577,7 @@ export class RentifyApiClient {
     body,
     requestOptions,
   }: {
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PUT" | "DELETE";
     path: string;
     query?: QueryParams;
     body?: JsonObject;

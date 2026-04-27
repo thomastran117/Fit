@@ -52,6 +52,7 @@ export default function AccountPage() {
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("Rentify MCP");
   const [tokenExpiryDays, setTokenExpiryDays] = useState("30");
+  const [tokenAccessLevel, setTokenAccessLevel] = useState<"read" | "write">("read");
   const [pendingTokenCreate, setPendingTokenCreate] = useState(false);
   const [pendingTokenRevoke, setPendingTokenRevoke] = useState<string | null>(null);
 
@@ -137,6 +138,7 @@ export default function AccountPage() {
       const result = await authApi.createPersonalAccessToken({
         name: normalizedName,
         expiresInDays: Number(tokenExpiryDays),
+        scopes: tokenAccessLevel === "write" ? ["mcp:read", "mcp:write"] : ["mcp:read"],
       });
       setPersonalAccessTokens((current) => [result, ...current]);
       setCreatedToken(result.token);
@@ -310,7 +312,7 @@ export default function AccountPage() {
             <div>
               <h2 className="text-2xl font-semibold text-slate-950">Personal access tokens</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Create a read-only token for MCP and other automation. The full token value is shown only once.
+                Create MCP tokens for read-only access or full posting management. The full token value is shown only once.
               </p>
             </div>
           </div>
@@ -333,7 +335,7 @@ export default function AccountPage() {
             </div>
           ) : null}
 
-          <div className="mt-6 grid gap-4 rounded-xl border border-slate-200 p-4 lg:grid-cols-[1.1fr_0.5fr_auto]">
+          <div className="mt-6 grid gap-4 rounded-xl border border-slate-200 p-4 lg:grid-cols-[1.1fr_0.6fr_0.6fr_auto]">
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-slate-700">Token name</span>
               <input
@@ -354,6 +356,20 @@ export default function AccountPage() {
                 <option value="30">30 days</option>
                 <option value="90">90 days</option>
                 <option value="180">180 days</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium text-slate-700">Access</span>
+              <select
+                value={tokenAccessLevel}
+                onChange={(event) =>
+                  setTokenAccessLevel(event.target.value as "read" | "write")
+                }
+                className="h-11 rounded-xl border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-slate-950"
+              >
+                <option value="read">Read only</option>
+                <option value="write">Read + write</option>
               </select>
             </label>
 

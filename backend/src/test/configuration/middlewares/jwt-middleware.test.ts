@@ -253,7 +253,7 @@ describe("jwt middleware helpers", () => {
 
   it("rejects PAT bearer auth on non-allowlisted routes", async () => {
     const context = createContext({
-      url: "https://example.test/postings/post_1",
+      url: "https://example.test/postings/post_1/booking-quote",
       authorization:
         "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
     });
@@ -261,6 +261,80 @@ describe("jwt middleware helpers", () => {
     await expect(requireJwtAuth(context)).rejects.toMatchObject<Partial<ForbiddenError>>({
       message: "Personal access tokens cannot access this endpoint.",
     });
+  });
+
+  it("accepts PAT bearer auth on write-allowlisted posting routes with mcp:write scope", async () => {
+    const principal = createPatPrincipal({
+      scopes: ["mcp:read", "mcp:write"],
+    });
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/postings/post_1/publish",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+
+    const result = await requireJwtAuth(context);
+
+    expect(result).toEqual(principal);
+  });
+
+  it("accepts PAT bearer auth on booking quote routes with mcp:read scope", async () => {
+    const principal = createPatPrincipal({
+      scopes: ["mcp:read"],
+    });
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/postings/post_1/booking-quote",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+
+    const result = await requireJwtAuth(context);
+
+    expect(result).toEqual(principal);
+  });
+
+  it("accepts PAT bearer auth on booking and renting read routes", async () => {
+    const principal = createPatPrincipal({
+      scopes: ["mcp:read"],
+    });
+    const bookingContext = createContext({
+      method: "GET",
+      url: "https://example.test/booking-requests/booking_1",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+    const rentingContext = createContext({
+      method: "GET",
+      url: "https://example.test/rentings/renting_1",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+
+    await expect(requireJwtAuth(bookingContext)).resolves.toEqual(principal);
+    await expect(requireJwtAuth(rentingContext)).resolves.toEqual(principal);
+  });
+
+  it("accepts PAT bearer auth on booking write routes with mcp:write scope", async () => {
+    const principal = createPatPrincipal({
+      scopes: ["mcp:read", "mcp:write"],
+    });
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/booking-requests/booking_1/approve",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+
+    const result = await requireJwtAuth(context);
+
+    expect(result).toEqual(principal);
   });
 
   it("rejects PAT bearer auth when the token lacks the required scope", async () => {
@@ -277,6 +351,60 @@ describe("jwt middleware helpers", () => {
 
     await expect(requireJwtAuth(context)).rejects.toMatchObject<Partial<ForbiddenError>>({
       message: "Personal access token does not include the required scope.",
+    });
+  });
+
+  it("rejects PAT bearer auth on write-allowlisted posting routes when the token lacks mcp:write", async () => {
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/postings/post_1/publish",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() =>
+        createPatPrincipal({
+          scopes: ["mcp:read"],
+        }),
+      ),
+    });
+
+    await expect(requireJwtAuth(context)).rejects.toMatchObject<Partial<ForbiddenError>>({
+      message: "Personal access token does not include the required scope.",
+    });
+  });
+
+  it("rejects PAT bearer auth on booking write routes when the token lacks mcp:write", async () => {
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/booking-requests/booking_1/approve",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() =>
+        createPatPrincipal({
+          scopes: ["mcp:read"],
+        }),
+      ),
+    });
+
+    await expect(requireJwtAuth(context)).rejects.toMatchObject<Partial<ForbiddenError>>({
+      message: "Personal access token does not include the required scope.",
+    });
+  });
+
+  it("rejects PAT bearer auth on payment session routes even with mcp:write", async () => {
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/booking-requests/booking_1/payment-session",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() =>
+        createPatPrincipal({
+          scopes: ["mcp:read", "mcp:write"],
+        }),
+      ),
+    });
+
+    await expect(requireJwtAuth(context)).rejects.toMatchObject<Partial<ForbiddenError>>({
+      message: "Personal access tokens cannot access this endpoint.",
     });
   });
 
