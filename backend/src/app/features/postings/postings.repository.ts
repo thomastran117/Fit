@@ -999,6 +999,33 @@ export class PostingsRepository extends BaseRepository {
     return outbox ? this.mapOutbox(outbox) : null;
   }
 
+  async hasNewerSearchOutboxJob(
+    job: Pick<PostingSearchOutboxRecord, "id" | "postingId" | "reindexRunId" | "targetIndexName" | "createdAt">,
+  ): Promise<boolean> {
+    if (!job.postingId) {
+      return false;
+    }
+
+    const count = await this.executeAsync(() =>
+      this.prisma.postingSearchOutbox.count({
+        where: {
+          postingId: job.postingId,
+          reindexRunId: job.reindexRunId ?? null,
+          targetIndexName: job.targetIndexName ?? null,
+          deadLetteredAt: null,
+          id: {
+            not: job.id,
+          },
+          createdAt: {
+            gt: new Date(job.createdAt),
+          },
+        },
+      }),
+    );
+
+    return count > 0;
+  }
+
   async enqueueSearchSync(postingId: string, operation: "upsert" | "delete" = "upsert"): Promise<void> {
     await this.executeAsync(() =>
       this.prisma.$transaction(async (transaction) => {
@@ -1124,6 +1151,7 @@ export class PostingsRepository extends BaseRepository {
           status: "running",
           totalPostings,
           startedAt: new Date(),
+          processingAt: new Date(),
           lastError: null,
         },
       }),
@@ -1181,6 +1209,7 @@ export class PostingsRepository extends BaseRepository {
           data: {
             status: "waiting_for_catchup",
             barrierOutboxId: barrierId,
+            processingAt: null,
           },
         });
 
@@ -1320,6 +1349,77 @@ export class PostingsRepository extends BaseRepository {
         where: {
           indexedAt: null,
           deadLetteredAt: null,
+        },
+      }),
+    );
+  }
+
+  async touchSearchReindexRunProcessing(id: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.searchReindexRun.update({
+        where: {
+          id,
+        },
+        data: {
+          processingAt: new Date(),
+        },
+      }),
+    );
+  }
+
+  async clearSearchReindexRunProcessing(id: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.searchReindexRun.update({
+        where: {
+          id,
+        },
+        data: {
+          processingAt: null,
+        },
+      }),
+    );
+  }
+
+  async markSearchOutboxSuperseded(ids: string[], brokerMessageId?: string): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const now = new Date();
+    await this.executeAsync(() =>
+      this.prisma.postingSearchOutbox.updateMany({
+        where: {
+          id: {
+            in: ids,
+          },
+        },
+        data: {
+          processedAt: now,
+          indexedAt: now,
+          processingAt: null,
+          brokerMessageId: brokerMessageId ?? null,
+          lastError: null,
+        },
+      }),
+    );
+  }
+
+  async releaseSearchOutboxClaims(ids: string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    await this.executeAsync(() =>
+      this.prisma.postingSearchOutbox.updateMany({
+        where: {
+          id: {
+            in: ids,
+          },
+          indexedAt: null,
+          deadLetteredAt: null,
+        },
+        data: {
+          processingAt: null,
         },
       }),
     );

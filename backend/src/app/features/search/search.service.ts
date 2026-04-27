@@ -24,6 +24,8 @@ function createEmptyQueueCounts(): SearchQueueCounts {
   };
 }
 
+const REINDEX_HEARTBEAT_BULK_CHUNK_SIZE = 100;
+
 export class SearchService {
   constructor(
     private readonly postingsRepository: PostingsRepository,
@@ -133,8 +135,10 @@ export class SearchService {
     await this.searchQueueService.ensureTopology();
 
     const jobs = await this.postingsRepository.claimSearchOutboxBatch(limit);
+    const relayJobs = this.coalesceRelayJobs(jobs);
 
-    for (const job of jobs) {
+    for (const relayJob of relayJobs) {
+      const job = relayJob.primary;
       let published = false;
       let publishError: string | undefined;
 
@@ -142,6 +146,7 @@ export class SearchService {
         try {
           await this.searchQueueService.publishIndexJob(this.toIndexJob(job));
           await this.postingsRepository.markSearchOutboxPublished(job.id, job.id);
+          await this.postingsRepository.markSearchOutboxSuperseded(relayJob.supersededIds, job.id);
           published = true;
           break;
         } catch (error) {
@@ -155,6 +160,7 @@ export class SearchService {
 
       try {
         const errorMessage = publishError ?? "Unknown relay error.";
+        await this.postingsRepository.releaseSearchOutboxClaims(relayJob.supersededIds);
 
         if (job.publishAttempts + 1 >= maxPublishAttempts) {
           await this.postingsRepository.markSearchOutboxDeadLettered(job.id, errorMessage);
@@ -183,19 +189,29 @@ export class SearchService {
       return;
     }
 
-    if (job.operation === "barrier") {
-      await this.postingsRepository.markSearchOutboxIndexed(job.id);
-      return;
-    }
-
-    try {
-      if (!job.postingId) {
-        throw new Error("Search outbox job is missing a posting id.");
+      if (job.operation === "barrier") {
+        await this.postingsRepository.markSearchOutboxIndexed(job.id);
+        return;
       }
 
-      if (job.operation === "delete") {
-        await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
-      } else {
+      try {
+        if (!job.postingId) {
+          throw new Error("Search outbox job is missing a posting id.");
+        }
+
+        if (await this.postingsRepository.hasNewerSearchOutboxJob(job)) {
+          console.info("Skipping stale search outbox job because a newer job exists.", {
+            outboxId: job.id,
+            postingId: job.postingId,
+            targetIndexName: job.targetIndexName,
+          });
+          await this.postingsRepository.markSearchOutboxIndexed(job.id);
+          return;
+        }
+
+        if (job.operation === "delete") {
+          await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
+        } else {
         const documents = await this.postingsRepository.findByIdsForIndexing([job.postingId]);
         const document = documents[0];
 
@@ -245,6 +261,7 @@ export class SearchService {
         const caughtUp = await this.postingsRepository.isSearchReindexRunCaughtUp(run.id);
 
         if (!caughtUp) {
+          await this.postingsRepository.clearSearchReindexRunProcessing(run.id);
           return 1;
         }
 
@@ -293,7 +310,11 @@ export class SearchService {
         break;
       }
 
-      await this.postingsSearchService.bulkUpsertDocuments(documents, run.targetIndexName);
+      for (const chunk of this.chunkDocuments(documents, REINDEX_HEARTBEAT_BULK_CHUNK_SIZE)) {
+        await this.postingsRepository.touchSearchReindexRunProcessing(run.id);
+        await this.postingsSearchService.bulkUpsertDocuments(chunk, run.targetIndexName);
+        await this.postingsRepository.touchSearchReindexRunProcessing(run.id);
+      }
       indexedPostings += documents.length;
       cursorId = documents[documents.length - 1]?.id;
 
@@ -343,5 +364,62 @@ export class SearchService {
     }
 
     return Math.max(0, Date.now() - startedAt);
+  }
+
+  private coalesceRelayJobs(
+    jobs: PostingSearchOutboxRecord[],
+  ): Array<{ primary: PostingSearchOutboxRecord; supersededIds: string[] }> {
+    const groups = new Map<
+      string,
+      {
+        primary: PostingSearchOutboxRecord;
+        supersededIds: string[];
+      }
+    >();
+
+    for (const job of jobs) {
+      const key = this.createRelayCoalescingKey(job);
+
+      if (!key) {
+        groups.set(`outbox:${job.id}`, {
+          primary: job,
+          supersededIds: [],
+        });
+        continue;
+      }
+
+      const existing = groups.get(key);
+
+      if (!existing) {
+        groups.set(key, {
+          primary: job,
+          supersededIds: [],
+        });
+        continue;
+      }
+
+      existing.supersededIds.push(existing.primary.id);
+      existing.primary = job;
+    }
+
+    return Array.from(groups.values());
+  }
+
+  private createRelayCoalescingKey(job: PostingSearchOutboxRecord): string | null {
+    if (job.operation === "barrier" || !job.postingId) {
+      return null;
+    }
+
+    return [job.postingId, job.reindexRunId ?? "live", job.targetIndexName ?? "live"].join(":");
+  }
+
+  private chunkDocuments<T>(documents: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+
+    for (let index = 0; index < documents.length; index += size) {
+      chunks.push(documents.slice(index, index + size));
+    }
+
+    return chunks;
   }
 }

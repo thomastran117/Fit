@@ -1,6 +1,7 @@
 import type {
   Channel,
   ConsumeMessage,
+  ConfirmChannel,
 } from "amqplib";
 import { environment } from "@/configuration/environment/index";
 import { createRabbitMqChannel } from "@/configuration/resources/rabbitmq";
@@ -16,6 +17,8 @@ export class SearchQueueService {
   private readonly mainQueueName: string;
   private readonly retryQueueNames: string[];
   private readonly deadLetterQueueName: string;
+  private publisherChannelPromise: Promise<ConfirmChannel> | null = null;
+  private publisherTopologyPromise: Promise<void> | null = null;
 
   constructor(indexBaseName = environment.getElasticsearchConfig().postingsIndexName) {
     const prefix = `${indexBaseName}.search-index`;
@@ -67,7 +70,20 @@ export class SearchQueueService {
       }
 
       try {
-        const payload = JSON.parse(message.content.toString("utf8")) as SearchIndexJobPayload;
+        let payload: SearchIndexJobPayload;
+
+        try {
+          payload = JSON.parse(message.content.toString("utf8")) as SearchIndexJobPayload;
+        } catch (error) {
+          console.error("Search index consumer received an invalid JSON payload.", {
+            error,
+            messageId: message.properties.messageId,
+          });
+          await this.publishMalformedMessage(channel, message, error);
+          channel.ack(message);
+          return;
+        }
+
         await onMessage(payload, message, channel);
       } catch (error) {
         console.error("Search index consumer failed before ack/nack handling", error);
@@ -117,10 +133,10 @@ export class SearchQueueService {
     routingKey: string,
     payload: SearchIndexJobPayload,
   ): Promise<void> {
-    const channel = await createRabbitMqChannel();
+    const channel = await this.getPublisherChannel();
 
     try {
-      await this.assertTopology(channel);
+      await this.ensurePublisherTopology(channel);
       channel.publish(
         this.exchangeName,
         routingKey,
@@ -133,8 +149,9 @@ export class SearchQueueService {
         },
       );
       await channel.waitForConfirms();
-    } finally {
-      await channel.close();
+    } catch (error) {
+      this.resetPublisherChannel();
+      throw error;
     }
   }
 
@@ -170,5 +187,56 @@ export class SearchQueueService {
       ready: queue.messageCount,
       consumers: queue.consumerCount,
     };
+  }
+
+  private async publishMalformedMessage(
+    channel: ConfirmChannel,
+    message: ConsumeMessage,
+    error: unknown,
+  ): Promise<void> {
+    channel.publish(this.exchangeName, "dead-letter", message.content, {
+      persistent: true,
+      contentType: message.properties.contentType || "application/json",
+      messageId: message.properties.messageId,
+      timestamp: Date.now(),
+      headers: {
+        ...(message.properties.headers ?? {}),
+        deadLetterReason: "invalid_json",
+        deadLetterError: error instanceof Error ? error.message : "Invalid JSON payload.",
+      },
+    });
+    await channel.waitForConfirms();
+  }
+
+  private async getPublisherChannel(): Promise<ConfirmChannel> {
+    if (!this.publisherChannelPromise) {
+      this.publisherChannelPromise = createRabbitMqChannel().then((channel) => {
+        channel.on("close", () => {
+          this.resetPublisherChannel();
+        });
+        channel.on("error", () => {
+          this.resetPublisherChannel();
+        });
+        return channel;
+      });
+    }
+
+    return this.publisherChannelPromise;
+  }
+
+  private async ensurePublisherTopology(channel: ConfirmChannel): Promise<void> {
+    if (!this.publisherTopologyPromise) {
+      this.publisherTopologyPromise = this.assertTopology(channel).catch((error) => {
+        this.publisherTopologyPromise = null;
+        throw error;
+      });
+    }
+
+    await this.publisherTopologyPromise;
+  }
+
+  private resetPublisherChannel(): void {
+    this.publisherChannelPromise = null;
+    this.publisherTopologyPromise = null;
   }
 }
