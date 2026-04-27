@@ -46,4 +46,23 @@ describe("ElasticsearchClient circuit breaker", () => {
       failureThreshold: 2,
     });
   });
+
+  it("does not open the circuit for repeated client-side 4xx failures", async () => {
+    const fetchMock = jest.fn(async () => new Response("bad request", { status: 400 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const client = new ElasticsearchClient(createConfig());
+
+    await expect(client.requestJson("/postings/_search", { method: "GET" })).rejects.toBeInstanceOf(
+      ElasticsearchUnavailableError,
+    );
+    await expect(client.requestJson("/postings/_search", { method: "GET" })).rejects.toBeInstanceOf(
+      ElasticsearchUnavailableError,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(client.getCircuitBreakerState()).toMatchObject({
+      state: "closed",
+      consecutiveFailures: 0,
+    });
+  });
 });

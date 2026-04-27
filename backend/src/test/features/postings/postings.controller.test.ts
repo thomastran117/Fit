@@ -97,6 +97,51 @@ describe("PostingsController", () => {
     expect(response.status).toBe(200);
   });
 
+  it("maps attribute search filters into the service input", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 5,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?family=place&subtype=entire_place&attr.bedrooms.min=2&attr.bedrooms.max=4&attr.amenities=wifi&attr.amenities=desk",
+    });
+
+    await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        family: "place",
+        subtype: "entire_place",
+        attributeFilters: [
+          {
+            key: "bedrooms",
+            min: 2,
+            max: 4,
+          },
+          {
+            key: "amenities",
+            value: ["wifi", "desk"],
+          },
+        ],
+      }),
+    );
+  });
+
   it("rejects create requests that omit the required variant", async () => {
     mockRequireJwtAuth.mockResolvedValue(createClaims());
     const createDraft = jest.fn();

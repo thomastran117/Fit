@@ -10,6 +10,12 @@ import type {
   SearchStatusResult,
 } from "@/features/search/search.model";
 import { SearchQueueService } from "@/features/search/search.queue.service";
+import {
+  getSearchTelemetrySnapshot,
+  recordQueueInspectionFailure,
+  recordReindexRunCompleted,
+  recordReindexRunFailed,
+} from "@/features/search/search.telemetry";
 
 function createEmptyQueueCounts(): SearchQueueCounts {
   return {
@@ -26,16 +32,25 @@ export class SearchService {
   ) {}
 
   async startReindex(): Promise<SearchReindexRunRecord> {
-    const activeRun = await this.postingsRepository.findActiveSearchReindexRun();
+    const run = await this.postingsRepository.withSearchReindexStartLock(
+      async ({ findActiveSearchReindexRun, createSearchReindexRun }) => {
+        const activeRun = await findActiveSearchReindexRun();
 
-    if (activeRun) {
+        if (activeRun) {
+          throw new ConflictError("A search reindex run is already active.");
+        }
+
+        await this.postingsSearchService.ensureLiveIndex();
+        const targetIndexName = await this.postingsSearchService.createVersionedIndex();
+        return createSearchReindexRun(targetIndexName);
+      },
+    );
+
+    if (!run) {
       throw new ConflictError("A search reindex run is already active.");
     }
 
-    await this.postingsSearchService.ensureLiveIndex();
-    const targetIndexName = await this.postingsSearchService.createVersionedIndex();
-
-    return this.postingsRepository.createSearchReindexRun(targetIndexName);
+    return run;
   }
 
   async getReindexRun(id: string): Promise<SearchReindexRunRecord | null> {
@@ -43,47 +58,73 @@ export class SearchService {
   }
 
   async getStatus(): Promise<SearchStatusResult> {
-    const [readTargets, writeTargets, currentReindexRun, pendingOutboxCount, queueCounts] =
+    const [aliasHealth, currentReindexRun, pendingOutboxMetrics, queueInspection] =
       await Promise.all([
         this.postingsSearchService.isElasticsearchEnabled()
-          ? this.postingsSearchService.getAliasTargets(this.postingsSearchService.getReadAliasName())
-          : Promise.resolve([]),
-        this.postingsSearchService.isElasticsearchEnabled()
-          ? this.postingsSearchService.getAliasTargets(this.postingsSearchService.getWriteAliasName())
-          : Promise.resolve([]),
+          ? this.postingsSearchService.getAliasStatus()
+          : Promise.resolve(this.createDisabledAliasHealth()),
         this.postingsRepository.findActiveSearchReindexRun(),
-        this.postingsRepository.getPendingSearchOutboxCount(),
+        this.postingsRepository.getPendingSearchOutboxMetrics(),
         this.postingsSearchService.isElasticsearchEnabled()
-          ? this.searchQueueService.getQueueCounts().catch(() => ({
-              main: createEmptyQueueCounts(),
-              retry1: createEmptyQueueCounts(),
-              retry2: createEmptyQueueCounts(),
-              retry3: createEmptyQueueCounts(),
-              deadLetter: createEmptyQueueCounts(),
-            }))
+          ? this.searchQueueService
+              .getQueueCounts()
+              .then((counts) => ({
+                inspection: {
+                  ok: true as const,
+                },
+                counts,
+              }))
+              .catch((error) => {
+                recordQueueInspectionFailure();
+                return {
+                  inspection: {
+                    ok: false as const,
+                    error: error instanceof Error ? error.message : "Unable to inspect search queues.",
+                  },
+                };
+              })
           : Promise.resolve({
-              main: createEmptyQueueCounts(),
-              retry1: createEmptyQueueCounts(),
-              retry2: createEmptyQueueCounts(),
-              retry3: createEmptyQueueCounts(),
-              deadLetter: createEmptyQueueCounts(),
+              inspection: {
+                ok: true as const,
+              },
+              counts: {
+                main: createEmptyQueueCounts(),
+                retry1: createEmptyQueueCounts(),
+                retry2: createEmptyQueueCounts(),
+                retry3: createEmptyQueueCounts(),
+                deadLetter: createEmptyQueueCounts(),
+              },
             }),
       ]);
+    const telemetry = getSearchTelemetrySnapshot();
 
     return {
       aliases: {
         read: this.postingsSearchService.getReadAliasName(),
         write: this.postingsSearchService.getWriteAliasName(),
-        readTargets,
-        writeTargets,
+        readTargets: aliasHealth.readTargets,
+        writeTargets: aliasHealth.writeTargets,
+        health: aliasHealth,
       },
       elasticsearch: {
         enabled: this.postingsSearchService.isElasticsearchEnabled(),
         circuitBreaker: this.postingsSearchService.getCircuitBreakerState(),
+        telemetry: {
+          ...telemetry.elasticsearchRequests,
+          ...telemetry.circuitBreaker,
+        },
       },
       currentReindexRun: currentReindexRun ?? undefined,
-      pendingOutboxCount,
-      queueCounts,
+      pendingOutboxCount: pendingOutboxMetrics.count,
+      pendingOutboxOldestAgeMs: pendingOutboxMetrics.oldestAgeMs,
+      queueInspection: queueInspection.inspection,
+      ...("counts" in queueInspection ? { queueCounts: queueInspection.counts } : {}),
+      telemetry: {
+        fallbacks: telemetry.fallbacks,
+        queueInspectionFailures: telemetry.queueInspectionFailures,
+        reindexRuns: telemetry.reindexRuns,
+        aliasActions: telemetry.aliasActions,
+      },
     };
   }
 
@@ -213,6 +254,7 @@ export class SearchService {
           [...previousReadTargets, ...previousWriteTargets].find((index) => index !== run.targetIndexName);
 
         await this.postingsRepository.markSearchReindexRunCompleted(run.id, retainedIndexName);
+        recordReindexRunCompleted(this.readReindexDurationMs(run));
       }
 
       return 1;
@@ -221,6 +263,12 @@ export class SearchService {
         run.id,
         error instanceof Error ? error.message : "Unknown reindex error.",
       );
+      recordReindexRunFailed(this.readReindexDurationMs(run));
+      console.error("Search reindex run failed.", {
+        runId: run.id,
+        targetIndexName: run.targetIndexName,
+        error,
+      });
       return 1;
     }
   }
@@ -271,5 +319,29 @@ export class SearchService {
       occurredAt: job.createdAt,
       attempt: job.attempts,
     };
+  }
+
+  private createDisabledAliasHealth(): SearchStatusResult["aliases"]["health"] {
+    return {
+      state: "disabled",
+      readAlias: this.postingsSearchService.getReadAliasName(),
+      writeAlias: this.postingsSearchService.getWriteAliasName(),
+      readTargets: [],
+      writeTargets: [],
+    };
+  }
+
+  private readReindexDurationMs(run: SearchReindexRunRecord): number | undefined {
+    if (!run.startedAt) {
+      return undefined;
+    }
+
+    const startedAt = new Date(run.startedAt).getTime();
+
+    if (Number.isNaN(startedAt)) {
+      return undefined;
+    }
+
+    return Math.max(0, Date.now() - startedAt);
   }
 }

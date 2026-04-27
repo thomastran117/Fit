@@ -6,6 +6,7 @@ import {
   type ElasticsearchClient,
 } from "@/configuration/resources/elasticsearch";
 import type {
+  SearchAttributeFilterInput,
   PostingAttributeValue,
   PostingSearchDocument,
   PostingSearchSource,
@@ -14,11 +15,20 @@ import type {
 } from "@/features/postings/postings.model";
 import { postingVariantCatalog } from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type {
+  SearchAliasStatus,
+  SearchFallbackReason,
+} from "@/features/search/search.model";
+import {
+  recordAliasAction,
+  recordSearchFallback,
+} from "@/features/search/search.telemetry";
 
 interface SearchIdsResult {
   ids: string[];
   total: number;
   source: PostingSearchSource;
+  fallbackReason?: SearchFallbackReason;
 }
 
 interface ElasticsearchSearchResponse {
@@ -49,6 +59,13 @@ interface ElasticsearchBulkResponse {
 
 type ElasticsearchAliasResponse = Record<string, unknown>;
 
+class ElasticsearchAliasStateError extends ElasticsearchUnavailableError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ElasticsearchAliasStateError";
+  }
+}
+
 export class PostingsSearchService {
   constructor(
     private readonly postingsRepository: PostingsRepository,
@@ -56,10 +73,20 @@ export class PostingsSearchService {
   ) {}
 
   async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
-    const searchIds = await this.searchIdsWithFallback(input);
-    const batch = await this.postingsRepository.batchFindPublic({
+    let searchIds = await this.searchIdsWithFallback(input);
+    let batch = await this.postingsRepository.batchFindPublic({
       ids: searchIds.ids,
     });
+
+    if (searchIds.source === "elasticsearch" && batch.missingIds.length > 0) {
+      console.warn("Postings search falling back to database because Elasticsearch returned stale ids.", {
+        missingIds: batch.missingIds,
+      });
+      searchIds = await this.searchIdsFromDatabase(input, "index-drift");
+      batch = await this.postingsRepository.batchFindPublic({
+        ids: searchIds.ids,
+      });
+    }
 
     return {
       postings: batch.postings,
@@ -74,18 +101,34 @@ export class PostingsSearchService {
       return;
     }
 
-    const [readTargets, writeTargets] = await Promise.all([
-      this.getAliasTargets(this.getReadAliasName()),
-      this.getAliasTargets(this.getWriteAliasName()),
-    ]);
+    const aliasStatus = await this.getAliasStatus();
 
-    if (readTargets.length > 0 && writeTargets.length > 0) {
-      return;
+    switch (aliasStatus.state) {
+      case "disabled":
+      case "ready":
+        return;
+      case "missing": {
+        const indexName = this.createVersionedIndexName();
+        await this.createConcreteIndex(indexName);
+        await this.setAliases(indexName, [], []);
+        recordAliasAction("created_index");
+        return;
+      }
+      case "missing_read_alias":
+        await this.addAlias(aliasStatus.writeTargets[0]!, this.getReadAliasName());
+        recordAliasAction("repaired_read_alias");
+        return;
+      case "missing_write_alias":
+        await this.addAlias(aliasStatus.readTargets[0]!, this.getWriteAliasName(), true);
+        recordAliasAction("repaired_write_alias");
+        return;
+      case "inconsistent":
+      default:
+        throw new ElasticsearchAliasStateError(
+          aliasStatus.message ??
+            "Elasticsearch aliases are inconsistent and cannot be repaired automatically.",
+        );
     }
-
-    const indexName = this.createVersionedIndexName();
-    await this.createConcreteIndex(indexName);
-    await this.setAliases(indexName, readTargets, writeTargets);
   }
 
   async createVersionedIndex(): Promise<string> {
@@ -175,6 +218,80 @@ export class PostingsSearchService {
     return Object.keys(response);
   }
 
+  async getAliasStatus(): Promise<SearchAliasStatus> {
+    const readAlias = this.getReadAliasName();
+    const writeAlias = this.getWriteAliasName();
+
+    if (!this.isElasticsearchEnabled()) {
+      return {
+        state: "disabled",
+        readAlias,
+        writeAlias,
+        readTargets: [],
+        writeTargets: [],
+      };
+    }
+
+    const [readTargets, writeTargets] = await Promise.all([
+      this.getAliasTargets(readAlias),
+      this.getAliasTargets(writeAlias),
+    ]);
+
+    if (readTargets.length === 0 && writeTargets.length === 0) {
+      return {
+        state: "missing",
+        readAlias,
+        writeAlias,
+        readTargets,
+        writeTargets,
+      };
+    }
+
+    if (
+      readTargets.length === 1 &&
+      writeTargets.length === 1 &&
+      readTargets[0] === writeTargets[0]
+    ) {
+      return {
+        state: "ready",
+        readAlias,
+        writeAlias,
+        readTargets,
+        writeTargets,
+      };
+    }
+
+    if (readTargets.length === 0 && writeTargets.length === 1) {
+      return {
+        state: "missing_read_alias",
+        readAlias,
+        writeAlias,
+        readTargets,
+        writeTargets,
+      };
+    }
+
+    if (readTargets.length === 1 && writeTargets.length === 0) {
+      return {
+        state: "missing_write_alias",
+        readAlias,
+        writeAlias,
+        readTargets,
+        writeTargets,
+      };
+    }
+
+    return {
+      state: "inconsistent",
+      readAlias,
+      writeAlias,
+      readTargets,
+      writeTargets,
+      message:
+        "Read and write aliases do not resolve to a single shared concrete index and require manual repair.",
+    };
+  }
+
   async swapAliases(newIndexName: string): Promise<{ previousReadTargets: string[]; previousWriteTargets: string[] }> {
     const [previousReadTargets, previousWriteTargets] = await Promise.all([
       this.getAliasTargets(this.getReadAliasName()),
@@ -216,18 +333,15 @@ export class PostingsSearchService {
       } catch (error) {
         if (error instanceof ElasticsearchCircuitOpenError) {
           console.info("Postings search using database fallback because Elasticsearch circuit is open.");
-        } else {
-          console.warn("Postings search falling back to database", error);
+          return this.searchIdsFromDatabase(input, "circuit-open");
         }
+
+        console.warn("Postings search falling back to database", error);
+        return this.searchIdsFromDatabase(input, "es-unavailable");
       }
     }
 
-    const fallback = await this.postingsRepository.searchPublicFallback(input);
-
-    return {
-      ...fallback,
-      source: "database",
-    };
+    return this.searchIdsFromDatabase(input, "es-unavailable");
   }
 
   private async searchIdsInElasticsearch(input: SearchPostingsInput): Promise<SearchIdsResult> {
@@ -265,25 +379,55 @@ export class PostingsSearchService {
         bool: {
           should: [
             {
+              match_phrase: {
+                name: {
+                  query: input.query,
+                  boost: 10,
+                },
+              },
+            },
+            {
+              multi_match: {
+                query: input.query,
+                type: "best_fields",
+                operator: "and",
+                fields: [
+                  "name^7",
+                  "tags.text^5",
+                  "location.city^4",
+                  "location.region^3",
+                  "location.country^2",
+                  "description^2",
+                ],
+              },
+            },
+            {
               multi_match: {
                 query: input.query,
                 fields: [
                   "name^5",
-                  "description^2",
-                  "tags^3",
-                  "location.city^2",
-                  "location.region",
-                  "location.country",
+                  "tags.text^3",
+                  "location.city^3",
+                  "location.region^2",
+                  "location.country^2",
+                  "description",
                 ],
                 fuzziness: "AUTO",
+                prefix_length: 1,
+                boost: 0.7,
               },
             },
             {
-              match_phrase: {
-                name: {
-                  query: input.query,
-                  boost: 6,
-                },
+              multi_match: {
+                query: input.query,
+                type: "bool_prefix",
+                fields: [
+                  "name.prefix^4",
+                  "location.city.prefix^3",
+                  "location.region.prefix^2",
+                  "location.country.prefix^2",
+                ],
+                boost: 0.8,
               },
             },
           ],
@@ -326,6 +470,10 @@ export class PostingsSearchService {
           availabilityStatus: input.availabilityStatus,
         },
       });
+    }
+
+    for (const attributeFilter of input.attributeFilters ?? []) {
+      filter.push(...this.buildAttributeFilters(attributeFilter));
     }
 
     if (input.minDailyPrice !== undefined || input.maxDailyPrice !== undefined) {
@@ -580,14 +728,52 @@ export class PostingsSearchService {
     });
   }
 
+  private async addAlias(indexName: string, aliasName: string, isWriteIndex = false): Promise<void> {
+    await this.elasticsearch.requestJson("/_aliases", {
+      method: "POST",
+      body: JSON.stringify({
+        actions: [
+          {
+            add: {
+              index: indexName,
+              alias: aliasName,
+              ...(isWriteIndex ? { is_write_index: true } : {}),
+            },
+          },
+        ],
+      }),
+    });
+  }
+
   private buildIndexConfiguration(): Record<string, unknown> {
     return {
       settings: {
         analysis: {
+          filter: {
+            autocomplete_filter: {
+              type: "edge_ngram",
+              min_gram: 2,
+              max_gram: 20,
+            },
+          },
+          analyzer: {
+            search_text: {
+              tokenizer: "standard",
+              filter: ["lowercase", "asciifolding"],
+            },
+            autocomplete_index: {
+              tokenizer: "standard",
+              filter: ["lowercase", "asciifolding", "autocomplete_filter"],
+            },
+            autocomplete_search: {
+              tokenizer: "standard",
+              filter: ["lowercase", "asciifolding"],
+            },
+          },
           normalizer: {
             lowercase_normalizer: {
               type: "custom",
-              filter: ["lowercase"],
+              filter: ["lowercase", "asciifolding"],
             },
           },
         },
@@ -602,15 +788,33 @@ export class PostingsSearchService {
           subtype: { type: "keyword" },
           name: {
             type: "text",
+            analyzer: "search_text",
             fields: {
               sort: {
                 type: "keyword",
                 normalizer: "lowercase_normalizer",
               },
+              prefix: {
+                type: "text",
+                analyzer: "autocomplete_index",
+                search_analyzer: "autocomplete_search",
+              },
             },
           },
-          description: { type: "text" },
-          tags: { type: "keyword", normalizer: "lowercase_normalizer" },
+          description: {
+            type: "text",
+            analyzer: "search_text",
+          },
+          tags: {
+            type: "keyword",
+            normalizer: "lowercase_normalizer",
+            fields: {
+              text: {
+                type: "text",
+                analyzer: "search_text",
+              },
+            },
+          },
           availabilityStatus: { type: "keyword" },
           pricingCurrency: { type: "keyword" },
           dailyPriceAmount: { type: "double" },
@@ -622,9 +826,39 @@ export class PostingsSearchService {
           publishedAt: { type: "date" },
           location: {
             properties: {
-              city: { type: "text" },
-              region: { type: "text" },
-              country: { type: "text" },
+              city: {
+                type: "text",
+                analyzer: "search_text",
+                fields: {
+                  prefix: {
+                    type: "text",
+                    analyzer: "autocomplete_index",
+                    search_analyzer: "autocomplete_search",
+                  },
+                },
+              },
+              region: {
+                type: "text",
+                analyzer: "search_text",
+                fields: {
+                  prefix: {
+                    type: "text",
+                    analyzer: "autocomplete_index",
+                    search_analyzer: "autocomplete_search",
+                  },
+                },
+              },
+              country: {
+                type: "text",
+                analyzer: "search_text",
+                fields: {
+                  prefix: {
+                    type: "text",
+                    analyzer: "autocomplete_index",
+                    search_analyzer: "autocomplete_search",
+                  },
+                },
+              },
               postalCode: { type: "keyword" },
             },
           },
@@ -686,5 +920,55 @@ export class PostingsSearchService {
       hasNextPage: page < totalPages,
       hasPreviousPage: page > 1,
     };
+  }
+
+  private async searchIdsFromDatabase(
+    input: SearchPostingsInput,
+    reason: SearchFallbackReason,
+  ): Promise<SearchIdsResult> {
+    recordSearchFallback(reason);
+    const fallback = await this.postingsRepository.searchPublicFallback(input);
+
+    return {
+      ...fallback,
+      source: "database",
+      fallbackReason: reason,
+    };
+  }
+
+  private buildAttributeFilters(filter: SearchAttributeFilterInput): Array<Record<string, unknown>> {
+    const field = `searchableAttributes.${filter.key}`;
+    const clauses: Array<Record<string, unknown>> = [];
+
+    if (typeof filter.value === "string" || typeof filter.value === "number" || typeof filter.value === "boolean") {
+      clauses.push({
+        term: {
+          [field]: filter.value,
+        },
+      });
+    } else if (Array.isArray(filter.value)) {
+      clauses.push({
+        bool: {
+          filter: filter.value.map((value) => ({
+            term: {
+              [field]: value,
+            },
+          })),
+        },
+      });
+    }
+
+    if (filter.min !== undefined || filter.max !== undefined) {
+      clauses.push({
+        range: {
+          [field]: {
+            ...(filter.min !== undefined ? { gte: filter.min } : {}),
+            ...(filter.max !== undefined ? { lte: filter.max } : {}),
+          },
+        },
+      });
+    }
+
+    return clauses;
   }
 }

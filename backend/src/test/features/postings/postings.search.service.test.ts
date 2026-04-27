@@ -2,6 +2,7 @@ import { PostingsSearchService } from "@/features/postings/postings.search.servi
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";
 import { ElasticsearchUnavailableError } from "@/configuration/resources/elasticsearch";
+import { resetSearchTelemetry } from "@/features/search/search.telemetry";
 
 interface CapturedSql {
   sql: string;
@@ -119,6 +120,10 @@ function createFallbackRepository() {
 }
 
 describe("PostingsSearchService", () => {
+  beforeEach(() => {
+    resetSearchTelemetry();
+  });
+
   it("indexes family, subtype, and searchable attributes into Elasticsearch documents", async () => {
     const repository = {} as PostingsRepository;
     const requestJson = jest.fn(async () => undefined);
@@ -426,6 +431,60 @@ describe("PostingsSearchService", () => {
     );
   });
 
+  it("adds structured attribute filters to Elasticsearch search requests", async () => {
+    const { requestJson, service } = createElasticsearchSearchService();
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 20,
+      family: "place",
+      subtype: "entire_place",
+      attributeFilters: [
+        {
+          key: "bedrooms",
+          min: 2,
+          max: 4,
+        },
+        {
+          key: "amenities",
+          value: ["wifi", "desk"],
+        },
+      ],
+      sort: "relevance",
+    });
+
+    const body = readSearchRequest(requestJson);
+
+    expect(body.query.bool.filter).toEqual(
+      expect.arrayContaining([
+        {
+          range: {
+            "searchableAttributes.bedrooms": {
+              gte: 2,
+              lte: 4,
+            },
+          },
+        },
+        {
+          bool: {
+            filter: [
+              {
+                term: {
+                  "searchableAttributes.amenities": "wifi",
+                },
+              },
+              {
+                term: {
+                  "searchableAttributes.amenities": "desk",
+                },
+              },
+            ],
+          },
+        },
+      ]),
+    );
+  });
+
   it("falls back to database search when Elasticsearch is unavailable", async () => {
     const batchFindPublic = jest.fn(async () => ({
       postings: [],
@@ -466,6 +525,120 @@ describe("PostingsSearchService", () => {
       ids: ["posting-1"],
     });
   });
+
+  it("falls back to database search when Elasticsearch returns stale ids", async () => {
+    const batchFindPublic = jest
+      .fn()
+      .mockResolvedValueOnce({
+        postings: [],
+        missingIds: ["posting-1"],
+      })
+      .mockResolvedValueOnce({
+        postings: [],
+        missingIds: [],
+      });
+    const searchPublicFallback = jest.fn(async () => ({
+      ids: ["posting-2"],
+      total: 1,
+    }));
+    const repository = {
+      batchFindPublic,
+      searchPublicFallback,
+    } as unknown as PostingsRepository;
+    const requestJson = jest.fn(async () => ({
+      hits: {
+        total: {
+          value: 1,
+        },
+        hits: [
+          {
+            _id: "posting-1",
+          },
+        ],
+      },
+    }));
+    const service = new PostingsSearchService(repository, {
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    const result = await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      query: "loft",
+      sort: "relevance",
+    });
+
+    expect(result.source).toBe("database");
+    expect(searchPublicFallback).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 10,
+      query: "loft",
+      sort: "relevance",
+    });
+    expect(batchFindPublic).toHaveBeenNthCalledWith(1, {
+      ids: ["posting-1"],
+    });
+    expect(batchFindPublic).toHaveBeenNthCalledWith(2, {
+      ids: ["posting-2"],
+    });
+  });
+
+  it("repairs a missing read alias from the write alias target", async () => {
+    const repository = {} as PostingsRepository;
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        postings_test_v1: {},
+      })
+      .mockResolvedValueOnce({});
+    const service = new PostingsSearchService(repository, {
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await service.ensureLiveIndex();
+
+    expect(requestJson).toHaveBeenNthCalledWith(
+      3,
+      "/_aliases",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(JSON.parse(requestJson.mock.calls[2]?.[1]?.body as string)).toEqual({
+      actions: [
+        {
+          add: {
+            index: "postings_test_v1",
+            alias: "postings-test-read",
+          },
+        },
+      ],
+    });
+  });
+
+  it("fails closed when read and write aliases target different indices", async () => {
+    const repository = {} as PostingsRepository;
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        postings_test_read: {},
+      })
+      .mockResolvedValueOnce({
+        postings_test_write: {},
+      });
+    const service = new PostingsSearchService(repository, {
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await expect(service.ensureLiveIndex()).rejects.toBeInstanceOf(ElasticsearchUnavailableError);
+  });
 });
 
 describe("PostingsRepository.searchPublicFallback", () => {
@@ -479,6 +652,17 @@ describe("PostingsRepository.searchPublicFallback", () => {
       subtype: "entire_place",
       tags: ["loft", "workspace"],
       availabilityStatus: "available",
+      attributeFilters: [
+        {
+          key: "bedrooms",
+          min: 2,
+          max: 4,
+        },
+        {
+          key: "amenities",
+          value: ["wifi", "desk"],
+        },
+      ],
       minDailyPrice: 100,
       maxDailyPrice: 200,
       geo: {
@@ -499,6 +683,7 @@ describe("PostingsRepository.searchPublicFallback", () => {
     expect(idQuery.sql).toContain("family = ?");
     expect(idQuery.sql).toContain("subtype = ?");
     expect(idQuery.sql).toContain("availability_status = ?");
+    expect(idQuery.sql).toContain("JSON_EXTRACT(attributes, ?)"); 
     expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) >= ?");
     expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) <= ?");
     expect(idQuery.sql).toContain("pab.start_at < ?");
@@ -509,7 +694,22 @@ describe("PostingsRepository.searchPublicFallback", () => {
     expect(idQuery.sql).toContain("ORDER BY (");
     expect(idQuery.sql).toContain("ASC, published_at DESC, created_at DESC, id ASC");
     expect(idQuery.values).toEqual(
-      expect.arrayContaining(["place", "entire_place", "loft", "workspace", "available", 100, 200, 12]),
+      expect.arrayContaining([
+        "place",
+        "entire_place",
+        "loft",
+        "workspace",
+        "available",
+        "$.bedrooms",
+        2,
+        4,
+        "$.amenities",
+        "wifi",
+        "desk",
+        100,
+        200,
+        12,
+      ]),
     );
   });
 

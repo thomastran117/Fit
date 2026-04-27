@@ -84,7 +84,18 @@ interface SearchIdRow {
   id: string;
 }
 
+interface PendingSearchOutboxMetrics {
+  count: number;
+  oldestAgeMs?: number;
+}
+
+interface LockRow {
+  acquired?: bigint | number | boolean | null;
+  released?: bigint | number | boolean | null;
+}
+
 const PUBLIC_LOCATION_PRECISION = 2;
+const SEARCH_REINDEX_START_LOCK_NAME = "rentify:search-reindex:start";
 const postingInclude = {
   photos: {
     orderBy: {
@@ -673,6 +684,40 @@ export class PostingsRepository extends BaseRepository {
       whereClauses.push(
         Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) <= ${input.maxDailyPrice}`,
       );
+    }
+
+    for (const filter of input.attributeFilters ?? []) {
+      const attributePath = `$.${filter.key}`;
+
+      if (typeof filter.value === "string") {
+        whereClauses.push(
+          Prisma.sql`JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath})) = ${filter.value}`,
+        );
+      } else if (typeof filter.value === "boolean") {
+        whereClauses.push(Prisma.sql`JSON_EXTRACT(attributes, ${attributePath}) = ${filter.value}`);
+      } else if (typeof filter.value === "number") {
+        whereClauses.push(
+          Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath})) AS DECIMAL(18, 6)) = ${filter.value}`,
+        );
+      } else if (Array.isArray(filter.value)) {
+        for (const value of filter.value) {
+          whereClauses.push(
+            Prisma.sql`JSON_SEARCH(JSON_EXTRACT(attributes, ${attributePath}), 'one', ${value}) IS NOT NULL`,
+          );
+        }
+      }
+
+      if (filter.min !== undefined) {
+        whereClauses.push(
+          Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath})) AS DECIMAL(18, 6)) >= ${filter.min}`,
+        );
+      }
+
+      if (filter.max !== undefined) {
+        whereClauses.push(
+          Prisma.sql`CAST(JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath})) AS DECIMAL(18, 6)) <= ${filter.max}`,
+        );
+      }
     }
 
     if (input.availabilityWindow) {
@@ -1280,6 +1325,101 @@ export class PostingsRepository extends BaseRepository {
     );
   }
 
+  async getPendingSearchOutboxMetrics(): Promise<PendingSearchOutboxMetrics> {
+    return this.executeAsync(async () => {
+      const [count, oldest] = await Promise.all([
+        this.prisma.postingSearchOutbox.count({
+          where: {
+            indexedAt: null,
+            deadLetteredAt: null,
+          },
+        }),
+        this.prisma.postingSearchOutbox.findFirst({
+          where: {
+            indexedAt: null,
+            deadLetteredAt: null,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+          select: {
+            createdAt: true,
+          },
+        }),
+      ]);
+
+      return {
+        count,
+        ...(oldest
+          ? {
+              oldestAgeMs: Math.max(0, Date.now() - oldest.createdAt.getTime()),
+            }
+          : {}),
+      };
+    });
+  }
+
+  async withSearchReindexStartLock<T>(
+    operation: (helpers: {
+      findActiveSearchReindexRun: () => Promise<SearchReindexRunRecord | null>;
+      createSearchReindexRun: (targetIndexName: string) => Promise<SearchReindexRunRecord>;
+    }) => Promise<T>,
+  ): Promise<T | null> {
+    return this.executeAsync(
+      () =>
+        this.prisma.$transaction(async (transaction) => {
+          const lockRows = await transaction.$queryRaw<LockRow[]>(
+            Prisma.sql`SELECT GET_LOCK(${SEARCH_REINDEX_START_LOCK_NAME}, 0) AS acquired`,
+          );
+          const acquired = this.readMysqlLockResult(lockRows[0]?.acquired);
+
+          if (!acquired) {
+            return null;
+          }
+
+          try {
+            return await operation({
+              findActiveSearchReindexRun: async () => {
+                const run = await transaction.searchReindexRun.findFirst({
+                  where: {
+                    status: {
+                      in: ["pending", "running", "waiting_for_catchup"],
+                    },
+                  },
+                  orderBy: [
+                    {
+                      createdAt: "desc",
+                    },
+                  ],
+                });
+
+                return run ? this.mapSearchReindexRun(run) : null;
+              },
+              createSearchReindexRun: async (targetIndexName: string) => {
+                const run = await transaction.searchReindexRun.create({
+                  data: {
+                    id: randomUUID(),
+                    status: "pending",
+                    targetIndexName,
+                    sourceSnapshotAt: new Date(),
+                  },
+                });
+
+                return this.mapSearchReindexRun(run);
+              },
+            });
+          } finally {
+            await transaction.$queryRaw<LockRow[]>(
+              Prisma.sql`SELECT RELEASE_LOCK(${SEARCH_REINDEX_START_LOCK_NAME}) AS released`,
+            );
+          }
+        }),
+      {
+        operationName: "withSearchReindexStartLock",
+      },
+    );
+  }
+
   private createFallbackOrderBy(
     input: SearchPostingsInput,
     distanceExpression: Prisma.Sql | null,
@@ -1782,6 +1922,18 @@ export class PostingsRepository extends BaseRepository {
       postings: orderedRecords,
       missingIds,
     };
+  }
+
+  private readMysqlLockResult(value: bigint | number | boolean | null | undefined): boolean {
+    if (typeof value === "bigint") {
+      return value === 1n;
+    }
+
+    if (typeof value === "number") {
+      return value === 1;
+    }
+
+    return value === true;
   }
 }
 
