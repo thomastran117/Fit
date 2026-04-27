@@ -2,6 +2,10 @@ x-backend-build: &backend-build
   context: ./backend
   dockerfile: Dockerfile
 
+x-mcp-build: &mcp-build
+  context: ./mcp
+  dockerfile: Dockerfile
+
 x-backend-environment: &backend-environment
   NODE_ENV: production
   DATABASE_URL: mysql://rent:rent@mysql:3306/rent
@@ -17,10 +21,17 @@ x-backend-environment: &backend-environment
   GMAIL_APP_PASSWORD: change-me
   ACCESS_TOKEN_SECRET: change-me-access-token-secret
   REFRESH_TOKEN_SECRET: change-me-refresh-token-secret
+  PERSONAL_ACCESS_TOKEN_SECRET: change-me-personal-access-token-secret
   SQUARE_ACCESS_TOKEN: change-me-square-access-token
   SQUARE_LOCATION_ID: change-me-square-location-id
   SQUARE_WEBHOOK_SIGNATURE_KEY: change-me-square-webhook-signature-key
   SQUARE_WEBHOOK_NOTIFICATION_URL: http://localhost:8040/payments/webhooks/square
+
+x-mcp-environment: &mcp-environment
+  NODE_ENV: production
+  RENTIFY_API_BASE_URL: http://backend:8040
+  RENTIFY_API_TIMEOUT_MS: 5000
+  RENTIFY_PAT: ${RENTIFY_PAT:-}
 
 x-api-depends-on: &api-depends-on
   backend-migrate:
@@ -254,6 +265,18 @@ services:
       NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT: consumers
     ports:
       - "3040:3040"
+
+  mcp:
+    build: *mcp-build
+    image: rent-mcp:local
+    container_name: rent-mcp
+    profiles: ["mcp"]
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_started
+    environment: *mcp-environment
+    stdin_open: true
 
 volumes:
   mysql_data:

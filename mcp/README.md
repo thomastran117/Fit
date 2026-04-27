@@ -93,6 +93,20 @@ npm run build
 npm run start
 ```
 
+## Docker
+
+Build the MCP image directly:
+
+```bash
+docker build -t rentify-mcp ./mcp
+```
+
+The repo also includes a compose-integrated `mcp` service. Because this server uses `stdio`, it is intended to be run on demand rather than exposed on a port:
+
+```bash
+docker compose --profile mcp run --rm -T mcp
+```
+
 ## Example MCP Client Config
 
 Example desktop-style MCP config on Windows:
@@ -108,6 +122,30 @@ Example desktop-style MCP config on Windows:
       "env": {
         "RENTIFY_API_BASE_URL": "http://127.0.0.1:8040",
         "RENTIFY_API_TIMEOUT_MS": "5000",
+        "RENTIFY_PAT": "rpat_your_public_id_your_secret"
+      }
+    }
+  }
+}
+```
+
+Example using the compose-managed container:
+
+```json
+{
+  "mcpServers": {
+    "rentify-docker": {
+      "command": "docker",
+      "args": [
+        "compose",
+        "--profile",
+        "mcp",
+        "run",
+        "--rm",
+        "-T",
+        "mcp"
+      ],
+      "env": {
         "RENTIFY_PAT": "rpat_your_public_id_your_secret"
       }
     }
