@@ -110,6 +110,7 @@ The repository now includes Docker support for:
 From the repo root, start everything with:
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
@@ -123,6 +124,10 @@ Exposed ports:
 
 Notes:
 
+- `docker compose` now reads backend secrets and frontend public env values from the repo-root `.env` file.
+- The Next.js frontend also preloads the same repo-root `.env` file for local `npm run dev` and `npm run build`.
+- Start by copying `.env.example` to `.env`, then replace the placeholder secrets before using the stack beyond local bootstrapping.
+- Frontend `NEXT_PUBLIC_*` values are consumed at build time, so after changing them you should rerun `docker compose up --build`.
 - The backend container runs `prisma migrate deploy` before starting the server.
 - In `development` and `test`, the backend now auto-seeds when the database is empty.
 - Set `DATABASE_AUTO_SEED_REFRESH=true` to force a refresh of fixture-owned records on startup.
@@ -141,9 +146,6 @@ Notes:
   - `user4@rentify.local` / `Rentify123!`
   - `admin1@rentify.local` / `Rentify123!`
 - The seed set includes 62 postings and 27 bookings, along with related payments, rentings, reviews across 5 reviewed postings, search rows, and analytics fixtures for local browsing and testing.
-- The current `docker-compose.yml` includes placeholder values for `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
-- Replace those placeholders before using the stack for anything beyond local bootstrapping.
-
 ## Documentation
 
 - Application plan: [docs/rentify-plan.md](C:/Users/thoma/Documents/Rent/docs/rentify-plan.md)

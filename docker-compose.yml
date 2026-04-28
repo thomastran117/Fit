@@ -7,25 +7,39 @@ x-mcp-build: &mcp-build
   dockerfile: Dockerfile
 
 x-backend-environment: &backend-environment
-  NODE_ENV: development
-  DATABASE_URL: mysql://rent:rent@mysql:3306/rent
-  REDIS_HOST: redis
-  REDIS_PORT: 6379
-  ELASTICSEARCH_ENABLED: "true"
-  ELASTICSEARCH_URL: http://elasticsearch:9200
-  ELASTICSEARCH_POSTINGS_INDEX: postings
-  RABBITMQ_URL: amqp://rabbitmq:5672
-  FRONTEND_URL: http://localhost:3040
-  APP_BASE_URL: http://localhost:3040
-  GMAIL_USER: change-me@example.com
-  GMAIL_APP_PASSWORD: change-me
-  ACCESS_TOKEN_SECRET: change-me-access-token-secret
-  REFRESH_TOKEN_SECRET: change-me-refresh-token-secret
-  PERSONAL_ACCESS_TOKEN_SECRET: change-me-personal-access-token-secret
-  SQUARE_ACCESS_TOKEN: change-me-square-access-token
-  SQUARE_LOCATION_ID: change-me-square-location-id
-  SQUARE_WEBHOOK_SIGNATURE_KEY: change-me-square-webhook-signature-key
-  SQUARE_WEBHOOK_NOTIFICATION_URL: http://localhost:8040/payments/webhooks/square
+  NODE_ENV: ${NODE_ENV:-development}
+  DATABASE_URL: ${DATABASE_URL:-mysql://rent:rent@mysql:3306/rent}
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  ELASTICSEARCH_ENABLED: ${ELASTICSEARCH_ENABLED:-true}
+  ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+  ELASTICSEARCH_POSTINGS_INDEX: ${ELASTICSEARCH_POSTINGS_INDEX:-postings}
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://rabbitmq:5672}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3040}
+  APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3040}
+  GMAIL_USER: ${GMAIL_USER}
+  GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+  ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET}
+  REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
+  PERSONAL_ACCESS_TOKEN_SECRET: ${PERSONAL_ACCESS_TOKEN_SECRET}
+  SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN}
+  SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID}
+  SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY}
+  SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-http://localhost:8040/payments/webhooks/square}
+  CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY}
+  TOKEN_ISSUER: ${TOKEN_ISSUER}
+  TOKEN_AUDIENCE: ${TOKEN_AUDIENCE}
+  MICROSOFT_OAUTH_CLIENT_ID: ${MICROSOFT_OAUTH_CLIENT_ID}
+  MICROSOFT_OAUTH_TENANT: ${MICROSOFT_OAUTH_TENANT}
+  GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+  GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+
+x-frontend-public-environment: &frontend-public-environment
+  NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8040}
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+  NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID:-}
+  NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID:-}
+  NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT: ${NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT:-consumers}
 
 x-mcp-environment: &mcp-environment
   NODE_ENV: development
@@ -235,25 +249,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8040
-        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ""
-        NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ""
-        NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID: ""
-        NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT: consumers
+      args: *frontend-public-environment
     container_name: rent-frontend
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_started
     environment:
+      <<: *frontend-public-environment
       NODE_ENV: production
       PORT: 3040
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8040
-      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ""
-      NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ""
-      NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID: ""
-      NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT: consumers
     ports:
       - "3040:3040"
 

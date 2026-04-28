@@ -2,11 +2,13 @@ This is the Rentify frontend built with [Next.js](https://nextjs.org) and `tailw
 
 ## Getting Started
 
-Create a local env file first:
+Create the shared repo env file first:
 
 ```bash
-cp .env.example .env.local
+cp ../.env.example ../.env
 ```
+
+The frontend loads public env values from the repo-root `.env` file. If you need frontend-only overrides while developing locally, add `frontend/.env.local`; Next.js will apply that after the shared file.
 
 Frontend env values:
 
