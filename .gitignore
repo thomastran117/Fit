@@ -1,3 +1,4 @@
+.env
 mcp/node_modules
 mcp/dist
 mcp/coverage
