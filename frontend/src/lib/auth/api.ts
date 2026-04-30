@@ -39,6 +39,7 @@ interface VerifyEmailInput {
 
 interface ResendVerificationEmailInput {
   email: string;
+  captchaToken: string;
 }
 
 interface ForgotPasswordInput {
@@ -48,6 +49,7 @@ interface ForgotPasswordInput {
 
 interface ResendForgotPasswordInput {
   email: string;
+  captchaToken: string;
 }
 
 interface ResetPasswordInput {
@@ -64,6 +66,7 @@ interface UnlockLocalLoginInput {
 
 interface ResendUnlockLocalLoginInput {
   email: string;
+  captchaToken: string;
 }
 
 interface OAuthAuthenticateInput {

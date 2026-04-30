@@ -46,6 +46,20 @@ interface AuthRequestContext {
   refreshToken?: string;
 }
 
+interface PendingLocalSignupRecord {
+  email: string;
+  passwordHash: string;
+  firstName?: string;
+  lastName?: string;
+  deviceId?: string;
+  createdAt: string;
+}
+
+interface VerificationRecipient {
+  email: string;
+  firstName?: string;
+}
+
 const BCRYPT_SALT_ROUNDS = 12;
 const DUMMY_PASSWORD_HASH =
   "$2b$12$1M7NQyWNh5v3NFg4cTQdUeVUI5BvR9f0vAOVeI3E1FQfQ0rFJz0Vy";
@@ -55,6 +69,9 @@ const LOCAL_LOGIN_LOCK_TTL_IN_SECONDS = 30 * 60;
 const LOCAL_LOGIN_UNLOCK_OTP_PURPOSE = "local-login-unlock";
 const LOCAL_PASSWORD_RESET_OTP_PURPOSE = "local-password-reset";
 const EMAIL_VERIFICATION_OTP_PURPOSE = "email-verification";
+const PENDING_LOCAL_SIGNUP_CACHE_PREFIX = "auth:pending-signup";
+const PENDING_LOCAL_SIGNUP_VERIFY_LOCK_PREFIX = "auth:pending-signup-verify";
+const PENDING_LOCAL_SIGNUP_VERIFY_LOCK_TTL_IN_MS = 10_000;
 const PUBLIC_OTP_RATE_LIMIT_WINDOW_IN_SECONDS = 60 * 60;
 const PUBLIC_OTP_EMAIL_LIMIT = 5;
 const PUBLIC_OTP_IP_LIMIT = 20;
@@ -140,7 +157,7 @@ export class AuthService {
   async localSignup(input: LocalSignupInput): Promise<SignupVerificationPendingResult> {
     const existingUser = await this.authRepository.findUserByEmail(input.email);
 
-    if (existingUser) {
+    if (existingUser?.emailVerified) {
       return {
         verificationRequired: true,
         email: input.email,
@@ -149,21 +166,25 @@ export class AuthService {
     }
 
     const passwordHash = await this.hashPassword(input.password);
-    const user = await this.authRepository.createLocalUser(
+    await this.writePendingLocalSignup(
       {
         email: input.email,
+        passwordHash,
         firstName: input.firstName,
         lastName: input.lastName,
+        deviceId: input.deviceId,
+        createdAt: new Date().toISOString(),
       },
-      passwordHash,
+      this.otpService.getTtlInSeconds(),
     );
-
-    await this.deviceService.registerKnownDevice(user, input.client, input.deviceId);
-    await this.sendVerificationCode(user);
+    await this.sendVerificationCode({
+      email: input.email,
+      firstName: input.firstName,
+    });
 
     return {
       verificationRequired: true,
-      email: user.email,
+      email: input.email,
       alreadyPending: false,
     };
   }
@@ -250,7 +271,7 @@ export class AuthService {
       passwordHash,
       tokenVersion: nextTokenVersion,
     };
-    const deviceStatus = await this.deviceService.registerKnownDevice(
+    const deviceStatus = await this.deviceService.evaluateExistingSessionDevice(
       updatedUser,
       input.client,
       input.deviceId,
@@ -265,25 +286,61 @@ export class AuthService {
       subject: input.email,
       code: input.code,
     });
+    const verificationLock = await this.acquirePendingLocalSignupVerificationLock(input.email);
 
-    const user = await this.authRepository.findUserByEmail(input.email);
-
-    if (!user || user.emailVerified) {
+    if (!verificationLock) {
       throw new BadRequestError("Verification code is invalid or has expired.");
     }
 
-    await this.authRepository.markEmailVerified(user.id);
+    try {
+      const pendingSignup = await this.readPendingLocalSignup(input.email);
 
-    const verifiedUser: AuthUserRecord = {
-      ...user,
-      emailVerified: true,
-    };
+      if (!pendingSignup) {
+        throw new BadRequestError("Verification code is invalid or has expired.");
+      }
 
-    return this.issueTokensForUser(
-      verifiedUser,
-      await this.deviceService.registerKnownDevice(verifiedUser, input.client, input.deviceId),
-      input.deviceId,
-    );
+      const existingUser = await this.authRepository.findUserByEmail(input.email);
+      let verifiedUser: AuthUserRecord;
+
+      if (!existingUser) {
+        const createdUser = await this.authRepository.createLocalUser(
+          {
+            email: pendingSignup.email,
+            firstName: pendingSignup.firstName,
+            lastName: pendingSignup.lastName,
+          },
+          pendingSignup.passwordHash,
+        );
+        await this.authRepository.markEmailVerified(createdUser.id);
+        verifiedUser = {
+          ...createdUser,
+          emailVerified: true,
+          passwordHash: pendingSignup.passwordHash,
+        };
+      } else if (existingUser.emailVerified) {
+        await this.deletePendingLocalSignup(input.email);
+        throw new BadRequestError("Verification code is invalid or has expired.");
+      } else {
+        verifiedUser = await this.authRepository.activatePendingLocalUser(existingUser.id, {
+          passwordHash: pendingSignup.passwordHash,
+          firstName: pendingSignup.firstName,
+          lastName: pendingSignup.lastName,
+        });
+      }
+
+      await this.deletePendingLocalSignup(input.email);
+
+      const resolvedDeviceId = input.deviceId ?? pendingSignup.deviceId;
+      const deviceStatus = await this.deviceService.evaluateExistingSessionDevice(
+        verifiedUser,
+        input.client,
+        resolvedDeviceId,
+      );
+
+      return this.issueTokensForUser(verifiedUser, deviceStatus, resolvedDeviceId);
+    } finally {
+      await verificationLock.release();
+    }
   }
 
   async resendVerificationEmail(input: ResendVerificationEmailInput): Promise<{
@@ -304,10 +361,25 @@ export class AuthService {
       };
     }
 
+    const pendingSignup = await this.readPendingLocalSignup(input.email);
+
+    if (pendingSignup) {
+      await this.sendPublicVerificationCode({
+        email: pendingSignup.email,
+        firstName: pendingSignup.firstName,
+      });
+      return {
+        accepted: true,
+      };
+    }
+
     const user = await this.authRepository.findUserByEmail(input.email);
 
     if (user && !user.emailVerified) {
-      await this.sendPublicVerificationCode(user);
+      await this.sendPublicVerificationCode({
+        email: user.email,
+        firstName: user.firstName,
+      });
     }
 
     return {
@@ -338,7 +410,7 @@ export class AuthService {
       passwordHash,
       tokenVersion: nextTokenVersion,
     };
-    const deviceStatus = await this.deviceService.registerKnownDevice(
+    const deviceStatus = await this.deviceService.evaluateExistingSessionDevice(
       updatedUser,
       input.client,
       input.deviceId,
@@ -498,7 +570,11 @@ export class AuthService {
     const claims = await this.tokenService.verifyRefreshToken(input.refreshToken);
     const user = await this.requireExistingUser(claims.sub);
     const deviceId = claims.deviceId ?? input.client.device.id;
-    const deviceStatus = await this.deviceService.registerKnownDevice(user, input.client, deviceId);
+    const deviceStatus = await this.deviceService.evaluateExistingSessionDevice(
+      user,
+      input.client,
+      deviceId,
+    );
 
     await this.tokenService.revokeRefreshToken(input.refreshToken);
 
@@ -754,29 +830,29 @@ export class AuthService {
     };
   }
 
-  private async sendVerificationCode(user: AuthUserRecord): Promise<void> {
+  private async sendVerificationCode(recipient: VerificationRecipient): Promise<void> {
     const issuedOtp = await this.otpService.issue({
       purpose: EMAIL_VERIFICATION_OTP_PURPOSE,
-      subject: user.email,
+      subject: recipient.email,
     });
 
     await this.emailService.sendVerificationEmail({
-      to: user.email,
+      to: recipient.email,
       verificationCode: issuedOtp.code,
-      firstName: user.firstName,
+      firstName: recipient.firstName,
     });
   }
 
-  private async sendPublicVerificationCode(user: AuthUserRecord): Promise<void> {
+  private async sendPublicVerificationCode(recipient: VerificationRecipient): Promise<void> {
     try {
-      await this.sendVerificationCode(user);
+      await this.sendVerificationCode(recipient);
     } catch (error) {
       if (error instanceof Error && error.name === "TooManyRequestError") {
         this.logSuspiciousOtpPattern({
           allowed: false,
           flow: "resend-verification-email",
           purpose: EMAIL_VERIFICATION_OTP_PURPOSE,
-          subject: user.email,
+          subject: recipient.email,
           reason: "otp-cooldown",
         });
         return;
@@ -825,6 +901,36 @@ export class AuthService {
     );
 
     return this.issueTokensForUser(user, deviceStatus, input.deviceId, Boolean(input.rememberMe));
+  }
+
+  private getPendingLocalSignupKey(email: string): string {
+    return `${PENDING_LOCAL_SIGNUP_CACHE_PREFIX}:${email.toLowerCase()}`;
+  }
+
+  private getPendingLocalSignupVerifyLockKey(email: string): string {
+    return `${PENDING_LOCAL_SIGNUP_VERIFY_LOCK_PREFIX}:${email.toLowerCase()}`;
+  }
+
+  private async writePendingLocalSignup(
+    signup: PendingLocalSignupRecord,
+    ttlInSeconds: number,
+  ): Promise<void> {
+    await this.cacheService.setJson(this.getPendingLocalSignupKey(signup.email), signup, ttlInSeconds);
+  }
+
+  private async readPendingLocalSignup(email: string): Promise<PendingLocalSignupRecord | null> {
+    return this.cacheService.getJson<PendingLocalSignupRecord>(this.getPendingLocalSignupKey(email));
+  }
+
+  private async deletePendingLocalSignup(email: string): Promise<void> {
+    await this.cacheService.delete(this.getPendingLocalSignupKey(email));
+  }
+
+  private acquirePendingLocalSignupVerificationLock(email: string) {
+    return this.cacheService.acquireLock(
+      this.getPendingLocalSignupVerifyLockKey(email),
+      PENDING_LOCAL_SIGNUP_VERIFY_LOCK_TTL_IN_MS,
+    );
   }
 
   private getLocalLoginAttemptKey(email: string): string {

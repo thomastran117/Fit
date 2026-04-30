@@ -1,6 +1,6 @@
 const tokenConfig = {
-  accessTokenSecret: "test-access-secret",
-  refreshTokenSecret: "test-refresh-secret",
+  accessTokenSecret: "test-access-secret-value-with-32chars",
+  refreshTokenSecret: "test-refresh-secret-value-with-32c",
   accessTokenTtlSeconds: 15 * 60,
   refreshTokenTtlSeconds: 30 * 24 * 60 * 60,
   rememberMeRefreshTokenTtlSeconds: 90 * 24 * 60 * 60,
@@ -8,7 +8,7 @@ const tokenConfig = {
   audience: undefined,
   refreshTokenMode: "stateful" as const,
   refreshTokenCachePrefix: "auth:refresh",
-  personalAccessTokenSecret: "test-pat-secret",
+  personalAccessTokenSecret: "test-personal-access-token-secret-32",
 };
 
 const captchaConfig = {

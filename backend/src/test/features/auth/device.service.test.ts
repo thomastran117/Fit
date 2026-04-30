@@ -68,6 +68,7 @@ function createService(overrides?: {
   findKnownDevice?: (userId: string, deviceId: string) => Promise<KnownDeviceRecord | null>;
   touchKnownDevice?: (userId: string, deviceId: string, ipAddress?: string) => Promise<void>;
   hasKnownIpAddress?: (userId: string, ipAddress: string) => Promise<boolean>;
+  hasAnyKnownDevice?: (userId: string) => Promise<boolean>;
   touchKnownIpAddress?: (userId: string, ipAddress: string) => Promise<void>;
   registerKnownDevice?: (input: {
     userId: string;
@@ -96,6 +97,7 @@ function createService(overrides?: {
     findKnownDevice: jest.fn(overrides?.findKnownDevice ?? (async () => null)),
     touchKnownDevice: jest.fn(overrides?.touchKnownDevice ?? (async () => {})),
     hasKnownIpAddress: jest.fn(overrides?.hasKnownIpAddress ?? (async () => false)),
+    hasAnyKnownDevice: jest.fn(overrides?.hasAnyKnownDevice ?? (async () => true)),
     touchKnownIpAddress: jest.fn(overrides?.touchKnownIpAddress ?? (async () => {})),
     registerKnownDevice:
       jest.fn(
@@ -293,6 +295,48 @@ describe("DeviceService", () => {
       userAgent: "test-agent",
       detectedAt: expect.any(Date),
     });
+  });
+
+  it("does not auto-register unseen devices during existing-session evaluation", async () => {
+    const { service, deviceRepository, emailService } = createService({
+      hasKnownIpAddress: async () => false,
+      hasAnyKnownDevice: async () => true,
+    });
+
+    const result = await service.evaluateExistingSessionDevice(
+      createUser(),
+      createClient(),
+      "new-session-device",
+    );
+
+    expect(result).toEqual({
+      deviceId: "new-session-device",
+      known: false,
+      knownByIp: false,
+    });
+    expect(deviceRepository.registerKnownDevice).not.toHaveBeenCalled();
+    expect(emailService.sendNewDeviceEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips unknown-device alerts for brand-new users during existing-session evaluation", async () => {
+    const { service, emailService, deviceRepository } = createService({
+      hasKnownIpAddress: async () => false,
+      hasAnyKnownDevice: async () => false,
+    });
+
+    const result = await service.evaluateExistingSessionDevice(
+      createUser(),
+      createClient(),
+      "brand-new-device",
+    );
+
+    expect(result).toEqual({
+      deviceId: "brand-new-device",
+      known: false,
+      knownByIp: false,
+    });
+    expect(emailService.sendNewDeviceEmail).not.toHaveBeenCalled();
+    expect(deviceRepository.registerKnownDevice).not.toHaveBeenCalled();
   });
 
   it("suppresses duplicate unknown-device alerts during the cooldown window", async () => {

@@ -112,6 +112,62 @@ export class DeviceService {
     };
   }
 
+  async evaluateExistingSessionDevice(
+    user: AuthUserRecord,
+    client: ClientRequestContext,
+    deviceId?: string,
+  ): Promise<KnownDeviceStatus> {
+    if (deviceId) {
+      const knownDevice = await this.deviceRepository.findKnownDevice(user.id, deviceId);
+
+      if (knownDevice) {
+        await this.deviceRepository.touchKnownDevice(user.id, deviceId, client.ip);
+
+        return {
+          deviceId,
+          known: true,
+          knownByIp: Boolean(client.ip && knownDevice.lastIpAddress === client.ip),
+        };
+      }
+    }
+
+    if (!client.ip) {
+      return {
+        deviceId,
+        known: false,
+        knownByIp: false,
+      };
+    }
+
+    const knownByIp = await this.deviceRepository.hasKnownIpAddress(user.id, client.ip);
+
+    if (knownByIp) {
+      await this.deviceRepository.touchKnownIpAddress(user.id, client.ip);
+
+      return {
+        deviceId,
+        known: false,
+        knownByIp: true,
+      };
+    }
+
+    if (!(await this.deviceRepository.hasAnyKnownDevice(user.id))) {
+      return {
+        deviceId,
+        known: false,
+        knownByIp: false,
+      };
+    }
+
+    await this.notifyUnknownDevice(user, client, deviceId ?? "unknown-device");
+
+    return {
+      deviceId,
+      known: false,
+      knownByIp: false,
+    };
+  }
+
   async listKnownDevices(
     userId: string,
     currentDeviceId?: string,

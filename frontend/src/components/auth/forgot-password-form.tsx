@@ -17,6 +17,7 @@ interface ResetErrors {
   code?: string;
   newPassword?: string;
   confirmPassword?: string;
+  captchaToken?: string;
 }
 
 interface ApiErrorShape {
@@ -123,16 +124,37 @@ function getResetFailureResult(error: unknown): {
 } {
   const apiError = error as ApiErrorShape | undefined;
   const status = apiError?.status;
+  const code = apiError?.body?.code;
   const message = apiError?.body?.error ?? apiError?.message;
   const details = apiError?.body?.details as { retryAfterSeconds?: number } | undefined;
 
   if (status === 400) {
-    return {
-      generalError: null,
-      fieldErrors: {
-        code: message || "Reset code is invalid or has expired.",
-      },
-    };
+    switch (code) {
+      case "CAPTCHA_REQUIRED":
+      case "CAPTCHA_MISSING":
+        return {
+          generalError: "Please complete the security check before requesting another reset code.",
+          fieldErrors: {
+            captchaToken: "Complete the verification to continue.",
+          },
+        };
+      case "CAPTCHA_INVALID":
+      case "CAPTCHA_EXPIRED":
+      case "TURNSTILE_VALIDATION_FAILED":
+        return {
+          generalError: "The security check expired or failed. Please try again.",
+          fieldErrors: {
+            captchaToken: "Please complete the verification again.",
+          },
+        };
+      default:
+        return {
+          generalError: null,
+          fieldErrors: {
+            code: message || "Reset code is invalid or has expired.",
+          },
+        };
+    }
   }
 
   if (status === 409) {
@@ -259,11 +281,20 @@ export function ForgotPasswordForm() {
     setGeneralError(null);
     setResetErrors({});
     setResentMessage(null);
+
+    if (!captchaToken.trim()) {
+      setResetErrors({
+        captchaToken: "Complete the verification to continue.",
+      });
+      return;
+    }
+
     setResending(true);
 
     try {
       await authApi.resendForgotPassword({
         email: email.trim().toLowerCase(),
+        captchaToken,
       });
 
       setResentMessage(`If ${email.trim().toLowerCase()} is eligible, a new reset code is on the way.`);
@@ -271,6 +302,7 @@ export function ForgotPasswordForm() {
       const failure = getResetFailureResult(error);
       setGeneralError(failure.generalError);
     } finally {
+      clearCaptchaToken();
       setResending(false);
     }
   }
@@ -452,6 +484,25 @@ export function ForgotPasswordForm() {
           {resetPending ? "Resetting password..." : "Reset password"}
         </button>
       </form>
+
+      <AuthCaptchaPanel
+        token={captchaToken}
+        error={resetErrors.captchaToken}
+        onChange={(token) => {
+          setResetErrors((current) => ({
+            ...current,
+            captchaToken: undefined,
+          }));
+          setCaptchaToken(token);
+        }}
+        onReset={() => {
+          setResetErrors((current) => ({
+            ...current,
+            captchaToken: undefined,
+          }));
+          clearCaptchaToken();
+        }}
+      />
 
       <button
         type="button"

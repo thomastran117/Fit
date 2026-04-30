@@ -457,6 +457,8 @@ type NumberOptions = {
   min?: number;
 };
 
+const MINIMUM_TOKEN_SECRET_LENGTH = 32;
+
 function parseNumber(
   raw: RawEnvironmentValues,
   name: EnvironmentVariableName,
@@ -510,6 +512,22 @@ function readRequiredString(
   return value;
 }
 
+function readRequiredSecret(
+  raw: RawEnvironmentValues,
+  name: EnvironmentVariableName,
+  errors: string[],
+): string {
+  const value = readRequiredString(raw, name, errors);
+
+  if (value && value.length < MINIMUM_TOKEN_SECRET_LENGTH) {
+    errors.push(
+      `${name} must be at least ${MINIMUM_TOKEN_SECRET_LENGTH} characters long.`,
+    );
+  }
+
+  return value;
+}
+
 function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
   const raw = normalizeRawEnvironment(source);
   const errors: string[] = [];
@@ -518,9 +536,9 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
   const rateLimiterStrategy = parseRateLimiterStrategy(raw, errors);
 
   const databaseUrl = readRequiredString(raw, "DATABASE_URL", errors);
-  const accessTokenSecret = readRequiredString(raw, "ACCESS_TOKEN_SECRET", errors);
-  const refreshTokenSecret = readRequiredString(raw, "REFRESH_TOKEN_SECRET", errors);
-  const personalAccessTokenSecret = readRequiredString(
+  const accessTokenSecret = readRequiredSecret(raw, "ACCESS_TOKEN_SECRET", errors);
+  const refreshTokenSecret = readRequiredSecret(raw, "REFRESH_TOKEN_SECRET", errors);
+  const personalAccessTokenSecret = readRequiredSecret(
     raw,
     "PERSONAL_ACCESS_TOKEN_SECRET",
     errors,

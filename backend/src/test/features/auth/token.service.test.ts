@@ -16,11 +16,21 @@ function createClaims(overrides: Partial<JwtClaims> = {}): JwtClaims {
 
 function createAuthRepository(options?: {
   tokenVersion?: number | null;
+  role?: JwtClaims["role"];
 }) {
   return {
-    findTokenVersionByUserId: jest.fn(async () =>
-      options?.tokenVersion === undefined ? 2 : options.tokenVersion,
-    ),
+    findSessionValidationByUserId: jest.fn(async () => {
+      const tokenVersion = options?.tokenVersion === undefined ? 2 : options.tokenVersion;
+
+      if (tokenVersion === null) {
+        return null;
+      }
+
+      return {
+        tokenVersion,
+        role: options?.role ?? "user",
+      };
+    }),
   };
 }
 
@@ -46,6 +56,7 @@ function createCache() {
 
 function createService(options?: {
   tokenVersion?: number | null;
+  role?: JwtClaims["role"];
   refreshTokenMode?: "stateless" | "stateful";
   issuer?: string;
   audience?: string;
@@ -53,6 +64,7 @@ function createService(options?: {
 }) {
   const authRepository = createAuthRepository({
     tokenVersion: options?.tokenVersion,
+    role: options?.role,
   });
   const cache = createCache();
   const service = new TokenService({
@@ -78,7 +90,9 @@ describe("TokenService", () => {
 
   it("creates and verifies access tokens while preserving auth claims", async () => {
     jest.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
-    const { service, authRepository } = createService();
+    const { service, authRepository } = createService({
+      role: "owner",
+    });
 
     const token = service.createAccessToken({
       sub: "user-1",
@@ -99,7 +113,24 @@ describe("TokenService", () => {
       iat: 1_700_000_000,
       exp: 1_700_000_900,
     });
-    expect(authRepository.findTokenVersionByUserId).toHaveBeenCalledWith("user-1");
+    expect(authRepository.findSessionValidationByUserId).toHaveBeenCalledWith("user-1");
+  });
+
+  it("hydrates the current role from storage when the JWT claim is stale", async () => {
+    const { service } = createService({
+      role: "user",
+    });
+    const token = service.createAccessToken({
+      sub: "user-1",
+      role: "admin",
+      tokenVersion: 2,
+    });
+
+    await expect(service.verifyAccessToken(token)).resolves.toMatchObject({
+      sub: "user-1",
+      role: "user",
+      tokenVersion: 2,
+    });
   });
 
   it("rejects access tokens when the stored token version has changed", async () => {
@@ -189,7 +220,7 @@ describe("TokenService", () => {
       exp: 1_707_776_000,
     });
     expect(typeof claims.jti).toBe("string");
-    expect(authRepository.findTokenVersionByUserId).toHaveBeenCalledWith("user-1");
+    expect(authRepository.findSessionValidationByUserId).toHaveBeenCalledWith("user-1");
   });
 
   it("rejects stateless refresh tokens with invalid signatures", async () => {
@@ -245,6 +276,22 @@ describe("TokenService", () => {
     });
     await expect(service.revokeRefreshToken(token)).resolves.toBe(true);
     expect(cache.service.delete).toHaveBeenCalledWith(`test:refresh:${body.jti}`);
+  });
+
+  it("rejects stateful refresh token revocation when the signature is invalid", async () => {
+    const { service } = createService({
+      refreshTokenMode: "stateful",
+    });
+    const token = await service.createRefreshToken({
+      sub: "user-1",
+      tokenVersion: 2,
+    });
+    const parts = token.split(".");
+    const tamperedToken = `${parts[0]}.${parts[1]}.not-the-real-signature`;
+
+    await expect(service.revokeRefreshToken(tamperedToken)).rejects.toThrow(
+      "Invalid refresh token signature.",
+    );
   });
 
   it("rejects stateful refresh tokens when the cached session is missing", async () => {

@@ -88,6 +88,10 @@ function createService(overrides?: {
   listOAuthIdentitiesByUserId?: (userId: string) => Promise<AuthUserRecord["oauthIdentities"]>;
   unlinkOAuthIdentity?: (userId: string, provider: "google" | "microsoft" | "apple") => Promise<boolean>;
   markEmailVerified?: (userId: string) => Promise<void>;
+  activatePendingLocalUser?: (
+    userId: string,
+    input: { passwordHash: string; firstName?: string; lastName?: string },
+  ) => Promise<AuthUserRecord>;
   updatePasswordHash?: (userId: string, passwordHash: string) => Promise<void>;
   rotateTokenVersion?: (userId: string) => Promise<number>;
   verifyRefreshToken?: (token: string) => Promise<{ sub: string; deviceId?: string; rememberMe?: boolean }>;
@@ -95,7 +99,7 @@ function createService(overrides?: {
   getRefreshTokenExpiresInSeconds?: (rememberMe?: boolean) => number;
   revokeRefreshToken?: (token: string) => Promise<boolean>;
   evaluateSuccessfulAuthentication?: () => Promise<{ deviceId?: string; known: boolean; knownByIp: boolean }>;
-  registerKnownDevice?: () => Promise<{ deviceId?: string; known: boolean; knownByIp: boolean }>;
+  evaluateExistingSessionDevice?: () => Promise<{ deviceId?: string; known: boolean; knownByIp: boolean }>;
   listKnownDevices?: (userId: string, currentDeviceId?: string) => Promise<Array<{
     id: string;
     current: boolean;
@@ -112,10 +116,11 @@ function createService(overrides?: {
   registerKnownDevice?: (
     user: AuthUserRecord,
     client: ReturnType<typeof createClient>,
-    deviceId: string,
+    deviceId?: string,
   ) => Promise<{ deviceId?: string; known: boolean; knownByIp: boolean }>;
   issueOtp?: (input: { purpose: string; subject: string }) => Promise<{ code: string }>;
   verifyOtp?: (input: { purpose: string; subject: string; code: string }) => Promise<void>;
+  otpTtlInSeconds?: number;
   sendVerificationEmail?: (input: {
     to: string;
     verificationCode: string;
@@ -139,6 +144,13 @@ function createService(overrides?: {
     firstName?: string;
     lastName?: string;
   }>;
+  cacheGetJson?: (key: string) => Promise<unknown | null>;
+  cacheDelete?: (key: string) => Promise<boolean>;
+  cacheSetJson?: (key: string, value: unknown, ttlSeconds?: number) => Promise<void>;
+  acquireLock?: (
+    key: string,
+    ttlInMs: number,
+  ) => Promise<{ release: () => Promise<boolean> } | null>;
 }) {
   const cacheJsonStore = new Map<string, { value: unknown; ttlSeconds?: number }>();
   const authRepository = {
@@ -193,6 +205,16 @@ function createService(overrides?: {
       overrides?.listOAuthIdentitiesByUserId ?? (async () => []),
     unlinkOAuthIdentity: overrides?.unlinkOAuthIdentity ?? (async () => true),
     markEmailVerified: overrides?.markEmailVerified ?? (async () => {}),
+    activatePendingLocalUser:
+      overrides?.activatePendingLocalUser ??
+      (async (userId, input) => ({
+        ...createUser(),
+        id: userId,
+        passwordHash: input.passwordHash,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        emailVerified: true,
+      })),
     updatePasswordHash: overrides?.updatePasswordHash ?? (async () => {}),
     rotateTokenVersion: overrides?.rotateTokenVersion ?? (async () => 3),
   };
@@ -218,10 +240,18 @@ function createService(overrides?: {
         code: "123456",
       })),
     verify: overrides?.verifyOtp ?? (async () => {}),
+    getTtlInSeconds: () => overrides?.otpTtlInSeconds ?? 600,
   };
   const deviceService = {
     evaluateSuccessfulAuthentication:
       overrides?.evaluateSuccessfulAuthentication ??
+      (async () => ({
+        deviceId: "device-1",
+        known: true,
+        knownByIp: true,
+      })),
+    evaluateExistingSessionDevice:
+      overrides?.evaluateExistingSessionDevice ??
       (async () => ({
         deviceId: "device-1",
         known: true,
@@ -271,14 +301,38 @@ function createService(overrides?: {
   const appleOAuthService = {};
   const cacheService = {
     getJson: jest.fn(async <TValue>(key: string) => {
+      if (overrides?.cacheGetJson) {
+        return (await overrides.cacheGetJson(key)) as TValue | null;
+      }
+
       return (cacheJsonStore.get(key)?.value as TValue | undefined) ?? null;
     }),
-    delete: jest.fn(async (key: string) => cacheJsonStore.delete(key)),
+    delete: jest.fn(async (key: string) => {
+      if (overrides?.cacheDelete) {
+        return overrides.cacheDelete(key);
+      }
+
+      return cacheJsonStore.delete(key);
+    }),
     setJson: jest.fn(async (key: string, value: unknown, ttlSeconds?: number) => {
+      if (overrides?.cacheSetJson) {
+        await overrides.cacheSetJson(key, value, ttlSeconds);
+        return;
+      }
+
       cacheJsonStore.set(key, {
         value,
         ttlSeconds,
       });
+    }),
+    acquireLock: jest.fn(async (key: string, ttlInMs: number) => {
+      if (overrides?.acquireLock) {
+        return overrides.acquireLock(key, ttlInMs);
+      }
+
+      return {
+        release: async () => true,
+      };
     }),
   };
 
@@ -455,6 +509,36 @@ describe("AuthService", () => {
     });
 
     expect(verificationEmailSent).toBe(false);
+  });
+
+  it("resends verification email for cached pending signup state without a real user", async () => {
+    let verificationEmailSentTo: string | undefined;
+    const service = createService({
+      findUserByEmail: async () => null,
+      cacheGetJson: async () => ({
+        email: "pending@example.com",
+        passwordHash: "hashed-password",
+        firstName: "Pending",
+        lastName: "User",
+        deviceId: "device-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+      sendVerificationEmail: async (input) => {
+        verificationEmailSentTo = input.to;
+      },
+    });
+
+    await expect(
+      service.resendVerificationEmail({
+        client: createClient(),
+        email: "pending@example.com",
+        deviceId: "device-1",
+      }),
+    ).resolves.toEqual({
+      accepted: true,
+    });
+
+    expect(verificationEmailSentTo).toBe("pending@example.com");
   });
 
   it("rate-limits public OTP requests by email before user lookup", async () => {
@@ -758,30 +842,23 @@ describe("AuthService", () => {
     });
   });
 
-  it("creates a new local user and sends verification during signup", async () => {
-    const createdUser = {
-      ...createUser(),
-      email: "new-user@example.com",
-      firstName: "New",
-      lastName: "User",
-      emailVerified: false,
-    };
-    let createdPasswordHash: string | undefined;
-    let registeredDeviceId: string | undefined;
+  it("stores pending signup state in cache and sends verification during signup", async () => {
+    let createLocalUserCalled = false;
     let verificationEmailSentTo: string | undefined;
+    let cachedKey: string | undefined;
+    let cachedValue: unknown;
+    let cachedTtl: number | undefined;
     const service = createService({
       findUserByEmail: async () => null,
-      createLocalUser: async (_input, passwordHash) => {
-        createdPasswordHash = passwordHash;
-        return createdUser;
+      createLocalUser: async () => {
+        createLocalUserCalled = true;
+        return createUser();
       },
-      registerKnownDevice: async (_user, _client, deviceId) => {
-        registeredDeviceId = deviceId;
-        return {
-          deviceId,
-          known: true,
-          knownByIp: true,
-        };
+      otpTtlInSeconds: 600,
+      cacheSetJson: async (key, value, ttlSeconds) => {
+        cachedKey = key;
+        cachedValue = value;
+        cachedTtl = ttlSeconds;
       },
       sendVerificationEmail: async (input) => {
         verificationEmailSentTo = input.to;
@@ -790,22 +867,33 @@ describe("AuthService", () => {
 
     const result = await service.localSignup({
       client: createClient(),
-      email: createdUser.email,
+      email: "new-user@example.com",
       password: "CorrectHorseBatteryStaple1!",
-      firstName: createdUser.firstName,
-      lastName: createdUser.lastName,
+      firstName: "New",
+      lastName: "User",
       deviceId: "device-1",
     });
 
-    expect(typeof createdPasswordHash).toBe("string");
+    expect(createLocalUserCalled).toBe(false);
+    expect(cachedKey).toBe("auth:pending-signup:new-user@example.com");
+    expect(cachedTtl).toBe(600);
+    expect(cachedValue).toMatchObject({
+      email: "new-user@example.com",
+      firstName: "New",
+      lastName: "User",
+      deviceId: "device-1",
+      createdAt: expect.any(String),
+    });
     await expect(
-      bcrypt.compare("CorrectHorseBatteryStaple1!", createdPasswordHash ?? ""),
+      bcrypt.compare(
+        "CorrectHorseBatteryStaple1!",
+        (cachedValue as { passwordHash?: string }).passwordHash ?? "",
+      ),
     ).resolves.toBe(true);
-    expect(registeredDeviceId).toBe("device-1");
-    expect(verificationEmailSentTo).toBe(createdUser.email);
+    expect(verificationEmailSentTo).toBe("new-user@example.com");
     expect(result).toEqual({
       verificationRequired: true,
-      email: createdUser.email,
+      email: "new-user@example.com",
       alreadyPending: false,
     });
   });
@@ -1117,15 +1205,96 @@ describe("AuthService", () => {
     });
   });
 
-  it("rejects verifyEmail when the account cannot be found", async () => {
+  it("creates a real user from pending signup state during email verification", async () => {
+    const pendingPasswordHash = await bcrypt.hash("CorrectHorseBatteryStaple1!", 4);
+    const createdUser = {
+      ...createUser(),
+      email: "pending@example.com",
+      firstName: "Pending",
+      lastName: "User",
+      emailVerified: false,
+    };
+    let createdInput:
+      | { email: string; firstName?: string; lastName?: string; passwordHash: string }
+      | null = null;
+    let markedVerifiedUserId: string | undefined;
+    let deletedPendingKey: string | undefined;
     const service = createService({
       findUserByEmail: async () => null,
+      cacheGetJson: async () => ({
+        email: "pending@example.com",
+        passwordHash: pendingPasswordHash,
+        firstName: "Pending",
+        lastName: "User",
+        deviceId: "device-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+      createLocalUser: async (input, passwordHash) => {
+        createdInput = {
+          ...input,
+          passwordHash,
+        };
+        return createdUser;
+      },
+      markEmailVerified: async (userId) => {
+        markedVerifiedUserId = userId;
+      },
+      cacheDelete: async (key) => {
+        deletedPendingKey = key;
+        return true;
+      },
+    });
+
+    await expect(
+      service.verifyEmail({
+        client: createClient(),
+        email: "pending@example.com",
+        code: "123456",
+        deviceId: "device-1",
+      }),
+    ).resolves.toMatchObject({
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      user: {
+        email: "pending@example.com",
+        emailVerified: true,
+      },
+    });
+
+    expect(createdInput).toEqual({
+      email: "pending@example.com",
+      firstName: "Pending",
+      lastName: "User",
+      passwordHash: pendingPasswordHash,
+    });
+    expect(markedVerifiedUserId).toBe("user-1");
+    expect(deletedPendingKey).toBe("auth:pending-signup:pending@example.com");
+  });
+
+  it("rejects verifyEmail when pending signup state is missing", async () => {
+    const service = createService({
+      cacheGetJson: async () => null,
     });
 
     await expect(
       service.verifyEmail({
         client: createClient(),
         email: "missing@example.com",
+        code: "123456",
+        deviceId: "device-1",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it("rejects verifyEmail when the pending-signup verification lock cannot be acquired", async () => {
+    const service = createService({
+      acquireLock: async () => null,
+    });
+
+    await expect(
+      service.verifyEmail({
+        client: createClient(),
+        email: "locked@example.com",
         code: "123456",
         deviceId: "device-1",
       }),

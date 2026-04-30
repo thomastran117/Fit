@@ -124,8 +124,12 @@ export class TokenService {
 
   async verifyAccessToken(token: string): Promise<JwtClaims> {
     const claims = this.verifyJwt(token);
-    await this.assertTokenVersionIsCurrent(claims.sub, claims.tokenVersion);
-    return claims;
+    const sessionValidation = await this.getCurrentSessionValidation(claims.sub, claims.tokenVersion);
+
+    return {
+      ...claims,
+      role: sessionValidation.role,
+    };
   }
 
   getAccessTokenExpiresInSeconds(): number {
@@ -250,7 +254,7 @@ export class TokenService {
   }
 
   async revokeStatefulRefreshToken(token: string): Promise<boolean> {
-    const claims = this.parseRefreshToken(token);
+    const claims = await this.verifyStatefulRefreshToken(token);
     return this.cache.delete(this.getRefreshCacheKey(claims.jti));
   }
 
@@ -322,16 +326,6 @@ export class TokenService {
     };
   }
 
-  private parseRefreshToken(token: string): RefreshTokenClaims {
-    const [version, body, signature] = token.split(".");
-
-    if (!version || !body || !signature || version !== REFRESH_TOKEN_VERSION) {
-      throw new UnauthorizedError("Invalid refresh token format.");
-    }
-
-    return JSON.parse(fromBase64Url(body)) as RefreshTokenClaims;
-  }
-
   private assertRefreshTokenIsValid(claims: RefreshTokenClaims): void {
     const now = Math.floor(Date.now() / 1000);
 
@@ -340,20 +334,29 @@ export class TokenService {
     }
   }
 
+  private async getCurrentSessionValidation(
+    userId: string,
+    tokenVersion?: string | number | boolean | null,
+  ): Promise<{ tokenVersion: number; role: AppRole }> {
+    const sessionValidation = await this.authRepository.findSessionValidationByUserId(userId);
+    const normalizedTokenVersion = typeof tokenVersion === "number" ? tokenVersion : 0;
+
+    if (!sessionValidation) {
+      throw new UnauthorizedError("Authenticated user could not be found.");
+    }
+
+    if (normalizedTokenVersion !== sessionValidation.tokenVersion) {
+      throw new UnauthorizedError("Session is no longer valid.");
+    }
+
+    return sessionValidation;
+  }
+
   private async assertTokenVersionIsCurrent(
     userId: string,
     tokenVersion?: string | number | boolean | null,
   ): Promise<void> {
-    const currentTokenVersion = await this.authRepository.findTokenVersionByUserId(userId);
-    const normalizedTokenVersion = typeof tokenVersion === "number" ? tokenVersion : 0;
-
-    if (currentTokenVersion === null) {
-      throw new UnauthorizedError("Authenticated user could not be found.");
-    }
-
-    if (normalizedTokenVersion !== currentTokenVersion) {
-      throw new UnauthorizedError("Session is no longer valid.");
-    }
+    await this.getCurrentSessionValidation(userId, tokenVersion);
   }
 
   private getRefreshCacheKey(jti: string): string {
