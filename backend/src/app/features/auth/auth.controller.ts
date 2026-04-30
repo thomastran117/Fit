@@ -100,6 +100,7 @@ export class AuthController {
 
   resendForgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resendForgotPasswordRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.resendForgotPassword(
       this.toResendForgotPasswordInput(context, input),
     );
@@ -120,6 +121,7 @@ export class AuthController {
 
   resendVerificationEmail = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resendVerificationEmailRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.resendVerificationEmail(
       this.toResendVerificationEmailInput(context, input),
     );
@@ -143,6 +145,7 @@ export class AuthController {
 
   resendUnlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resendUnlockLocalLoginRequestSchema);
+    await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.resendUnlockLocalLogin(
       this.toResendUnlockLocalLoginInput(context, input),
     );

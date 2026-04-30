@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { AuthCaptchaPanel } from "@/components/auth/auth-captcha-panel";
+import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
 
 interface ApiErrorShape {
@@ -59,6 +61,62 @@ function getUnlockFailureResult(error: unknown): {
   };
 }
 
+function getResendUnlockFailureResult(error: unknown): {
+  generalError: string | null;
+  fieldError?: string;
+} {
+  const apiError = error as ApiErrorShape | undefined;
+  const status = apiError?.status;
+  const code = apiError?.body?.code;
+  const message = apiError?.body?.error ?? apiError?.message;
+  const details = apiError?.body?.details as { retryAfterSeconds?: number } | undefined;
+
+  if (status === 400) {
+    switch (code) {
+      case "CAPTCHA_REQUIRED":
+      case "CAPTCHA_MISSING":
+        return {
+          generalError: "Please complete the security check before requesting another unlock code.",
+          fieldError: "Complete the verification to continue.",
+        };
+      case "CAPTCHA_INVALID":
+      case "CAPTCHA_EXPIRED":
+      case "TURNSTILE_VALIDATION_FAILED":
+        return {
+          generalError: "The security check expired or failed. Please try again.",
+          fieldError: "Please complete the verification again.",
+        };
+      default:
+        return {
+          generalError: message || "We couldn't send another unlock code right now.",
+        };
+    }
+  }
+
+  if (status === 429) {
+    const retryAfterSeconds = details?.retryAfterSeconds;
+
+    return {
+      generalError: retryAfterSeconds
+        ? `A new unlock code was sent recently. Try again in ${retryAfterSeconds} seconds.`
+        : message || "A new unlock code was sent recently. Please wait before retrying.",
+      fieldError: undefined,
+    };
+  }
+
+  if (status !== undefined && status >= 500) {
+    return {
+      generalError: "Something went wrong on our side. Please try again in a moment.",
+      fieldError: undefined,
+    };
+  }
+
+  return {
+    generalError: "We couldn't resend an unlock code right now. Check your connection and try again.",
+    fieldError: undefined,
+  };
+}
+
 export function LoginUnlockPanel({ email, onUnlocked, onCancel }: LoginUnlockPanelProps) {
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
@@ -66,6 +124,8 @@ export function LoginUnlockPanel({ email, onUnlocked, onCancel }: LoginUnlockPan
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [resentMessage, setResentMessage] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken, clearCaptchaToken] = useAuthCaptchaToken();
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
 
   async function handleUnlock(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,16 +162,27 @@ export function LoginUnlockPanel({ email, onUnlocked, onCancel }: LoginUnlockPan
     setGeneralError(null);
     setCodeError(null);
     setResentMessage(null);
+    setCaptchaError(null);
+
+    if (!captchaToken.trim()) {
+      setCaptchaError("Complete the verification to continue.");
+      return;
+    }
+
     setResending(true);
 
     try {
-      await authApi.resendUnlockLocalLogin({ email });
+      await authApi.resendUnlockLocalLogin({
+        email,
+        captchaToken,
+      });
       setResentMessage("If sign-in is locked for this email, a new unlock code is on the way.");
     } catch (error) {
-      const failure = getUnlockFailureResult(error);
+      const failure = getResendUnlockFailureResult(error);
       setGeneralError(failure.generalError);
-      setCodeError(failure.fieldError ?? null);
+      setCaptchaError(failure.fieldError ?? null);
     } finally {
+      clearCaptchaToken();
       setResending(false);
     }
   }
@@ -178,6 +249,19 @@ export function LoginUnlockPanel({ email, onUnlocked, onCancel }: LoginUnlockPan
           {pending ? "Unlocking..." : "Unlock sign-in"}
         </button>
       </form>
+
+      <AuthCaptchaPanel
+        token={captchaToken}
+        error={captchaError ?? undefined}
+        onChange={(token) => {
+          setCaptchaError(null);
+          setCaptchaToken(token);
+        }}
+        onReset={() => {
+          setCaptchaError(null);
+          clearCaptchaToken();
+        }}
+      />
 
       <button
         type="button"

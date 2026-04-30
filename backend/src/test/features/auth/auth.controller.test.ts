@@ -138,6 +138,9 @@ function createContext(options?: {
 function createController(overrides?: {
   localAuthenticate?: (input: unknown) => Promise<AuthSessionResult>;
   localSignup?: (input: unknown) => Promise<unknown>;
+  resendForgotPassword?: (input: unknown) => Promise<unknown>;
+  resendVerificationEmail?: (input: unknown) => Promise<unknown>;
+  resendUnlockLocalLogin?: (input: unknown) => Promise<unknown>;
   changePassword?: (input: unknown) => Promise<AuthSessionResult>;
   refresh?: (input: unknown) => Promise<AuthSessionResult>;
   logout?: (input: unknown) => Promise<unknown>;
@@ -155,6 +158,27 @@ function createController(overrides?: {
             verificationRequired: true,
             email: "user@example.com",
             alreadyPending: false,
+          })),
+      ),
+    resendForgotPassword:
+      jest.fn(
+        overrides?.resendForgotPassword ??
+          (async () => ({
+            accepted: true,
+          })),
+      ),
+    resendVerificationEmail:
+      jest.fn(
+        overrides?.resendVerificationEmail ??
+          (async () => ({
+            accepted: true,
+          })),
+      ),
+    resendUnlockLocalLogin:
+      jest.fn(
+        overrides?.resendUnlockLocalLogin ??
+          (async () => ({
+            accepted: true,
           })),
       ),
     changePassword:
@@ -392,6 +416,49 @@ describe("AuthController", () => {
         failOpen: true,
       },
     });
+  });
+
+  it("public resend actions verify captcha before calling the auth service", async () => {
+    const { controller, authService, captchaService } = createController();
+
+    await controller.resendForgotPassword(
+      createContext({
+        body: {
+          email: "user@example.com",
+          captchaToken: "resend-forgot-captcha",
+        },
+        headers: {
+          "x-request-id": "req-forgot",
+        },
+      }),
+    );
+    await controller.resendVerificationEmail(
+      createContext({
+        body: {
+          email: "user@example.com",
+          captchaToken: "resend-verify-captcha",
+        },
+        headers: {
+          "x-request-id": "req-verify",
+        },
+      }),
+    );
+    await controller.resendUnlockLocalLogin(
+      createContext({
+        body: {
+          email: "user@example.com",
+          captchaToken: "resend-unlock-captcha",
+        },
+        headers: {
+          "x-request-id": "req-unlock",
+        },
+      }),
+    );
+
+    expect(captchaService.verify).toHaveBeenCalledTimes(3);
+    expect(authService.resendForgotPassword).toHaveBeenCalledTimes(1);
+    expect(authService.resendVerificationEmail).toHaveBeenCalledTimes(1);
+    expect(authService.resendUnlockLocalLogin).toHaveBeenCalledTimes(1);
   });
 
   it("localSignup rejects html in profile fields before calling the auth service", async () => {

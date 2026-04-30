@@ -122,6 +122,7 @@ export const verifyEmailRequestSchema = z.object({
 
 export const resendVerificationEmailRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
+  captchaToken: requiredSafeTrimmedString("Captcha token is required."),
 });
 
 export const unlockLocalLoginRequestSchema = z.object({
@@ -131,6 +132,7 @@ export const unlockLocalLoginRequestSchema = z.object({
 
 export const resendUnlockLocalLoginRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
+  captchaToken: requiredSafeTrimmedString("Captcha token is required."),
 });
 
 export const refreshRequestSchema = z.object({
@@ -144,6 +146,7 @@ export const forgotPasswordRequestSchema = z.object({
 
 export const resendForgotPasswordRequestSchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
+  captchaToken: requiredSafeTrimmedString("Captcha token is required."),
 });
 
 export const resetPasswordRequestSchema = z.object({

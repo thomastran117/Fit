@@ -266,6 +266,35 @@ export class AuthRepository extends BaseRepository {
     );
   }
 
+  async activatePendingLocalUser(
+    userId: string,
+    input: {
+      passwordHash: string;
+      firstName?: string;
+      lastName?: string;
+    },
+  ): Promise<AuthUserRecord> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          passwordHash: input.passwordHash,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
+          emailVerified: true,
+        },
+        include: {
+          profile: true,
+          oauthIdentities: true,
+        },
+      }),
+    );
+
+    return this.mapUser(user);
+  }
+
   async updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
     await this.executeAsync(() =>
       this.prisma.user.update({

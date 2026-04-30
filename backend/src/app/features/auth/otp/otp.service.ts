@@ -59,6 +59,10 @@ export class OtpService {
     this.cachePrefix = options.cachePrefix ?? DEFAULTS.cachePrefix;
   }
 
+  getTtlInSeconds(): number {
+    return this.ttlInSeconds;
+  }
+
   async issue(input: IssueOtpInput): Promise<IssuedOtpResult & { code: string }> {
     const cooldownKey = this.getCooldownKey(input);
     const cooldownTtl = await this.cache.ttl(cooldownKey);

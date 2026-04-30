@@ -37,6 +37,18 @@ type DevicePersistence = {
 };
 
 export class DeviceRepository extends BaseRepository {
+  async hasAnyKnownDevice(userId: string): Promise<boolean> {
+    const count = await this.executeAsync(() =>
+      this.prisma.device.count({
+        where: {
+          userId,
+        },
+      }),
+    );
+
+    return count > 0;
+  }
+
   async hasKnownIpAddress(userId: string, ipAddress: string): Promise<boolean> {
     const count = await this.executeAsync(() =>
       this.prisma.device.count({

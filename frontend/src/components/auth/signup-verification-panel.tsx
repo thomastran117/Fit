@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthCaptchaPanel } from "@/components/auth/auth-captcha-panel";
 import { useAuth } from "@/components/auth/auth-context";
+import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
 import type { SignupVerificationPendingResult } from "@/lib/auth/types";
 
@@ -66,6 +68,56 @@ function getVerificationFailureResult(error: unknown): VerificationFailureResult
   };
 }
 
+function getResendFailureResult(error: unknown): VerificationFailureResult {
+  const apiError = error as ApiErrorShape | undefined;
+  const status = apiError?.status;
+  const code = apiError?.body?.code;
+  const message = apiError?.body?.error ?? apiError?.message;
+  const details = apiError?.body?.details as { retryAfterSeconds?: number } | undefined;
+
+  if (status === 400) {
+    switch (code) {
+      case "CAPTCHA_REQUIRED":
+      case "CAPTCHA_MISSING":
+        return {
+          generalError: "Please complete the security check before requesting another code.",
+          fieldError: "Complete the verification to continue.",
+        };
+      case "CAPTCHA_INVALID":
+      case "CAPTCHA_EXPIRED":
+      case "TURNSTILE_VALIDATION_FAILED":
+        return {
+          generalError: "The security check expired or failed. Please try again.",
+          fieldError: "Please complete the verification again.",
+        };
+      default:
+        return {
+          generalError: message || "We couldn't send another verification code right now.",
+        };
+    }
+  }
+
+  if (status === 429) {
+    const retryAfterSeconds = details?.retryAfterSeconds;
+
+    return {
+      generalError: retryAfterSeconds
+        ? `A verification code was sent recently. Try again in ${retryAfterSeconds} seconds.`
+        : message || "A verification code was sent recently. Please wait before retrying.",
+    };
+  }
+
+  if (status !== undefined && status >= 500) {
+    return {
+      generalError: "Something went wrong on our side. Please try again in a moment.",
+    };
+  }
+
+  return {
+    generalError: "We couldn't resend the verification code right now. Check your connection and try again.",
+  };
+}
+
 interface SignupVerificationPanelProps {
   result: SignupVerificationPendingResult;
 }
@@ -80,6 +132,8 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [resentMessage, setResentMessage] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken, clearCaptchaToken] = useAuthCaptchaToken();
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
 
   async function handleVerify(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,19 +171,28 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
     setGeneralError(null);
     setCodeError(null);
     setResentMessage(null);
+    setCaptchaError(null);
+
+    if (!captchaToken.trim()) {
+      setCaptchaError("Complete the verification to continue.");
+      return;
+    }
+
     setResending(true);
 
     try {
       await authApi.resendVerificationEmail({
         email: result.email,
+        captchaToken,
       });
 
       setResentMessage("If this email needs verification, a new code is on the way.");
     } catch (error) {
-      const failure = getVerificationFailureResult(error);
+      const failure = getResendFailureResult(error);
       setGeneralError(failure.generalError);
-      setCodeError(failure.fieldError ?? null);
+      setCaptchaError(failure.fieldError ?? null);
     } finally {
+      clearCaptchaToken();
       setResending(false);
     }
   }
@@ -201,6 +264,19 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
           {pending ? "Verifying..." : "Verify email"}
         </button>
       </form>
+
+      <AuthCaptchaPanel
+        token={captchaToken}
+        error={captchaError ?? undefined}
+        onChange={(token) => {
+          setCaptchaError(null);
+          setCaptchaToken(token);
+        }}
+        onReset={() => {
+          setCaptchaError(null);
+          clearCaptchaToken();
+        }}
+      />
 
       <button
         type="button"
