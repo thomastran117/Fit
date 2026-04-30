@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import {
+  type AppRole,
   type CreateLocalUserInput,
   type AuthUserRecord,
   type OAuthIdentityRecord,
@@ -57,6 +58,31 @@ type AuthProfilePersistence = {
 };
 
 export class AuthRepository extends BaseRepository {
+  async findSessionValidationByUserId(
+    userId: string,
+  ): Promise<{ tokenVersion: number; role: AppRole } | null> {
+    const user = await this.executeAsync(() =>
+      this.prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+        select: {
+          tokenVersion: true,
+          role: true,
+        },
+      }),
+    );
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      tokenVersion: user.tokenVersion,
+      role: normalizeAppRole(user.role),
+    };
+  }
+
   async findUserById(id: string): Promise<AuthUserRecord | null> {
     const user = await this.executeAsync(() =>
       this.prisma.user.findUnique({
@@ -329,18 +355,8 @@ export class AuthRepository extends BaseRepository {
   }
 
   async findTokenVersionByUserId(userId: string): Promise<number | null> {
-    const user = await this.executeAsync(() =>
-      this.prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-        select: {
-          tokenVersion: true,
-        },
-      }),
-    );
-
-    return user?.tokenVersion ?? null;
+    const sessionValidation = await this.findSessionValidationByUserId(userId);
+    return sessionValidation?.tokenVersion ?? null;
   }
 
   private mapUser(user: AuthUserPersistence): AuthUserRecord {

@@ -14,10 +14,12 @@ export function applyDatabaseSeedTestEnvironment(overrides: {
   process.env.DATABASE_URL = overrides.databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_DB_URL;
   process.env.DATABASE_AUTO_SEED_ENABLED = "true";
   process.env.DATABASE_AUTO_SEED_REFRESH = "true";
-  process.env.ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET ?? "seed-test-access-secret";
-  process.env.REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET ?? "seed-test-refresh-secret";
+  process.env.ACCESS_TOKEN_SECRET =
+    process.env.ACCESS_TOKEN_SECRET ?? "seed-test-access-secret-value-32ch";
+  process.env.REFRESH_TOKEN_SECRET =
+    process.env.REFRESH_TOKEN_SECRET ?? "seed-test-refresh-secret-value-32c";
   process.env.PERSONAL_ACCESS_TOKEN_SECRET =
-    process.env.PERSONAL_ACCESS_TOKEN_SECRET ?? "seed-test-pat-secret";
+    process.env.PERSONAL_ACCESS_TOKEN_SECRET ?? "seed-test-personal-access-token-32";
   process.env.GMAIL_USER = process.env.GMAIL_USER ?? "seed-test@example.com";
   process.env.GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD ?? "seed-test-password";
   process.env.SQUARE_ACCESS_TOKEN = process.env.SQUARE_ACCESS_TOKEN ?? "seed-test-square-token";
