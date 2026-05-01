@@ -46,6 +46,11 @@ import {
   upsertPostingRequestSchema,
 } from "@/features/postings/postings.model";
 import { PostingsService } from "@/features/postings/postings.service";
+import {
+  searchClickActivityRequestSchema,
+  type SearchClickActivityRequestBody,
+} from "@/features/recommendations/recommendation-activity.model";
+import type { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
 import type { AuthPrincipal } from "@/features/auth/auth.principal";
 
 export class PostingsController {
@@ -53,6 +58,7 @@ export class PostingsController {
     private readonly postingsService: PostingsService,
     private readonly postingsAnalyticsService: PostingsAnalyticsService,
     private readonly postingsReviewsService: PostingsReviewsService,
+    private readonly recommendationActivityPublisher: RecommendationActivityPublisher,
   ) {}
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
@@ -131,6 +137,13 @@ export class PostingsController {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");
     const result = await this.postingsService.publish(this.requireRouteId(context), auth.sub);
+    await this.recommendationActivityPublisher.publishPostingLifecycle({
+      posting: result,
+      eventType: "posting_published",
+      client: context.get("client"),
+      requestId: this.readRequestId(context),
+      actorUserId: auth.sub,
+    });
     return context.json(result);
   };
 
@@ -138,6 +151,13 @@ export class PostingsController {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");
     const result = await this.postingsService.archive(this.requireRouteId(context), auth.sub);
+    await this.recommendationActivityPublisher.publishPostingLifecycle({
+      posting: result,
+      eventType: "posting_archived",
+      client: context.get("client"),
+      requestId: this.readRequestId(context),
+      actorUserId: auth.sub,
+    });
     return context.json(result);
   };
 
@@ -145,6 +165,13 @@ export class PostingsController {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");
     const result = await this.postingsService.pause(this.requireRouteId(context), auth.sub);
+    await this.recommendationActivityPublisher.publishPostingLifecycle({
+      posting: result,
+      eventType: "posting_paused",
+      client: context.get("client"),
+      requestId: this.readRequestId(context),
+      actorUserId: auth.sub,
+    });
     return context.json(result);
   };
 
@@ -152,6 +179,13 @@ export class PostingsController {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");
     const result = await this.postingsService.unpause(this.requireRouteId(context), auth.sub);
+    await this.recommendationActivityPublisher.publishPostingLifecycle({
+      posting: result,
+      eventType: "posting_unpaused",
+      client: context.get("client"),
+      requestId: this.readRequestId(context),
+      actorUserId: auth.sub,
+    });
     return context.json(result);
   };
 
@@ -165,9 +199,30 @@ export class PostingsController {
         context.get("client"),
         auth?.sub,
       );
+      await this.recommendationActivityPublisher.publishPostingView({
+        posting: result,
+        client: context.get("client"),
+        requestId: this.readRequestId(context),
+        actorUserId: auth?.sub,
+      });
     }
 
     return context.json(result);
+  };
+
+  trackSearchClick = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.getOptionalAuth(context);
+    const body = await parseRequestBody(context, searchClickActivityRequestSchema);
+
+    await this.recommendationActivityPublisher.publishSearchClick({
+      postingId: this.requireRouteId(context),
+      client: context.get("client"),
+      body: this.toSearchClickActivityRequest(body),
+      requestId: this.readRequestId(context),
+      actorUserId: auth?.sub,
+    });
+
+    return new Response(null, { status: 202 });
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
@@ -298,6 +353,12 @@ export class PostingsController {
       endAt: body.endAt,
       note: body.note ?? undefined,
     };
+  }
+
+  private toSearchClickActivityRequest(
+    body: SearchClickActivityRequestBody,
+  ): SearchClickActivityRequestBody {
+    return body;
   }
 
   private parseListOwnerPostingsInput(
@@ -605,6 +666,10 @@ export class PostingsController {
 
   private async getOptionalAuth(context: Context<AppBindings>): Promise<AuthPrincipal | null> {
     return getOptionalJwtAuth(context);
+  }
+
+  private readRequestId(context: Context<AppBindings>): string | undefined {
+    return context.get("requestId");
   }
 
   private toValidationError(error: unknown, message: string): RequestValidationError {

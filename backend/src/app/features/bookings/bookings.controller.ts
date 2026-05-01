@@ -26,9 +26,13 @@ import {
   updateBookingRequestSchema,
 } from "@/features/bookings/bookings.model";
 import type { BookingsService } from "@/features/bookings/bookings.service";
+import type { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
 
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly recommendationActivityPublisher: RecommendationActivityPublisher,
+  ) {}
 
   createForPosting = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
@@ -36,6 +40,11 @@ export class BookingsController {
     const result = await this.bookingsService.create(
       this.toCreateInput(this.requirePostingId(context), auth.sub, body),
     );
+    await this.recommendationActivityPublisher.publishBookingRequestCreated({
+      bookingRequest: result,
+      client: context.get("client"),
+      requestId: this.readRequestId(context),
+    });
     return context.json(result, 201);
   };
 
@@ -226,6 +235,10 @@ export class BookingsController {
 
   private async requireAuth(context: Context<AppBindings>) {
     return requireJwtAuth(context);
+  }
+
+  private readRequestId(context: Context<AppBindings>): string | undefined {
+    return context.get("requestId");
   }
 
   private toValidationError(error: unknown, message: string): RequestValidationError {
