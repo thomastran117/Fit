@@ -64,6 +64,7 @@ export const usersSeedModule: SeedModule = {
           phoneNumber: fixtureUser.phoneNumber ?? null,
           avatarUrl: fixtureUser.avatarUrl ?? null,
           isPrivate: false,
+          recommendationPersonalizationEnabled: true,
           trustworthinessScore: fixtureUser.trustworthinessScore ?? 1,
         },
         create: {
@@ -73,6 +74,7 @@ export const usersSeedModule: SeedModule = {
           phoneNumber: fixtureUser.phoneNumber ?? null,
           avatarUrl: fixtureUser.avatarUrl ?? null,
           isPrivate: false,
+          recommendationPersonalizationEnabled: true,
           trustworthinessScore: fixtureUser.trustworthinessScore ?? 1,
         },
       });

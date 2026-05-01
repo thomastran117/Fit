@@ -29,6 +29,10 @@ import { PaymentsService } from "@/features/payments/payments.service";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
+import { RecommendationActivityProcessor } from "@/features/recommendations/recommendation-activity.processor";
+import { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
+import { RecommendationActivityQueueService } from "@/features/recommendations/recommendation-activity.queue.service";
+import { RecommendationActivityRepository } from "@/features/recommendations/recommendation-activity.repository";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
@@ -84,6 +88,18 @@ export const containerTokens = {
   profileRepository: createServiceToken<ProfileRepository>("ProfileRepository"),
   profileService: createServiceToken<ProfileService>("ProfileService"),
   profileController: createServiceToken<ProfileController>("ProfileController"),
+  recommendationActivityQueueService: createServiceToken<RecommendationActivityQueueService>(
+    "RecommendationActivityQueueService",
+  ),
+  recommendationActivityRepository: createServiceToken<RecommendationActivityRepository>(
+    "RecommendationActivityRepository",
+  ),
+  recommendationActivityProcessor: createServiceToken<RecommendationActivityProcessor>(
+    "RecommendationActivityProcessor",
+  ),
+  recommendationActivityPublisher: createServiceToken<RecommendationActivityPublisher>(
+    "RecommendationActivityPublisher",
+  ),
   postingsRepository: createServiceToken<PostingsRepository>("PostingsRepository"),
   rentingsRepository: createServiceToken<RentingsRepository>("RentingsRepository"),
   rentingsService: createServiceToken<RentingsService>("RentingsService"),

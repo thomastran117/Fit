@@ -255,6 +255,10 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
     resolveHandler<BookingsController>(containerTokens.bookingsController, "createForPosting"),
   );
   app.post(
+    "/postings/:id/activity/search-click",
+    resolveHandler<PostingsController>(containerTokens.postingsController, "trackSearchClick"),
+  );
+  app.post(
     "/postings/:id/booking-quote",
     resolveHandler<BookingsController>(containerTokens.bookingsController, "quoteForPosting"),
   );
@@ -329,6 +333,10 @@ export function mountRoutes(app: Hono<AppBindings>): Hono<AppBindings> {
   app.post(
     "/booking-requests/:id/decline",
     resolveHandler<BookingsController>(containerTokens.bookingsController, "decline"),
+  );
+  app.post(
+    "/booking-requests/:id/convert",
+    resolveHandler<RentingsController>(containerTokens.rentingsController, "convertBookingRequest"),
   );
   app.post(
     "/payments/webhooks/square",
