@@ -11,9 +11,10 @@ async function bootstrap(): Promise<void> {
     {
       fetch: app.fetch,
       port,
+      hostname: "0.0.0.0",
     },
     () => {
-      console.log(`Server listening on http://localhost:${port}`);
+      console.log(`Server listening on http://0.0.0.0:${port}`);
     },
   );
 
