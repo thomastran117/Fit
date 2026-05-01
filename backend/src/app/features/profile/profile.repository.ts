@@ -17,6 +17,7 @@ type ProfilePersistence = {
   avatarUrl: string | null;
   avatarBlobName: string | null;
   isPrivate: boolean;
+  recommendationPersonalizationEnabled?: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
@@ -148,10 +149,35 @@ export class ProfileRepository extends BaseRepository {
     return this.mapProfile(profile);
   }
 
+  async findRecommendationPersonalizationEnabledByUserId(
+    userId: string,
+  ): Promise<boolean | null> {
+    const prismaProfile = this.prisma.profile as unknown as {
+      findUnique: (args: unknown) => Promise<{
+        recommendationPersonalizationEnabled?: boolean;
+      } | null>;
+    };
+    const profile = await this.executeAsync(() =>
+      prismaProfile.findUnique({
+        where: {
+          userId,
+        },
+        select: {
+          recommendationPersonalizationEnabled: true,
+        },
+      }),
+    );
+
+    return profile?.recommendationPersonalizationEnabled ?? true;
+  }
+
   async update(input: UpdateProfileInput): Promise<ProfileRecord> {
     try {
+      const prismaProfile = this.prisma.profile as unknown as {
+        update: (args: unknown) => Promise<ProfilePersistence>;
+      };
       const profile = await this.executeAsync(() =>
-        this.prisma.profile.update({
+        prismaProfile.update({
           where: {
             userId: input.userId,
           },
@@ -159,6 +185,12 @@ export class ProfileRepository extends BaseRepository {
             username: input.username,
             phoneNumber: input.phoneNumber ?? null,
             ...(input.isPrivate !== undefined ? { isPrivate: input.isPrivate } : {}),
+            ...(input.recommendationPersonalizationEnabled !== undefined
+              ? {
+                  recommendationPersonalizationEnabled:
+                    input.recommendationPersonalizationEnabled,
+                }
+              : {}),
             avatarUrl: input.avatarUrl ?? null,
             avatarBlobName: input.avatarBlobName ?? null,
             ...(input.trustworthinessScore !== undefined
@@ -208,6 +240,8 @@ export class ProfileRepository extends BaseRepository {
       avatarUrl: profile.avatarUrl ?? undefined,
       avatarBlobName: profile.avatarBlobName ?? undefined,
       isPrivate: profile.isPrivate,
+      recommendationPersonalizationEnabled:
+        profile.recommendationPersonalizationEnabled ?? true,
       trustworthinessScore: profile.trustworthinessScore,
       rentPostingsCount: profile.rentPostingsCount,
       availableRentPostingsCount: profile.availableRentPostingsCount,
