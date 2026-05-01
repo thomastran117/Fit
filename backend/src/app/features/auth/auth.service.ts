@@ -822,6 +822,8 @@ export class AuthService {
       phoneNumber: user.profile.phoneNumber,
       avatarUrl: user.profile.avatarUrl,
       isPrivate: user.profile.isPrivate,
+      recommendationPersonalizationEnabled:
+        user.profile.recommendationPersonalizationEnabled,
       trustworthinessScore: user.profile.trustworthinessScore,
       rentPostingsCount: user.profile.rentPostingsCount,
       availableRentPostingsCount: user.profile.availableRentPostingsCount,

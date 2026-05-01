@@ -61,6 +61,7 @@ function createAuthUser(overrides: Partial<AuthUserProfile> = {}): AuthUserProfi
     phoneNumber: undefined,
     avatarUrl: undefined,
     isPrivate: false,
+    recommendationPersonalizationEnabled: true,
     trustworthinessScore: 80,
     rentPostingsCount: 0,
     availableRentPostingsCount: 0,

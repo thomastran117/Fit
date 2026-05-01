@@ -139,6 +139,7 @@ describe("authorization", () => {
       } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const context = createContext({
       authorization: "Bearer user-token",

@@ -57,6 +57,7 @@ const PAT_ROUTE_POLICIES: PatRoutePolicy[] = [
   { method: "GET", pattern: /^\/rentings\/me$/, requiredScope: "mcp:read" },
   { method: "GET", pattern: /^\/rentings\/[^/]+$/, requiredScope: "mcp:read" },
   { method: "POST", pattern: /^\/postings\/[^/]+\/booking-quote$/, requiredScope: "mcp:read" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/activity\/search-click$/, requiredScope: "mcp:read" },
   { method: "POST", pattern: /^\/postings$/, requiredScope: "mcp:write" },
   { method: "POST", pattern: /^\/postings\/[^/]+\/booking-requests$/, requiredScope: "mcp:write" },
   { method: "PUT", pattern: /^\/postings\/[^/]+$/, requiredScope: "mcp:write" },
@@ -73,6 +74,7 @@ const PAT_ROUTE_POLICIES: PatRoutePolicy[] = [
   { method: "PUT", pattern: /^\/booking-requests\/[^/]+$/, requiredScope: "mcp:write" },
   { method: "POST", pattern: /^\/booking-requests\/[^/]+\/approve$/, requiredScope: "mcp:write" },
   { method: "POST", pattern: /^\/booking-requests\/[^/]+\/decline$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/booking-requests\/[^/]+\/convert$/, requiredScope: "mcp:write" },
 ];
 
 function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: AuthPrincipal): void {

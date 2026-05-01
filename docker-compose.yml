@@ -25,7 +25,7 @@ x-backend-environment: &backend-environment
   SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN}
   SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID}
   SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY}
-  SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-http://localhost:8040/payments/webhooks/square}
+  SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-http://127.0.0.1:8040/payments/webhooks/square}
   CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY}
   TOKEN_ISSUER: ${TOKEN_ISSUER}
   TOKEN_AUDIENCE: ${TOKEN_AUDIENCE}
@@ -35,7 +35,7 @@ x-backend-environment: &backend-environment
   GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
 
 x-frontend-public-environment: &frontend-public-environment
-  NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8040}
+  NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8040}
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
   NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID:-}
   NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID:-}
@@ -76,6 +76,14 @@ x-search-worker-depends-on: &search-worker-depends-on
     condition: service_healthy
 
 x-rabbitmq-worker-depends-on: &rabbitmq-worker-depends-on
+  rabbitmq:
+    condition: service_healthy
+
+x-recommendation-worker-depends-on: &recommendation-worker-depends-on
+  backend-migrate:
+    condition: service_completed_successfully
+  mysql:
+    condition: service_healthy
   rabbitmq:
     condition: service_healthy
 
@@ -199,6 +207,15 @@ services:
     depends_on: *rabbitmq-worker-depends-on
     environment: *backend-environment
     command: ["node", "dist/workers/email/email-delivery.worker.js"]
+
+  recommendation-activity-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-recommendation-activity-worker
+    restart: unless-stopped
+    depends_on: *recommendation-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/recommendations/recommendation-activity.worker.js"]
 
   payment-retry-worker:
     build: *backend-build

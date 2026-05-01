@@ -297,6 +297,23 @@ describe("jwt middleware helpers", () => {
     expect(result).toEqual(principal);
   });
 
+  it("accepts PAT bearer auth on posting search-click tracking routes with mcp:read scope", async () => {
+    const principal = createPatPrincipal({
+      scopes: ["mcp:read"],
+    });
+    const context = createContext({
+      method: "POST",
+      url: "https://example.test/postings/post_1/activity/search-click",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+
+    const result = await requireJwtAuth(context);
+
+    expect(result).toEqual(principal);
+  });
+
   it("accepts PAT bearer auth on booking and renting read routes", async () => {
     const principal = createPatPrincipal({
       scopes: ["mcp:read"],
@@ -432,6 +449,9 @@ describe("jwt middleware helpers", () => {
         },
       } as never,
       {} as never,
+      {
+        publishPostingView: async () => undefined,
+      } as never,
     );
     const context = createContext({
       url: "https://example.test/postings/posting-123",
