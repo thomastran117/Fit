@@ -36,11 +36,30 @@ function createContext(options?: {
       url: options?.url ?? "https://example.test/postings",
       param: (name?: string) => (name ? options?.params?.[name] : options?.params ?? {}),
     },
-    get: () => ({
-      resolve: () => ({
-        inspectRequest: () => [],
-      }),
-    }),
+    get: (name?: string) => {
+      if (name === "client") {
+        return {
+          ip: "127.0.0.1",
+          device: {
+            id: "device-1",
+            type: "desktop",
+            isMobile: false,
+            userAgent: "test-agent",
+            platform: "test-os",
+          },
+        };
+      }
+
+      if (name === "requestId") {
+        return "request-1";
+      }
+
+      return {
+        resolve: () => ({
+          inspectRequest: () => [],
+        }),
+      };
+    },
     json: (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), {
         status,
@@ -76,6 +95,7 @@ describe("PostingsController", () => {
       {
         searchPublic,
       } as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -116,6 +136,7 @@ describe("PostingsController", () => {
       } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const context = createContext({
       url: "https://example.test/postings?family=place&subtype=entire_place&attr.bedrooms.min=2&attr.bedrooms.max=4&attr.amenities=wifi&attr.amenities=desk",
@@ -149,6 +170,7 @@ describe("PostingsController", () => {
       {
         createDraft,
       } as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -203,6 +225,7 @@ describe("PostingsController", () => {
       {
         update,
       } as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -269,6 +292,7 @@ describe("PostingsController", () => {
       } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const context = createContext({
       params: {
@@ -295,6 +319,7 @@ describe("PostingsController", () => {
       {
         createOwnerAvailabilityBlock,
       } as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -332,6 +357,7 @@ describe("PostingsController", () => {
       {
         updateOwnerAvailabilityBlock,
       } as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -373,6 +399,9 @@ describe("PostingsController", () => {
       } as never,
       {} as never,
       {} as never,
+      {
+        publishPostingLifecycle: jest.fn(async () => undefined),
+      } as never,
     );
     const context = createContext({
       params: {
@@ -398,6 +427,7 @@ describe("PostingsController", () => {
       } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const context = createContext({
       params: {
@@ -407,5 +437,75 @@ describe("PostingsController", () => {
 
     await expect(controller.listAvailabilityBlocks(context)).rejects.toThrow();
     expect(listOwnerAvailabilityBlocks).not.toHaveBeenCalled();
+  });
+
+  it("tracks search click activity and returns 202", async () => {
+    mockGetOptionalJwtAuth.mockResolvedValue(null);
+    const publishSearchClick = jest.fn(async () => undefined);
+    const controller = new PostingsController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {
+        publishSearchClick,
+      } as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+      body: {
+        searchSessionId: "search-1",
+        page: 1,
+        position: 0,
+        hasGeoFilter: false,
+        hasAvailabilityFilter: true,
+      },
+    });
+
+    const response = await controller.trackSearchClick(context);
+
+    expect(publishSearchClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        postingId: "posting-1",
+        actorUserId: undefined,
+        requestId: "request-1",
+      }),
+    );
+    expect(response.status).toBe(202);
+  });
+
+  it("publishes recommendation posting views alongside owner analytics for public viewers", async () => {
+    mockGetOptionalJwtAuth.mockResolvedValue(null);
+    const trackPublicView = jest.fn(async () => undefined);
+    const publishPostingView = jest.fn(async () => undefined);
+    const controller = new PostingsController(
+      {
+        getById: jest.fn(async () => ({
+          id: "posting-1",
+          ownerId: "owner-1",
+          status: "published",
+        })),
+      } as never,
+      {
+        trackPublicView,
+      } as never,
+      {} as never,
+      {
+        publishPostingView,
+      } as never,
+    );
+    const context = createContext({
+      params: {
+        id: "posting-1",
+      },
+      url: "https://example.test/postings/posting-1",
+    });
+
+    const response = await controller.getById(context);
+
+    expect(trackPublicView).toHaveBeenCalledTimes(1);
+    expect(publishPostingView).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(200);
   });
 });
