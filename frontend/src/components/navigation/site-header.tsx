@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/auth/types";
 
 const navigationLinks = [
   { href: "/", label: "Home" },
+  { href: "/postings", label: "Browse" },
   { href: "/about", label: "About" },
   { href: "/services", label: "Services" },
   { href: "/contact", label: "Contact" },

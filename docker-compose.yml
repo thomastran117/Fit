@@ -276,6 +276,7 @@ services:
       <<: *frontend-public-environment
       NODE_ENV: production
       PORT: 3040
+      INTERNAL_API_BASE_URL: http://backend:8040
     ports:
       - "3040:3040"
 

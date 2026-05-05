@@ -1,0 +1,165 @@
+import { resolveApiBaseUrl } from "@/lib/env";
+
+export type PostingSort =
+  | "relevance"
+  | "newest"
+  | "oldest"
+  | "dailyPrice"
+  | "nearest"
+  | "nameAsc"
+  | "nameDesc";
+
+export interface PublicPostingSearchParams {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  sort?: PostingSort;
+  family?: string;
+  subtype?: string;
+  tags?: string[];
+  availabilityStatus?: "available" | "limited" | "unavailable";
+  minDailyPrice?: number;
+  maxDailyPrice?: number;
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+  startAt?: string;
+  endAt?: string;
+}
+
+export interface PublicPostingSearchResult {
+  postings: PublicPostingSummary[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+  source: "elasticsearch" | "database";
+  query?: string;
+}
+
+export interface PublicPostingSummary {
+  id: string;
+  name: string;
+  description: string;
+  variant: {
+    family: string;
+    subtype: string;
+  };
+  pricing: {
+    currency: string;
+    daily: {
+      amount: number;
+    };
+  };
+  location: {
+    city: string;
+    region: string;
+    country: string;
+  };
+  tags: string[];
+  availabilityStatus: "available" | "limited" | "unavailable";
+  publishedAt?: string;
+}
+
+interface ApiErrorResponse {
+  error?: string;
+}
+
+export class PublicPostingSearchError extends Error {
+  constructor(
+    message: string,
+    readonly debug: {
+      requestUrl: string;
+      params: PublicPostingSearchParams;
+      status?: number;
+      statusText?: string;
+      responseBody?: unknown;
+      causeMessage?: string;
+    },
+  ) {
+    super(message);
+    this.name = "PublicPostingSearchError";
+  }
+}
+
+function toQueryString(params: PublicPostingSearchParams): string {
+  const searchParams = new URLSearchParams();
+
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.pageSize) searchParams.set("pageSize", String(params.pageSize));
+  if (params.q) searchParams.set("q", params.q);
+  if (params.sort) searchParams.set("sort", params.sort);
+  if (params.family) searchParams.set("family", params.family);
+  if (params.subtype) searchParams.set("subtype", params.subtype);
+  if (params.tags) {
+    for (const tag of params.tags) searchParams.append("tags", tag);
+  }
+  if (params.availabilityStatus) searchParams.set("availabilityStatus", params.availabilityStatus);
+  if (params.minDailyPrice !== undefined) searchParams.set("minDailyPrice", String(params.minDailyPrice));
+  if (params.maxDailyPrice !== undefined) searchParams.set("maxDailyPrice", String(params.maxDailyPrice));
+  if (params.latitude !== undefined) searchParams.set("latitude", String(params.latitude));
+  if (params.longitude !== undefined) searchParams.set("longitude", String(params.longitude));
+  if (params.radiusKm !== undefined) searchParams.set("radiusKm", String(params.radiusKm));
+  if (params.startAt) searchParams.set("startAt", params.startAt);
+  if (params.endAt) searchParams.set("endAt", params.endAt);
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function searchPublicPostings(
+  params: PublicPostingSearchParams,
+): Promise<PublicPostingSearchResult> {
+  const requestUrl = `${resolveApiBaseUrl()}/postings${toQueryString(params)}`;
+
+  try {
+    const response = await fetch(requestUrl, {
+      headers: {
+        accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    console.log(response);
+
+    const payload = (await response.json().catch(() => null)) as
+      | PublicPostingSearchResult
+      | ApiErrorResponse
+      | null;
+
+    if (!response.ok) {
+      const error = new PublicPostingSearchError(
+        (payload && "error" in payload && payload.error) || "Unable to load postings.",
+        {
+          requestUrl,
+          params,
+          status: response.status,
+          statusText: response.statusText,
+          responseBody: payload,
+        },
+      );
+
+      console.error("Public postings search request failed", error.debug);
+      throw error;
+    }
+
+    return payload as PublicPostingSearchResult;
+  } catch (error) {
+    if (error instanceof PublicPostingSearchError) {
+      throw error;
+    }
+
+    const debug = {
+      requestUrl,
+      params,
+      causeMessage: error instanceof Error ? error.message : "Unknown fetch failure.",
+    };
+    console.error("Public postings search fetch threw before a response was received", debug);
+
+    throw new PublicPostingSearchError("Unable to load postings.", debug);
+  }
+}

@@ -14,3 +14,13 @@ export const publicEnv = {
   microsoftOAuthTenant:
     process.env.NEXT_PUBLIC_MICROSOFT_OAUTH_TENANT?.trim() || "consumers",
 } as const;
+
+export const serverEnv = {
+  internalApiBaseUrl: trimTrailingSlash(
+    process.env.INTERNAL_API_BASE_URL?.trim() || publicEnv.apiBaseUrl,
+  ),
+} as const;
+
+export function resolveApiBaseUrl(): string {
+  return typeof window === "undefined" ? serverEnv.internalApiBaseUrl : publicEnv.apiBaseUrl;
+}
