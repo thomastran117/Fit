@@ -11,6 +11,7 @@ import type {
   BatchOwnerPostingsInput,
   ListOwnerPostingsInput,
   ListOwnerPostingsResult,
+  ManagedPostingPhotoInput,
   PublicPostingRecord,
   PostingAttributeValue,
   PostingAvailabilityBlockInput,
@@ -21,6 +22,7 @@ import type {
   PostingRecord,
   PostingSearchDocument,
   PostingSearchOutboxRecord,
+  PostingThumbnailOutboxRecord,
   PostingSort,
   PostingStatus,
   PostingSubtype,
@@ -94,6 +96,8 @@ interface SearchOutboxIdRow {
   id: string;
 }
 
+type ThumbnailOutboxPersistence = Prisma.PostingThumbnailOutboxGetPayload<object>;
+
 interface SearchOutboxLagRow {
   unpublishedCount?: bigint | number | null;
   unpublishedOldestCreatedAt?: Date | null;
@@ -166,6 +170,7 @@ export class PostingsRepository extends BaseRepository {
           created.id,
           isPostingSearchIndexable(created.status as PostingStatus) ? "upsert" : "delete",
         );
+        await this.enqueueThumbnailOutbox(transaction, created.id);
         await this.syncOwnerPostingCounts(transaction, input.ownerId);
 
         return created;
@@ -179,11 +184,34 @@ export class PostingsRepository extends BaseRepository {
     return this.executeAsync(async () => {
       try {
         const posting = await this.prisma.$transaction(async (transaction) => {
+          const existing = await transaction.posting.findUnique({
+            where: {
+              id,
+            },
+            include: {
+              photos: {
+                orderBy: {
+                  position: "asc",
+                },
+              },
+            },
+          });
+
+          if (!existing) {
+            throw new Prisma.PrismaClientKnownRequestError("No Posting found", {
+              code: "P2025",
+              clientVersion: "unknown",
+            });
+          }
+
           const updated = await transaction.posting.update({
             where: {
               id,
             },
-            data: this.toUpdateData(input),
+            data: this.toUpdateData(
+              input,
+              this.mergePhotosWithExisting(existing.photos, input.photos),
+            ),
             include: postingInclude,
           });
 
@@ -192,6 +220,7 @@ export class PostingsRepository extends BaseRepository {
             updated.id,
             isPostingSearchIndexable(updated.status as PostingStatus) ? "upsert" : "delete",
           );
+          await this.enqueueThumbnailOutbox(transaction, updated.id);
           await this.syncOwnerPostingCounts(transaction, input.ownerId);
 
           return updated;
@@ -446,6 +475,7 @@ export class PostingsRepository extends BaseRepository {
           });
 
           await this.enqueueOutbox(transaction, updated.id, "upsert");
+          await this.enqueueThumbnailOutbox(transaction, updated.id);
           await this.syncOwnerPostingCounts(transaction, ownerId);
 
           return updated;
@@ -545,6 +575,7 @@ export class PostingsRepository extends BaseRepository {
           });
 
           await this.enqueueOutbox(transaction, updated.id, "upsert");
+          await this.enqueueThumbnailOutbox(transaction, updated.id);
           await this.syncOwnerPostingCounts(transaction, ownerId);
 
           return updated;
@@ -1072,6 +1103,177 @@ export class PostingsRepository extends BaseRepository {
     await this.executeAsync(() =>
       this.prisma.$transaction(async (transaction) => {
         await this.enqueueOutbox(transaction, postingId, operation);
+      }),
+    );
+  }
+
+  async enqueueThumbnailSync(postingId: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        await this.enqueueThumbnailOutbox(transaction, postingId);
+      }),
+    );
+  }
+
+  async claimThumbnailOutboxBatch(limit: number): Promise<PostingThumbnailOutboxRecord[]> {
+    return this.executeAsync(async () => {
+      const now = new Date();
+      const staleProcessingThreshold = new Date(now.getTime() - 5 * 60 * 1000);
+      const candidates = await this.prisma.postingThumbnailOutbox.findMany({
+        where: {
+          processedAt: null,
+          deadLetteredAt: null,
+          availableAt: {
+            lte: now,
+          },
+          OR: [
+            {
+              processingAt: null,
+            },
+            {
+              processingAt: {
+                lt: staleProcessingThreshold,
+              },
+            },
+          ],
+        },
+        orderBy: [
+          {
+            availableAt: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
+        take: limit,
+      });
+
+      const claimed: PostingThumbnailOutboxRecord[] = [];
+
+      for (const candidate of candidates) {
+        const result = await this.prisma.postingThumbnailOutbox.updateMany({
+          where: {
+            id: candidate.id,
+            processedAt: null,
+            deadLetteredAt: null,
+            OR: [
+              {
+                processingAt: null,
+              },
+              {
+                processingAt: {
+                  lt: staleProcessingThreshold,
+                },
+              },
+            ],
+          },
+          data: {
+            processingAt: now,
+          },
+        });
+
+        if (result.count === 1) {
+          claimed.push(this.mapThumbnailOutbox(candidate, now));
+        }
+      }
+
+      return claimed;
+    });
+  }
+
+  async findPrimaryPhotoForThumbnailing(postingId: string): Promise<PostingPhotoRecord | null> {
+    const photo = await this.executeAsync(() =>
+      this.prisma.postingPhoto.findFirst({
+        where: {
+          postingId,
+          position: 0,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
+    );
+
+    return photo
+      ? {
+          id: photo.id,
+          blobUrl: photo.blobUrl,
+          blobName: photo.blobName,
+          thumbnailBlobUrl: photo.thumbnailBlobUrl ?? undefined,
+          thumbnailBlobName: photo.thumbnailBlobName ?? undefined,
+          position: photo.position,
+          createdAt: photo.createdAt.toISOString(),
+          updatedAt: photo.updatedAt.toISOString(),
+        }
+      : null;
+  }
+
+  async updatePostingPhotoThumbnail(
+    photoId: string,
+    input: {
+      thumbnailBlobName: string;
+      thumbnailBlobUrl: string;
+    },
+  ): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingPhoto.update({
+        where: {
+          id: photoId,
+        },
+        data: {
+          thumbnailBlobName: input.thumbnailBlobName,
+          thumbnailBlobUrl: input.thumbnailBlobUrl,
+        },
+      }),
+    );
+  }
+
+  async markThumbnailOutboxProcessed(id: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingThumbnailOutbox.update({
+        where: {
+          id,
+        },
+        data: {
+          processedAt: new Date(),
+          processingAt: null,
+          lastError: null,
+        },
+      }),
+    );
+  }
+
+  async markThumbnailOutboxRetry(
+    id: string,
+    attempts: number,
+    errorMessage: string,
+  ): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingThumbnailOutbox.update({
+        where: {
+          id,
+        },
+        data: {
+          attempts,
+          lastError: errorMessage,
+          processingAt: null,
+          availableAt: new Date(Date.now() + Math.min(60_000, attempts * 5_000)),
+        },
+      }),
+    );
+  }
+
+  async markThumbnailOutboxDeadLettered(id: string, errorMessage: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingThumbnailOutbox.update({
+        where: {
+          id,
+        },
+        data: {
+          deadLetteredAt: new Date(),
+          processingAt: null,
+          lastError: errorMessage,
+        },
       }),
     );
   }
@@ -1691,6 +1893,33 @@ export class PostingsRepository extends BaseRepository {
     });
   }
 
+  private async enqueueThumbnailOutbox(
+    transaction: Prisma.TransactionClient,
+    postingId: string,
+  ): Promise<void> {
+    const dedupeKey = `posting:${postingId}:primary-thumbnail`;
+
+    await transaction.postingThumbnailOutbox.upsert({
+      where: {
+        dedupeKey,
+      },
+      update: {
+        postingId,
+        attempts: 0,
+        availableAt: new Date(),
+        processingAt: null,
+        processedAt: null,
+        deadLetteredAt: null,
+        lastError: null,
+      },
+      create: {
+        id: randomUUID(),
+        postingId,
+        dedupeKey,
+      },
+    });
+  }
+
   private async syncOwnerPostingCounts(
     transaction: Prisma.TransactionClient,
     ownerId: string,
@@ -1758,6 +1987,8 @@ export class PostingsRepository extends BaseRepository {
           id: randomUUID(),
           blobUrl: photo.blobUrl,
           blobName: photo.blobName,
+          thumbnailBlobUrl: photo.thumbnailBlobUrl ?? null,
+          thumbnailBlobName: photo.thumbnailBlobName ?? null,
           position: photo.position,
         })),
       },
@@ -1773,7 +2004,10 @@ export class PostingsRepository extends BaseRepository {
     };
   }
 
-  private toUpdateData(input: UpsertPostingInput): Prisma.PostingUpdateInput {
+  private toUpdateData(
+    input: UpsertPostingInput,
+    photos: ManagedPostingPhotoInput[] = input.photos,
+  ): Prisma.PostingUpdateInput {
     return {
       family: input.variant.family,
       subtype: input.variant.subtype,
@@ -1794,14 +2028,55 @@ export class PostingsRepository extends BaseRepository {
       postalCode: input.location.postalCode ?? null,
       photos: {
         deleteMany: {},
-        create: input.photos.map((photo) => ({
+        create: photos.map((photo) => ({
           id: randomUUID(),
           blobUrl: photo.blobUrl,
           blobName: photo.blobName,
+          thumbnailBlobUrl: photo.thumbnailBlobUrl ?? null,
+          thumbnailBlobName: photo.thumbnailBlobName ?? null,
           position: photo.position,
         })),
       },
     };
+  }
+
+  private mergePhotosWithExisting(
+    existingPhotos: Array<{
+      blobUrl: string;
+      blobName: string;
+      thumbnailBlobUrl: string | null;
+      thumbnailBlobName: string | null;
+    }>,
+    nextPhotos: ManagedPostingPhotoInput[],
+  ): ManagedPostingPhotoInput[] {
+    const existingByBlobKey = new Map(
+      existingPhotos.map((photo) => [
+        this.createPhotoBlobKey(photo.blobUrl, photo.blobName),
+        photo,
+      ]),
+    );
+
+    return nextPhotos.map((photo) => {
+      if (photo.thumbnailBlobName || photo.thumbnailBlobUrl) {
+        return photo;
+      }
+
+      const existing = existingByBlobKey.get(this.createPhotoBlobKey(photo.blobUrl, photo.blobName));
+
+      if (!existing?.thumbnailBlobName || !existing.thumbnailBlobUrl) {
+        return photo;
+      }
+
+      return {
+        ...photo,
+        thumbnailBlobName: existing.thumbnailBlobName,
+        thumbnailBlobUrl: existing.thumbnailBlobUrl,
+      };
+    });
+  }
+
+  private createPhotoBlobKey(blobUrl: string, blobName: string): string {
+    return `${blobUrl}::${blobName}`;
   }
 
   private mapAvailabilityBlock(block: {
@@ -1859,6 +2134,8 @@ export class PostingsRepository extends BaseRepository {
         id: photo.id,
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
+        thumbnailBlobUrl: photo.thumbnailBlobUrl ?? undefined,
+        thumbnailBlobName: photo.thumbnailBlobName ?? undefined,
         position: photo.position,
         createdAt: photo.createdAt.toISOString(),
         updatedAt: photo.updatedAt.toISOString(),
@@ -1889,9 +2166,12 @@ export class PostingsRepository extends BaseRepository {
 
   private mapPublicPosting(posting: PostingPersistence): PublicPostingRecord {
     const record = this.mapPosting(posting);
+    const primaryPhoto = record.photos.find((photo) => photo.position === 0) ?? record.photos[0];
 
     return {
       ...record,
+      primaryPhotoUrl: primaryPhoto?.blobUrl,
+      primaryThumbnailUrl: primaryPhoto?.thumbnailBlobUrl,
       location: {
         city: record.location.city,
         region: record.location.region,
@@ -2036,6 +2316,25 @@ export class PostingsRepository extends BaseRepository {
       indexedAt: outbox.indexedAt?.toISOString(),
       deadLetteredAt: outbox.deadLetteredAt?.toISOString(),
       brokerMessageId: outbox.brokerMessageId ?? undefined,
+      lastError: outbox.lastError ?? undefined,
+      createdAt: outbox.createdAt.toISOString(),
+      updatedAt: outbox.updatedAt.toISOString(),
+    };
+  }
+
+  private mapThumbnailOutbox(
+    outbox: ThumbnailOutboxPersistence,
+    processingAt?: Date,
+  ): PostingThumbnailOutboxRecord {
+    return {
+      id: outbox.id,
+      postingId: outbox.postingId,
+      dedupeKey: outbox.dedupeKey,
+      attempts: outbox.attempts,
+      availableAt: outbox.availableAt.toISOString(),
+      processingAt: (processingAt ?? outbox.processingAt ?? undefined)?.toISOString(),
+      processedAt: outbox.processedAt?.toISOString(),
+      deadLetteredAt: outbox.deadLetteredAt?.toISOString(),
       lastError: outbox.lastError ?? undefined,
       createdAt: outbox.createdAt.toISOString(),
       updatedAt: outbox.updatedAt.toISOString(),

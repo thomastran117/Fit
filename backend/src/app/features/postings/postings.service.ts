@@ -14,12 +14,12 @@ import {
   type BatchPostingsResult,
   type ListOwnerPostingsInput,
   type ListOwnerPostingsResult,
+  type ManagedPostingPhotoInput,
   type PublicPostingRecord,
   type PostingAvailabilityBlockRecord,
   type PostingAvailabilityBlockInput,
   type PostingAttributeValue,
   type PostingFamily,
-  type PostingPhotoInput,
   type PostingPricing,
   type PostingRecord,
   type SearchAttributeFilterInput,
@@ -369,7 +369,7 @@ export class PostingsService {
     };
   }
 
-  private normalizePhotos(photos: PostingPhotoInput[]): PostingPhotoInput[] {
+  private normalizePhotos(photos: ManagedPostingPhotoInput[]): ManagedPostingPhotoInput[] {
     if (photos.length === 0) {
       throw new BadRequestError("At least one photo is required.");
     }
@@ -387,6 +387,15 @@ export class PostingsService {
 
       uniquePositions.add(photo.position);
       this.assertManagedBlob(photo.blobUrl, photo.blobName);
+
+      const hasThumbnailBlobName = typeof photo.thumbnailBlobName === "string";
+      const hasThumbnailBlobUrl = typeof photo.thumbnailBlobUrl === "string";
+
+      if (hasThumbnailBlobName !== hasThumbnailBlobUrl) {
+        throw new BadRequestError(
+          "Thumbnail blob URL and thumbnail blob name must be provided together.",
+        );
+      }
     }
 
     return photos
@@ -510,6 +519,8 @@ export class PostingsService {
       photos: posting.photos.map((photo) => ({
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
+        thumbnailBlobUrl: photo.thumbnailBlobUrl,
+        thumbnailBlobName: photo.thumbnailBlobName,
         position: photo.position,
       })),
       tags: [...posting.tags],
@@ -1086,8 +1097,12 @@ export class PostingsService {
   }
 
   private toPublicPosting(posting: PostingRecord | PublicPostingRecord): PublicPostingRecord {
+    const primaryPhoto = posting.photos.find((photo) => photo.position === 0) ?? posting.photos[0];
+
     return {
       ...posting,
+      primaryPhotoUrl: primaryPhoto?.blobUrl,
+      primaryThumbnailUrl: primaryPhoto?.thumbnailBlobUrl,
       effectiveMaxBookingDurationDays:
         posting.maxBookingDurationDays ?? DEFAULT_MAX_BOOKING_DURATION_DAYS,
       location: {

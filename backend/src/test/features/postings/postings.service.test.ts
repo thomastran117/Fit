@@ -271,6 +271,8 @@ function buildPostingRecord(input: UpsertPostingInput): PostingRecord {
       id: `photo-${index + 1}`,
       blobUrl: photo.blobUrl,
       blobName: photo.blobName,
+      thumbnailBlobUrl: photo.thumbnailBlobUrl,
+      thumbnailBlobName: photo.thumbnailBlobName,
       position: photo.position,
       createdAt: "2026-04-18T00:00:00.000Z",
       updatedAt: "2026-04-18T00:00:00.000Z",
@@ -390,6 +392,11 @@ describe("PostingsService", () => {
       id: "posting-source",
       status: "published",
       publishedAt: "2026-04-21T00:00:00.000Z",
+      photos: repository.posting.photos.map((photo) => ({
+        ...photo,
+        thumbnailBlobName: "postings/thumbnails/photo-1.webp",
+        thumbnailBlobUrl: "https://example.blob.core.windows.net/postings/thumbnails/photo-1.webp",
+      })),
       availabilityBlocks: [
         buildAvailabilityBlockRecord("hold-1", {
           startAt: "2026-06-10T00:00:00.000Z",
@@ -429,6 +436,8 @@ describe("PostingsService", () => {
       photos: repository.posting.photos.map((photo) => ({
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
+        thumbnailBlobUrl: photo.thumbnailBlobUrl,
+        thumbnailBlobName: photo.thumbnailBlobName,
         position: photo.position,
       })),
       availabilityBlocks: repository.ownerBlocks.map((block) => ({

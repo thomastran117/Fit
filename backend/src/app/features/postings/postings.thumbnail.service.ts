@@ -1,0 +1,68 @@
+import sharp from "sharp";
+import type { BlobService } from "@/features/blob/blob.service";
+import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type { PostingThumbnailOutboxRecord } from "@/features/postings/postings.model";
+
+const THUMBNAIL_WIDTH = 640;
+const THUMBNAIL_HEIGHT = 480;
+const THUMBNAIL_QUALITY = 80;
+
+export class PostingThumbnailService {
+  constructor(
+    private readonly postingsRepository: PostingsRepository,
+    private readonly blobService: BlobService,
+  ) {}
+
+  async processJob(job: PostingThumbnailOutboxRecord, maxAttempts: number): Promise<void> {
+    try {
+      const primaryPhoto = await this.postingsRepository.findPrimaryPhotoForThumbnailing(job.postingId);
+
+      if (!primaryPhoto) {
+        await this.postingsRepository.markThumbnailOutboxProcessed(job.id);
+        return;
+      }
+
+      if (primaryPhoto.thumbnailBlobName && primaryPhoto.thumbnailBlobUrl) {
+        await this.postingsRepository.markThumbnailOutboxProcessed(job.id);
+        return;
+      }
+
+      const original = await this.blobService.downloadBlob(primaryPhoto.blobName);
+      const thumbnailBuffer = await sharp(original.body)
+        .resize(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, {
+          fit: "cover",
+          position: "centre",
+        })
+        .webp({
+          quality: THUMBNAIL_QUALITY,
+        })
+        .toBuffer();
+
+      const thumbnailBlobName =
+        this.blobService.buildPostingPhotoThumbnailBlobName(primaryPhoto.blobName);
+      const uploaded = await this.blobService.uploadBuffer({
+        blobName: thumbnailBlobName,
+        body: thumbnailBuffer,
+        contentType: "image/webp",
+      });
+
+      await this.postingsRepository.updatePostingPhotoThumbnail(primaryPhoto.id, {
+        thumbnailBlobName: uploaded.blobName,
+        thumbnailBlobUrl: uploaded.blobUrl,
+      });
+      await this.postingsRepository.enqueueSearchSync(job.postingId);
+      await this.postingsRepository.markThumbnailOutboxProcessed(job.id);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown posting thumbnail generation error.";
+      const nextAttempts = job.attempts + 1;
+
+      if (nextAttempts >= maxAttempts) {
+        await this.postingsRepository.markThumbnailOutboxDeadLettered(job.id, errorMessage);
+        return;
+      }
+
+      await this.postingsRepository.markThumbnailOutboxRetry(job.id, nextAttempts, errorMessage);
+    }
+  }
+}

@@ -59,6 +59,8 @@ export interface SeedPostingPhotoFixture {
   id: string;
   blobUrl: string;
   blobName: string;
+  thumbnailBlobUrl?: string;
+  thumbnailBlobName?: string;
   position: number;
 }
 

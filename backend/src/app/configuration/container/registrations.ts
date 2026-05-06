@@ -41,6 +41,7 @@ import { PostingsReviewsService } from "@/features/postings/postings.reviews.ser
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
+import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
@@ -449,6 +450,16 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     dependencies: [containerTokens.postingsRepository],
     resolve: ({ resolve }) =>
       new PostingsSearchService(resolve(containerTokens.postingsRepository)),
+  });
+  container.register({
+    token: containerTokens.postingThumbnailService,
+    lifetime: "scoped",
+    dependencies: [containerTokens.postingsRepository, containerTokens.blobService],
+    resolve: ({ resolve }) =>
+      new PostingThumbnailService(
+        resolve(containerTokens.postingsRepository),
+        resolve(containerTokens.blobService),
+      ),
   });
   container.register({
     token: containerTokens.searchQueueService,

@@ -53,6 +53,9 @@ type RawEnvironmentValues = {
   PORT?: string;
   POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
+  POSTINGS_THUMBNAIL_BATCH_SIZE?: string;
+  POSTINGS_THUMBNAIL_MAX_ATTEMPTS?: string;
+  POSTINGS_THUMBNAIL_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
@@ -211,6 +214,11 @@ export interface AppEnvironment {
       pollIntervalMs: number;
       batchSize: number;
     };
+    postingsThumbnail: {
+      pollIntervalMs: number;
+      batchSize: number;
+      maxAttempts: number;
+    };
     bookingExpiry: {
       pollIntervalMs: number;
       batchSize: number;
@@ -307,6 +315,9 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "PORT",
   "POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE",
   "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
+  "POSTINGS_THUMBNAIL_BATCH_SIZE",
+  "POSTINGS_THUMBNAIL_MAX_ATTEMPTS",
+  "POSTINGS_THUMBNAIL_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_INDEXER_PREFETCH",
   "POSTINGS_SEARCH_INDEXER_BATCH_SIZE",
   "POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS",
@@ -904,6 +915,20 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           min: 1,
         }),
       },
+      postingsThumbnail: {
+        pollIntervalMs: parseNumber(raw, "POSTINGS_THUMBNAIL_POLL_INTERVAL_MS", 5_000, errors, {
+          integer: true,
+          min: 1,
+        }),
+        batchSize: parseNumber(raw, "POSTINGS_THUMBNAIL_BATCH_SIZE", 25, errors, {
+          integer: true,
+          min: 1,
+        }),
+        maxAttempts: parseNumber(raw, "POSTINGS_THUMBNAIL_MAX_ATTEMPTS", 5, errors, {
+          integer: true,
+          min: 1,
+        }),
+      },
       bookingExpiry: {
         pollIntervalMs: parseNumber(
           raw,
@@ -1145,6 +1170,10 @@ class EnvironmentManager {
 
   getAnalyticsWorkerConfig(): AppEnvironment["workers"]["analytics"] {
     return this.get().workers.analytics;
+  }
+
+  getPostingsThumbnailWorkerConfig(): AppEnvironment["workers"]["postingsThumbnail"] {
+    return this.get().workers.postingsThumbnail;
   }
 
   getBookingExpiryWorkerConfig(): AppEnvironment["workers"]["bookingExpiry"] {

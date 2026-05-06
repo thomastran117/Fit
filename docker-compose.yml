@@ -199,6 +199,15 @@ services:
     environment: *backend-environment
     command: ["node", "dist/workers/bookings/booking-expiry.worker.js"]
 
+  posting-thumbnail-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-posting-thumbnail-worker
+    restart: unless-stopped
+    depends_on: *db-worker-depends-on
+    environment: *backend-environment
+    command: ["node", "dist/workers/postings/posting-thumbnail.worker.js"]
+
   email-worker:
     build: *backend-build
     image: rent-backend:local

@@ -185,6 +185,10 @@ export type PostingPricing = z.infer<typeof postingPricingSchema>;
 export type PostingVariant = z.infer<typeof postingVariantSchema>;
 export type PostingAttributeValue = VariantPostingAttributeValue;
 export type PostingPhotoInput = z.infer<typeof postingPhotoSchema>;
+export interface ManagedPostingPhotoInput extends PostingPhotoInput {
+  thumbnailBlobUrl?: string;
+  thumbnailBlobName?: string;
+}
 export type PostingAvailabilityBlockInput = z.infer<typeof postingAvailabilityBlockSchema>;
 export type UpsertPostingRequestBody = z.infer<typeof upsertPostingRequestSchema>;
 export type UpdatePostingRequestBody = z.infer<typeof updatePostingRequestSchema>;
@@ -205,6 +209,8 @@ export interface PostingPhotoRecord {
   id: string;
   blobUrl: string;
   blobName: string;
+  thumbnailBlobUrl?: string;
+  thumbnailBlobName?: string;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -269,6 +275,8 @@ export interface PostingRecord {
 
 export interface PublicPostingRecord extends Omit<PostingRecord, "location"> {
   location: PublicPostingLocationRecord;
+  primaryPhotoUrl?: string;
+  primaryThumbnailUrl?: string;
   viewerReviewState?: PostingViewerReviewState;
 }
 
@@ -310,7 +318,7 @@ export interface UpsertPostingInput {
   name: string;
   description: string;
   pricing: PostingPricing;
-  photos: PostingPhotoInput[];
+  photos: ManagedPostingPhotoInput[];
   tags: string[];
   attributes: Record<string, PostingAttributeValue>;
   availabilityStatus: PostingAvailabilityStatus;
@@ -427,6 +435,20 @@ export interface PostingSearchOutboxRecord {
   indexedAt?: string;
   deadLetteredAt?: string;
   brokerMessageId?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PostingThumbnailOutboxRecord {
+  id: string;
+  postingId: string;
+  dedupeKey: string;
+  attempts: number;
+  availableAt: string;
+  processingAt?: string;
+  processedAt?: string;
+  deadLetteredAt?: string;
   lastError?: string;
   createdAt: string;
   updatedAt: string;

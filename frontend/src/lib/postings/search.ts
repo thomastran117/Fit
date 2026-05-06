@@ -45,6 +45,8 @@ export interface PublicPostingSummary {
   id: string;
   name: string;
   description: string;
+  primaryPhotoUrl?: string;
+  primaryThumbnailUrl?: string;
   variant: {
     family: string;
     subtype: string;

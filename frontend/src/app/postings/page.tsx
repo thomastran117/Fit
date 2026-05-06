@@ -848,13 +848,30 @@ function SearchResults({
         <div className="mt-4 space-y-3">
           {postings.map((posting) => {
             const publishedDate = formatPublishedDate(posting.publishedAt);
+            const previewImageUrl = posting.primaryThumbnailUrl ?? posting.primaryPhotoUrl;
 
             return (
               <article
                 key={posting.id}
-                className="rounded-2xl border border-slate-200 p-4"
+                className="overflow-hidden rounded-2xl border border-slate-200"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="relative min-h-44 border-b border-slate-200 bg-slate-100 md:min-h-full md:border-b-0 md:border-r">
+                    {previewImageUrl ? (
+                      <img
+                        src={previewImageUrl}
+                        alt={posting.name}
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
+                        No Image
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="font-semibold text-slate-950">{posting.name}</h2>
                     <p className="mt-0.5 text-xs text-slate-500">
@@ -893,6 +910,8 @@ function SearchResults({
                     ))}
                   </div>
                 ) : null}
+                  </div>
+                </div>
               </article>
             );
           })}

@@ -183,6 +183,8 @@ export const postingsSeedModule: SeedModule = {
             postingId: posting.id,
             blobUrl: photo.blobUrl,
             blobName: photo.blobName,
+            thumbnailBlobUrl: photo.thumbnailBlobUrl ?? null,
+            thumbnailBlobName: photo.thumbnailBlobName ?? null,
             position: photo.position,
           },
         });
