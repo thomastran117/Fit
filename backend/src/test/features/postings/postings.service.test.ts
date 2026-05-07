@@ -10,6 +10,7 @@ import type {
   UpsertPostingInput,
 } from "@/features/postings/postings.model";
 import {
+  isPostingPubliclyVisible,
   toPublicPostingRecord,
 } from "@/features/postings/postings.model";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
@@ -258,7 +259,9 @@ function createServiceHarness(
     enqueuePostingThumbnailJob: jest.fn(async () => undefined),
   };
   const postingsPublicCacheService = new FakePostingsPublicCacheService();
-  postingsPublicCacheService.posting = toPublicPostingRecord(repository.posting);
+  postingsPublicCacheService.posting = isPostingPubliclyVisible(repository.posting)
+    ? toPublicPostingRecord(repository.posting)
+    : null;
 
   return {
     service: new PostingsService(
@@ -927,7 +930,9 @@ describe("PostingsService", () => {
       enqueuePostingThumbnailJob: jest.fn(async () => undefined),
     } as unknown as PostingThumbnailQueueService;
     const postingsPublicCacheService = new FakePostingsPublicCacheService();
-    postingsPublicCacheService.posting = toPublicPostingRecord(repository.posting);
+    postingsPublicCacheService.posting = isPostingPubliclyVisible(repository.posting)
+      ? toPublicPostingRecord(repository.posting)
+      : null;
     const service = new PostingsService(
       repository as unknown as PostingsRepository,
       searchService,

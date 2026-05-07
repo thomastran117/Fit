@@ -509,7 +509,7 @@ describe("BookingsService", () => {
     const booking = createBookingRequestRecord({
       holdExpiresAt: "2099-04-21T00:00:00.000Z",
     });
-    const { service, cacheService } = createService({
+    const { service, cacheService, postingsPublicCacheService } = createService({
       createdBooking: booking,
     });
 
@@ -524,6 +524,7 @@ describe("BookingsService", () => {
       "booking-request:booking-1:state",
       "posting:posting-1:booking-window",
     ]);
+    expect(postingsPublicCacheService.invalidatePublic).toHaveBeenCalledWith("posting-1");
   });
 
   it("allows owners to approve existing requests while the posting is paused", async () => {

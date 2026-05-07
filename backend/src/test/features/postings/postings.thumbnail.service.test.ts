@@ -1,4 +1,5 @@
 import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { BlobService } from "@/features/blob/blob.service";
 
@@ -59,6 +60,9 @@ describe("PostingThumbnailService", () => {
     const buildPostingPhotoThumbnailBlobName = jest.fn(
       () => "postings/thumbnails/photo-1.webp",
     );
+    const postingsPublicCacheService = {
+      invalidatePublic: jest.fn(async () => 1),
+    } as unknown as PostingsPublicCacheService;
     const service = new PostingThumbnailService(
       repository as unknown as PostingsRepository,
       {
@@ -66,6 +70,7 @@ describe("PostingThumbnailService", () => {
         uploadBuffer,
         buildPostingPhotoThumbnailBlobName,
       } as unknown as BlobService,
+      postingsPublicCacheService,
     );
 
     await service.generateForPosting("posting-1");
@@ -83,6 +88,9 @@ describe("PostingThumbnailService", () => {
       thumbnailBlobName: "postings/thumbnails/photo-1.webp",
       thumbnailBlobUrl: "https://example.blob.core.windows.net/postings/thumbnails/photo-1.webp",
     });
+    expect(
+      (postingsPublicCacheService.invalidatePublic as unknown as jest.Mock),
+    ).toHaveBeenCalledWith("posting-1");
     expect(repository.enqueuedSearchPostingId).toBe("posting-1");
   });
 
@@ -94,11 +102,15 @@ describe("PostingThumbnailService", () => {
       thumbnailBlobUrl: "https://example.blob.core.windows.net/postings/thumbnails/photo-1.webp",
     };
     const downloadBlob = jest.fn();
+    const postingsPublicCacheService = {
+      invalidatePublic: jest.fn(async () => 1),
+    } as unknown as PostingsPublicCacheService;
     const service = new PostingThumbnailService(
       repository as unknown as PostingsRepository,
       {
         downloadBlob,
       } as unknown as BlobService,
+      postingsPublicCacheService,
     );
 
     await service.generateForPosting("posting-1");
