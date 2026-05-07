@@ -36,6 +36,7 @@ import {
 } from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import type { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
@@ -47,6 +48,7 @@ export class PostingsService {
     private readonly postingsReviewsRepository: PostingsReviewsRepository,
     private readonly rentingsRepository: RentingsRepository,
     private readonly blobService: BlobService,
+    private readonly postingThumbnailQueueService: PostingThumbnailQueueService,
     private readonly contentSanitizationService: ContentSanitizationService,
     private readonly cacheService: CacheService,
   ) {}
@@ -56,7 +58,9 @@ export class PostingsService {
     this.assertSafeTextContent(normalizedInput);
     this.assertPublishableDraftShape(normalizedInput);
 
-    return this.postingsRepository.create(normalizedInput);
+    const created = await this.postingsRepository.create(normalizedInput);
+    await this.enqueueThumbnailGeneration(created.id);
+    return created;
   }
 
   async duplicate(id: string, ownerId: string): Promise<PostingRecord> {
@@ -68,7 +72,9 @@ export class PostingsService {
     this.assertSafeTextContent(duplicateInput);
     this.assertPublishableDraftShape(duplicateInput);
 
-    return this.postingsRepository.create(duplicateInput);
+    const duplicated = await this.postingsRepository.create(duplicateInput);
+    await this.enqueueThumbnailGeneration(duplicated.id);
+    return duplicated;
   }
 
   async update(id: string, input: UpsertPostingInput): Promise<PostingRecord> {
@@ -83,6 +89,7 @@ export class PostingsService {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
+    await this.enqueueThumbnailGeneration(updated.id);
     return updated;
   }
 
@@ -189,6 +196,7 @@ export class PostingsService {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
+    await this.enqueueThumbnailGeneration(published.id);
     return published;
   }
 
@@ -230,6 +238,7 @@ export class PostingsService {
           throw new ResourceNotFoundError("Posting could not be found.");
         }
 
+        await this.enqueueThumbnailGeneration(unpaused.id);
         return unpaused;
       },
       "Another request is already modifying this posting's booking availability. Please retry.",
@@ -1114,6 +1123,17 @@ export class PostingsService {
         longitude: Number(posting.location.longitude.toFixed(2)),
       },
     };
+  }
+
+  private async enqueueThumbnailGeneration(postingId: string): Promise<void> {
+    try {
+      await this.postingThumbnailQueueService.enqueuePostingThumbnailJob(postingId);
+    } catch (error) {
+      console.error("Failed to enqueue posting thumbnail job", {
+        postingId,
+        error,
+      });
+    }
   }
 
   private isValidCoordinate(value: number, min: number, max: number): boolean {

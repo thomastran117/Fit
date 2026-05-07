@@ -1,5 +1,4 @@
 import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
-import type { PostingThumbnailOutboxRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { BlobService } from "@/features/blob/blob.service";
 
@@ -20,9 +19,6 @@ class FakePostingsRepository {
       }
     | null = null;
   enqueuedSearchPostingId: string | null = null;
-  processedJobId: string | null = null;
-  retryState: { id: string; attempts: number; errorMessage: string } | null = null;
-  deadLetterState: { id: string; errorMessage: string } | null = null;
 
   async findPrimaryPhotoForThumbnailing() {
     return this.primaryPhoto;
@@ -42,38 +38,6 @@ class FakePostingsRepository {
   async enqueueSearchSync(postingId: string) {
     this.enqueuedSearchPostingId = postingId;
   }
-
-  async markThumbnailOutboxProcessed(id: string) {
-    this.processedJobId = id;
-  }
-
-  async markThumbnailOutboxRetry(id: string, attempts: number, errorMessage: string) {
-    this.retryState = {
-      id,
-      attempts,
-      errorMessage,
-    };
-  }
-
-  async markThumbnailOutboxDeadLettered(id: string, errorMessage: string) {
-    this.deadLetterState = {
-      id,
-      errorMessage,
-    };
-  }
-}
-
-function createJob(overrides: Partial<PostingThumbnailOutboxRecord> = {}): PostingThumbnailOutboxRecord {
-  return {
-    id: "thumb-job-1",
-    postingId: "posting-1",
-    dedupeKey: "posting:posting-1:primary-thumbnail",
-    attempts: 0,
-    availableAt: "2026-05-01T00:00:00.000Z",
-    createdAt: "2026-05-01T00:00:00.000Z",
-    updatedAt: "2026-05-01T00:00:00.000Z",
-    ...overrides,
-  };
 }
 
 const onePixelPng = Buffer.from(
@@ -104,7 +68,7 @@ describe("PostingThumbnailService", () => {
       } as unknown as BlobService,
     );
 
-    await service.processJob(createJob(), 3);
+    await service.generateForPosting("posting-1");
 
     expect(downloadBlob).toHaveBeenCalledWith("postings/photo-1.jpg");
     expect(buildPostingPhotoThumbnailBlobName).toHaveBeenCalledWith("postings/photo-1.jpg");
@@ -120,28 +84,26 @@ describe("PostingThumbnailService", () => {
       thumbnailBlobUrl: "https://example.blob.core.windows.net/postings/thumbnails/photo-1.webp",
     });
     expect(repository.enqueuedSearchPostingId).toBe("posting-1");
-    expect(repository.processedJobId).toBe("thumb-job-1");
-    expect(repository.retryState).toBeNull();
-    expect(repository.deadLetterState).toBeNull();
   });
 
-  it("dead-letters a job after the final failed attempt", async () => {
+  it("bails out when a primary photo already has a thumbnail", async () => {
     const repository = new FakePostingsRepository();
+    repository.primaryPhoto = {
+      ...repository.primaryPhoto,
+      thumbnailBlobName: "postings/thumbnails/photo-1.webp",
+      thumbnailBlobUrl: "https://example.blob.core.windows.net/postings/thumbnails/photo-1.webp",
+    };
+    const downloadBlob = jest.fn();
     const service = new PostingThumbnailService(
       repository as unknown as PostingsRepository,
       {
-        downloadBlob: jest.fn(async () => {
-          throw new Error("Blob download failed.");
-        }),
+        downloadBlob,
       } as unknown as BlobService,
     );
 
-    await service.processJob(createJob({ attempts: 2 }), 3);
+    await service.generateForPosting("posting-1");
 
-    expect(repository.deadLetterState).toEqual({
-      id: "thumb-job-1",
-      errorMessage: "Blob download failed.",
-    });
-    expect(repository.processedJobId).toBeNull();
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(repository.updatedThumbnail).toBeNull();
   });
 });

@@ -39,6 +39,7 @@ import { PostingsController } from "@/features/postings/postings.controller";
 import { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
@@ -462,6 +463,12 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       ),
   });
   container.register({
+    token: containerTokens.postingThumbnailQueueService,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new PostingThumbnailQueueService(),
+  });
+  container.register({
     token: containerTokens.searchQueueService,
     lifetime: "singleton",
     dependencies: [],
@@ -503,6 +510,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsReviewsRepository,
       containerTokens.rentingsRepository,
       containerTokens.blobService,
+      containerTokens.postingThumbnailQueueService,
       containerTokens.contentSanitizationService,
       containerTokens.cacheService,
     ],
@@ -513,6 +521,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsReviewsRepository),
         resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.blobService),
+        resolve(containerTokens.postingThumbnailQueueService),
         resolve(containerTokens.contentSanitizationService),
         resolve(containerTokens.cacheService),
       ),

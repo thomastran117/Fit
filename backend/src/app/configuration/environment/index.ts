@@ -53,9 +53,8 @@ type RawEnvironmentValues = {
   PORT?: string;
   POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
-  POSTINGS_THUMBNAIL_BATCH_SIZE?: string;
+  POSTINGS_THUMBNAIL_PREFETCH?: string;
   POSTINGS_THUMBNAIL_MAX_ATTEMPTS?: string;
-  POSTINGS_THUMBNAIL_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
@@ -215,8 +214,7 @@ export interface AppEnvironment {
       batchSize: number;
     };
     postingsThumbnail: {
-      pollIntervalMs: number;
-      batchSize: number;
+      prefetch: number;
       maxAttempts: number;
     };
     bookingExpiry: {
@@ -315,9 +313,8 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "PORT",
   "POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE",
   "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
-  "POSTINGS_THUMBNAIL_BATCH_SIZE",
+  "POSTINGS_THUMBNAIL_PREFETCH",
   "POSTINGS_THUMBNAIL_MAX_ATTEMPTS",
-  "POSTINGS_THUMBNAIL_POLL_INTERVAL_MS",
   "POSTINGS_SEARCH_INDEXER_PREFETCH",
   "POSTINGS_SEARCH_INDEXER_BATCH_SIZE",
   "POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS",
@@ -916,11 +913,7 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
         }),
       },
       postingsThumbnail: {
-        pollIntervalMs: parseNumber(raw, "POSTINGS_THUMBNAIL_POLL_INTERVAL_MS", 5_000, errors, {
-          integer: true,
-          min: 1,
-        }),
-        batchSize: parseNumber(raw, "POSTINGS_THUMBNAIL_BATCH_SIZE", 25, errors, {
+        prefetch: parseNumber(raw, "POSTINGS_THUMBNAIL_PREFETCH", 10, errors, {
           integer: true,
           min: 1,
         }),

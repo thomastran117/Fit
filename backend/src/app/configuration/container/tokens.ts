@@ -39,6 +39,7 @@ import { PostingsController } from "@/features/postings/postings.controller";
 import { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
@@ -116,6 +117,9 @@ export const containerTokens = {
   ),
   postingsReviewsService: createServiceToken<PostingsReviewsService>("PostingsReviewsService"),
   postingsSearchService: createServiceToken<PostingsSearchService>("PostingsSearchService"),
+  postingThumbnailQueueService: createServiceToken<PostingThumbnailQueueService>(
+    "PostingThumbnailQueueService",
+  ),
   postingThumbnailService: createServiceToken<PostingThumbnailService>("PostingThumbnailService"),
   searchQueueService: createServiceToken<SearchQueueService>("SearchQueueService"),
   searchService: createServiceToken<SearchService>("SearchService"),

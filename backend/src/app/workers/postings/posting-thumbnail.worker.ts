@@ -1,27 +1,65 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
-import { databaseWorkerResource, disconnectResources } from "@/workers/shared/resources";
-import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-runtime";
+import {
+  databaseWorkerResource,
+  disconnectResources,
+  rabbitMqWorkerResource,
+} from "@/workers/shared/resources";
+import { bootstrapWorker, startWorker } from "@/workers/shared/worker-runtime";
 
 const workerName = "Posting thumbnail worker";
-const workerResources = [databaseWorkerResource];
+const workerResources = [databaseWorkerResource, rabbitMqWorkerResource];
 
 export async function bootstrapPostingThumbnailWorker(): Promise<void> {
-  await bootstrapPollingWorker({
+  await bootstrapWorker({
     name: workerName,
     resources: workerResources,
-    getPollIntervalMs: () => environment.getPostingsThumbnailWorkerConfig().pollIntervalMs,
-    runOnce: async ({ scope }) => {
-      const repository = scope.resolve(containerTokens.postingsRepository);
+    run: async ({ container }, lifecycle) => {
+      const scope = container.createScope();
+      const thumbnailQueueService = scope.resolve(containerTokens.postingThumbnailQueueService);
       const thumbnailService = scope.resolve(containerTokens.postingThumbnailService);
-      const { batchSize, maxAttempts } = environment.getPostingsThumbnailWorkerConfig();
-      const jobs = await repository.claimThumbnailOutboxBatch(batchSize);
+      const { prefetch, maxAttempts } = environment.getPostingsThumbnailWorkerConfig();
 
-      for (const job of jobs) {
-        await thumbnailService.processJob(job, maxAttempts);
-      }
+      const stopConsuming = await thumbnailQueueService.consumePostingThumbnailJobs(
+        prefetch,
+        async (payload, message, channel) => {
+          try {
+            await thumbnailService.generateForPosting(payload.postingId);
+            channel.ack(message);
+          } catch (error) {
+            const attempt = payload.attempt + 1;
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown posting thumbnail generation error.";
 
-      return jobs.length;
+            console.error("Failed to process posting thumbnail job", {
+              jobId: payload.jobId,
+              postingId: payload.postingId,
+              attempt,
+              error,
+            });
+
+            if (attempt >= maxAttempts) {
+              await thumbnailQueueService.publishDeadLetterJob({
+                ...payload,
+                attempt,
+              });
+              console.error("Posting thumbnail job moved to dead-letter queue", {
+                jobId: payload.jobId,
+                postingId: payload.postingId,
+                error: errorMessage,
+              });
+            } else {
+              await thumbnailQueueService.publishRetryJob(payload, attempt);
+            }
+
+            channel.ack(message);
+          }
+        },
+      );
+
+      lifecycle.addShutdownTask(async () => {
+        await Promise.allSettled([stopConsuming(), scope.dispose()]);
+      });
     },
   });
 }

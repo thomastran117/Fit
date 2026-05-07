@@ -732,7 +732,6 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
         ) : result ? (
           <SearchResults
             result={result}
-            page={page}
             pageSize={pageSize}
             paginationProps={paginationProps}
           />
@@ -811,12 +810,10 @@ function SearchError({
 
 function SearchResults({
   result,
-  page,
   pageSize,
   paginationProps,
 }: {
   result: PublicPostingSearchResult;
-  page: number;
   pageSize: number;
   paginationProps: Omit<Parameters<typeof buildSearchHref>[0], "page">;
 }) {
@@ -858,6 +855,7 @@ function SearchResults({
                 <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="relative min-h-44 border-b border-slate-200 bg-slate-100 md:min-h-full md:border-b-0 md:border-r">
                     {previewImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={previewImageUrl}
                         alt={posting.name}

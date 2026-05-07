@@ -440,17 +440,4 @@ export interface PostingSearchOutboxRecord {
   updatedAt: string;
 }
 
-export interface PostingThumbnailOutboxRecord {
-  id: string;
-  postingId: string;
-  dedupeKey: string;
-  attempts: number;
-  availableAt: string;
-  processingAt?: string;
-  processedAt?: string;
-  deadLetteredAt?: string;
-  lastError?: string;
-  createdAt: string;
-  updatedAt: string;
-}
 

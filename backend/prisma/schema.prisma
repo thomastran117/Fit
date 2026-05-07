@@ -154,7 +154,6 @@ model Posting {
   bookingRequests   BookingRequest[]
   rentings          Renting[]
   payments          Payment[]
-  thumbnailOutboxEntries PostingThumbnailOutbox[]
 
   @@index([ownerId, status])
   @@index([status, publishedAt])
@@ -178,25 +177,6 @@ model PostingPhoto {
   @@unique([postingId, position])
   @@index([postingId])
   @@map("posting_photos")
-}
-
-model PostingThumbnailOutbox {
-  id            String   @id @db.VarChar(36)
-  postingId     String   @map("posting_id") @db.VarChar(36)
-  dedupeKey     String   @unique @map("dedupe_key") @db.VarChar(255)
-  attempts      Int      @default(0)
-  availableAt   DateTime @default(now()) @map("available_at") @db.DateTime(6)
-  processingAt  DateTime? @map("processing_at") @db.DateTime(6)
-  processedAt   DateTime? @map("processed_at") @db.DateTime(6)
-  deadLetteredAt DateTime? @map("dead_lettered_at") @db.DateTime(6)
-  lastError     String?  @map("last_error") @db.VarChar(2048)
-  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.DateTime(6)
-  posting       Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
-
-  @@index([availableAt, processedAt, deadLetteredAt, processingAt], map: "pt_outbox_ready_idx")
-  @@index([postingId])
-  @@map("posting_thumbnail_outbox")
 }
 
 model PostingAvailabilityBlock {

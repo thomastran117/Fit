@@ -204,7 +204,7 @@ services:
     image: rent-backend:local
     container_name: rent-posting-thumbnail-worker
     restart: unless-stopped
-    depends_on: *db-worker-depends-on
+    depends_on: *recommendation-worker-depends-on
     environment: *backend-environment
     command: ["node", "dist/workers/postings/posting-thumbnail.worker.js"]
 
