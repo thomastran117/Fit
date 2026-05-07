@@ -32,6 +32,8 @@ model User {
   payouts          Payout[]
   refundsIssued    Refund[]  @relation("RefundIssuer")
   personalAccessTokens PersonalAccessToken[]
+  recommendationProfile UserRecommendationProfile?
+  recommendationSnapshot UserRecommendationSnapshot?
 
   @@map("users")
 }
@@ -634,6 +636,57 @@ model RecommendationRefreshJob {
   @@index([jobType, userId])
   @@index([jobType, segmentType, segmentValue])
   @@map("recommendation_refresh_jobs")
+}
+
+model UserRecommendationProfile {
+  id                    String    @id @db.VarChar(36)
+  userId                String    @unique @map("user_id") @db.VarChar(36)
+  qualified             Boolean   @default(false)
+  activityWindowStartAt DateTime  @map("activity_window_start_at") @db.DateTime(6)
+  lastSignalAt          DateTime? @map("last_signal_at") @db.DateTime(6)
+  distinctPostingCount  Int       @default(0) @map("distinct_posting_count")
+  signalCounts          Json      @map("signal_counts")
+  familyAffinities      Json      @map("family_affinities")
+  subtypeAffinities     Json      @map("subtype_affinities")
+  tagAffinities         Json      @map("tag_affinities")
+  rebuiltAt             DateTime  @map("rebuilt_at") @db.DateTime(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.DateTime(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([qualified, rebuiltAt])
+  @@map("user_recommendation_profiles")
+}
+
+model UserRecommendationSnapshot {
+  id               String    @id @db.VarChar(36)
+  userId           String    @unique @map("user_id") @db.VarChar(36)
+  generatedAt      DateTime  @map("generated_at") @db.DateTime(6)
+  sourceLastSignalAt DateTime? @map("source_last_signal_at") @db.DateTime(6)
+  candidateCount   Int       @default(0) @map("candidate_count")
+  candidates       Json
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(6)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([generatedAt])
+  @@map("user_recommendation_snapshots")
+}
+
+model PopularRecommendationSnapshot {
+  id               String                          @id @db.VarChar(36)
+  segmentType      RecommendationPopularSegmentType @map("segment_type")
+  segmentValue     String                          @map("segment_value") @db.VarChar(191)
+  generatedAt      DateTime                        @map("generated_at") @db.DateTime(6)
+  sourceLastSignalAt DateTime?                     @map("source_last_signal_at") @db.DateTime(6)
+  candidateCount   Int                             @default(0) @map("candidate_count")
+  candidates       Json
+  createdAt        DateTime                        @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt        DateTime                        @updatedAt @map("updated_at") @db.DateTime(6)
+
+  @@unique([segmentType, segmentValue])
+  @@index([generatedAt])
+  @@map("popular_recommendation_snapshots")
 }
 
 enum PostingStatus {

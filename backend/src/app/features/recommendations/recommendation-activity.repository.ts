@@ -53,7 +53,9 @@ export class RecommendationActivityRepository extends BaseRepository {
           upsert: (args: unknown) => Promise<unknown>;
         };
         const recommendationRefreshJob = (transaction as any).recommendationRefreshJob as {
-          upsert: (args: unknown) => Promise<unknown>;
+          create: (args: unknown) => Promise<unknown>;
+          findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
+          update: (args: unknown) => Promise<unknown>;
         };
 
         if (activity.coalesced) {
@@ -127,25 +129,56 @@ export class RecommendationActivityRepository extends BaseRepository {
         }
 
         for (const job of jobs) {
-          await recommendationRefreshJob.upsert({
+          const existing = await recommendationRefreshJob.findUnique({
             where: {
               dedupeKey: job.dedupeKey,
             },
-            update: {
+          });
+
+          if (!existing) {
+            await recommendationRefreshJob.create({
+              data: {
+                id: randomUUID(),
+                jobType: job.jobType,
+                dedupeKey: job.dedupeKey,
+                userId: job.userId ?? null,
+                segmentType: job.segmentType ?? null,
+                segmentValue: job.segmentValue ?? null,
+                availableAt: job.availableAt,
+              },
+            });
+            continue;
+          }
+
+          const existingProcessedAt = existing.processedAt as Date | null | undefined;
+          const existingAvailableAt = existing.availableAt as Date | null | undefined;
+
+          if (!existingProcessedAt) {
+            await recommendationRefreshJob.update({
+              where: {
+                dedupeKey: job.dedupeKey,
+              },
+              data: {
+                availableAt:
+                  existingAvailableAt && existingAvailableAt.getTime() < job.availableAt.getTime()
+                    ? existingAvailableAt
+                    : job.availableAt,
+                lastError: null,
+              },
+            });
+            continue;
+          }
+
+          await recommendationRefreshJob.update({
+            where: {
+              dedupeKey: job.dedupeKey,
+            },
+            data: {
               availableAt: job.availableAt,
               processingAt: null,
               processedAt: null,
               attempts: 0,
               lastError: null,
-            },
-            create: {
-              id: randomUUID(),
-              jobType: job.jobType,
-              dedupeKey: job.dedupeKey,
-              userId: job.userId ?? null,
-              segmentType: job.segmentType ?? null,
-              segmentValue: job.segmentValue ?? null,
-              availableAt: job.availableAt,
             },
           });
         }

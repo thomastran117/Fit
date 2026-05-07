@@ -33,6 +33,8 @@ import { RecommendationActivityProcessor } from "@/features/recommendations/reco
 import { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
 import { RecommendationActivityQueueService } from "@/features/recommendations/recommendation-activity.queue.service";
 import { RecommendationActivityRepository } from "@/features/recommendations/recommendation-activity.repository";
+import { RecommendationPrecomputeRepository } from "@/features/recommendations/recommendation-precompute.repository";
+import { RecommendationPrecomputeService } from "@/features/recommendations/recommendation-precompute.service";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
@@ -104,6 +106,12 @@ export const containerTokens = {
   ),
   recommendationActivityPublisher: createServiceToken<RecommendationActivityPublisher>(
     "RecommendationActivityPublisher",
+  ),
+  recommendationPrecomputeRepository: createServiceToken<RecommendationPrecomputeRepository>(
+    "RecommendationPrecomputeRepository",
+  ),
+  recommendationPrecomputeService: createServiceToken<RecommendationPrecomputeService>(
+    "RecommendationPrecomputeService",
   ),
   postingsRepository: createServiceToken<PostingsRepository>("PostingsRepository"),
   rentingsRepository: createServiceToken<RentingsRepository>("RentingsRepository"),

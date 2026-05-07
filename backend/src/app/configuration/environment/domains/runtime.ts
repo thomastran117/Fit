@@ -179,6 +179,22 @@ export function buildWorkerConfig(
         min: 1,
       }),
     },
+    recommendationsPrecompute: {
+      pollIntervalMs: parseNumber(
+        raw,
+        "RECOMMENDATIONS_PRECOMPUTE_POLL_INTERVAL_MS",
+        5_000,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      batchSize: parseNumber(raw, "RECOMMENDATIONS_PRECOMPUTE_BATCH_SIZE", 25, errors, {
+        integer: true,
+        min: 1,
+      }),
+    },
     postingsThumbnail: {
       prefetch: parseNumber(raw, "POSTINGS_THUMBNAIL_PREFETCH", 10, errors, {
         integer: true,

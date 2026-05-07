@@ -55,6 +55,8 @@ export type RawEnvironmentValues = {
   PORT?: string;
   POSTINGS_ANALYTICS_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
+  RECOMMENDATIONS_PRECOMPUTE_BATCH_SIZE?: string;
+  RECOMMENDATIONS_PRECOMPUTE_POLL_INTERVAL_MS?: string;
   POSTINGS_THUMBNAIL_PREFETCH?: string;
   POSTINGS_THUMBNAIL_MAX_ATTEMPTS?: string;
   POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS?: string;
@@ -218,6 +220,10 @@ export interface AppEnvironment {
       maxAttempts: number;
     };
     analytics: {
+      pollIntervalMs: number;
+      batchSize: number;
+    };
+    recommendationsPrecompute: {
       pollIntervalMs: number;
       batchSize: number;
     };

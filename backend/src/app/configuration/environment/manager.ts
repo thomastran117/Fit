@@ -123,6 +123,10 @@ export class EnvironmentManager {
     return this.get().workers.analytics;
   }
 
+  getRecommendationsPrecomputeWorkerConfig(): AppEnvironment["workers"]["recommendationsPrecompute"] {
+    return this.get().workers.recommendationsPrecompute;
+  }
+
   getPostingsThumbnailWorkerConfig(): AppEnvironment["workers"]["postingsThumbnail"] {
     return this.get().workers.postingsThumbnail;
   }

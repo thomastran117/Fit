@@ -33,6 +33,8 @@ import { RecommendationActivityProcessor } from "@/features/recommendations/reco
 import { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
 import { RecommendationActivityQueueService } from "@/features/recommendations/recommendation-activity.queue.service";
 import { RecommendationActivityRepository } from "@/features/recommendations/recommendation-activity.repository";
+import { RecommendationPrecomputeRepository } from "@/features/recommendations/recommendation-precompute.repository";
+import { RecommendationPrecomputeService } from "@/features/recommendations/recommendation-precompute.service";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
@@ -304,6 +306,21 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       new RecommendationActivityPublisher(
         resolve(containerTokens.recommendationActivityQueueService),
         resolve(containerTokens.profileRepository),
+      ),
+  });
+  container.register({
+    token: containerTokens.recommendationPrecomputeRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new RecommendationPrecomputeRepository(),
+  });
+  container.register({
+    token: containerTokens.recommendationPrecomputeService,
+    lifetime: "scoped",
+    dependencies: [containerTokens.recommendationPrecomputeRepository],
+    resolve: ({ resolve }) =>
+      new RecommendationPrecomputeService(
+        resolve(containerTokens.recommendationPrecomputeRepository),
       ),
   });
   container.register({
