@@ -53,7 +53,10 @@ describe("PaymentsService", () => {
         raw: {},
       })),
     } as unknown as PaymentProviderAdapter;
-    const analyticsRepository = {} as PostingsAnalyticsRepository;
+    const analyticsRepository = {
+      enqueuePaymentFailedEvent: jest.fn(async () => undefined),
+      enqueueRefundRecordedEvent: jest.fn(async () => undefined),
+    } as unknown as PostingsAnalyticsRepository;
     const postingsRepository = {
       enqueueSearchSync: jest.fn(async () => undefined),
     } as unknown as PostingsRepository;
@@ -120,7 +123,10 @@ describe("PaymentsService", () => {
         isValid: true,
       })),
     } as unknown as PaymentProviderAdapter;
-    const analyticsRepository = {} as PostingsAnalyticsRepository;
+    const analyticsRepository = {
+      enqueuePaymentFailedEvent: jest.fn(async () => undefined),
+      enqueueRefundRecordedEvent: jest.fn(async () => undefined),
+    } as unknown as PostingsAnalyticsRepository;
     const postingsRepository = {
       enqueueSearchSync: jest.fn(async () => undefined),
     } as unknown as PostingsRepository;

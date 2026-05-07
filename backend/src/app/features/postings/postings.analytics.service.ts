@@ -57,6 +57,38 @@ export class PostingsAnalyticsService {
     });
   }
 
+  async trackSearchImpressions(postings: PublicPostingRecord[]): Promise<void> {
+    if (postings.length === 0) {
+      return;
+    }
+
+    const occurredAt = new Date().toISOString();
+
+    await Promise.all(
+      postings.map((posting) =>
+        this.analyticsRepository.enqueueSearchImpressionEvent({
+          postingId: posting.id,
+          ownerId: posting.ownerId,
+          occurredAt,
+        }),
+      ),
+    );
+  }
+
+  async trackSearchClick(postingId: string): Promise<void> {
+    const metadata = await this.postingsRepository.findPublicReadMetadataById(postingId);
+
+    if (!metadata || !isPostingPubliclyVisible(metadata)) {
+      return;
+    }
+
+    await this.analyticsRepository.enqueueSearchClickEvent({
+      postingId: metadata.id,
+      ownerId: metadata.ownerId,
+      occurredAt: new Date().toISOString(),
+    });
+  }
+
   async getOwnerSummary(ownerId: string, window: "7d" | "30d" | "all"): Promise<OwnerPostingsAnalyticsSummary> {
     return this.analyticsRepository.getOwnerSummary({
       ownerId,

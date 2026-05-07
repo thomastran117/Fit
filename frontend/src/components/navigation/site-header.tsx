@@ -15,11 +15,22 @@ const navigationLinks = [
   { href: "/contact", label: "Contact" },
 ];
 
-const accountLinks = [
-  { href: "/account", label: "Manage account", description: "Email, security, and login methods" },
-  { href: "/profile", label: "Profile", description: "Personal details and public-facing info" },
-  { href: "/settings", label: "Settings", description: "Preferences and application settings" },
-];
+function getAccountLinks(role?: "user" | "owner" | "admin") {
+  return [
+    ...(role && role !== "user"
+      ? [
+          {
+            href: "/dashboard",
+            label: "Dashboard",
+            description: "Live posting analytics and conversion trends",
+          },
+        ]
+      : []),
+    { href: "/account", label: "Manage account", description: "Email, security, and login methods" },
+    { href: "/profile", label: "Profile", description: "Personal details and public-facing info" },
+    { href: "/settings", label: "Settings", description: "Preferences and application settings" },
+  ];
+}
 
 function getInitials(value: string): string {
   return (
@@ -116,6 +127,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { status, session, clearSession } = useAuth();
+  const accountLinks = useMemo(() => getAccountLinks(session?.user.role), [session?.user.role]);
 
   const [logoutPending, setLogoutPending] = useState(false);
 

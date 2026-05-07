@@ -279,7 +279,18 @@ export interface SeedPostingViewEventFixture {
 export interface SeedPostingAnalyticsOutboxFixture {
   id: string;
   postingId: string;
-  eventType: "posting_viewed" | "booking_requested" | "booking_accepted" | "payment_captured";
+  eventType:
+    | "posting_viewed"
+    | "search_impression"
+    | "search_click"
+    | "booking_requested"
+    | "booking_approved"
+    | "booking_declined"
+    | "booking_expired"
+    | "booking_cancelled"
+    | "payment_failed"
+    | "refund_recorded"
+    | "renting_confirmed";
   payload: Record<string, unknown>;
   attempts?: number;
   availableAt: string;

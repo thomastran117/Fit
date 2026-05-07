@@ -95,7 +95,9 @@ describe("PostingsController", () => {
       {
         searchPublic,
       } as never,
-      {} as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
       {} as never,
       {} as never,
     );
@@ -134,7 +136,9 @@ describe("PostingsController", () => {
       {
         searchPublic,
       } as never,
-      {} as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
       {} as never,
       {} as never,
     );
@@ -444,7 +448,9 @@ describe("PostingsController", () => {
     const publishSearchClick = jest.fn(async () => undefined);
     const controller = new PostingsController(
       {} as never,
-      {} as never,
+      {
+        trackSearchClick: jest.fn(async () => undefined),
+      } as never,
       {} as never,
       {
         publishSearchClick,

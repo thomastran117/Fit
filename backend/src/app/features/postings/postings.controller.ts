@@ -214,6 +214,7 @@ export class PostingsController {
     const auth = await this.getOptionalAuth(context);
     const body = await parseRequestBody(context, searchClickActivityRequestSchema);
 
+    await this.postingsAnalyticsService.trackSearchClick(this.requireRouteId(context));
     await this.recommendationActivityPublisher.publishSearchClick({
       postingId: this.requireRouteId(context),
       client: context.get("client"),
@@ -253,6 +254,7 @@ export class PostingsController {
     const result = await this.postingsService.searchPublic(
       this.parseSearchPostingsInput(context),
     );
+    await this.postingsAnalyticsService.trackSearchImpressions(result.postings);
     return context.json(result);
   };
 

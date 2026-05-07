@@ -2,31 +2,59 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { BaseRepository } from "@/features/base/base.repository";
 import type {
+  EnqueueBookingApprovedEventInput,
+  EnqueueBookingCancelledEventInput,
+  EnqueueBookingDeclinedEventInput,
+  EnqueueBookingExpiredEventInput,
   EnqueueBookingRequestedEventInput,
-  EnqueueRentingConfirmedEventInput,
+  EnqueuePaymentFailedEventInput,
   EnqueuePostingViewedEventInput,
+  EnqueueRefundRecordedEventInput,
+  EnqueueRentingConfirmedEventInput,
+  EnqueueSearchClickEventInput,
+  EnqueueSearchImpressionEventInput,
   ListPostingAnalyticsInput,
   OwnerPostingsAnalyticsSummary,
-  ProcessBookingRequestedEventInput,
-  ProcessRentingConfirmedEventInput,
-  ProcessPostingViewedEventInput,
   PostingAnalyticsBucket,
+  PostingAnalyticsBucketMetrics,
+  PostingAnalyticsDataAvailability,
+  PostingAnalyticsDerivedMetrics,
   PostingAnalyticsDetail,
   PostingAnalyticsDetailInput,
+  PostingAnalyticsEventType,
   PostingAnalyticsListItem,
   PostingAnalyticsListResult,
   PostingAnalyticsMetrics,
   PostingAnalyticsOutboxRecord,
   PostingAnalyticsSummaryInput,
   PostingAnalyticsWindow,
+  ProcessBookingApprovedEventInput,
+  ProcessBookingCancelledEventInput,
+  ProcessBookingDeclinedEventInput,
+  ProcessBookingExpiredEventInput,
+  ProcessBookingRequestedEventInput,
+  ProcessPaymentFailedEventInput,
+  ProcessPostingViewedEventInput,
+  ProcessRefundRecordedEventInput,
+  ProcessRentingConfirmedEventInput,
+  ProcessSearchClickEventInput,
+  ProcessSearchImpressionEventInput,
 } from "@/features/postings/postings.analytics.model";
 
 interface AnalyticsAggregateRow {
+  searchImpressions: bigint | number | null;
+  searchClicks: bigint | number | null;
   views: bigint | number | null;
   uniqueViews: bigint | number | null;
   bookingRequests: bigint | number | null;
+  approvedRequests: bigint | number | null;
+  declinedRequests: bigint | number | null;
+  expiredRequests: bigint | number | null;
+  cancelledRequests: bigint | number | null;
+  paymentFailedRequests: bigint | number | null;
   confirmedBookings: bigint | number | null;
-  estimatedRevenue: Prisma.Decimal | number | string | null;
+  estimatedConfirmedRevenue: Prisma.Decimal | number | string | null;
+  refundedRevenue: Prisma.Decimal | number | string | null;
 }
 
 interface AnalyticsCountRow {
@@ -38,6 +66,9 @@ interface PostingAnalyticsListRow extends AnalyticsAggregateRow {
   name: string;
   status: string;
   primaryPhotoUrl: string | null;
+  publishedAt: Date | null;
+  pausedAt: Date | null;
+  archivedAt: Date | null;
 }
 
 interface PostingAnalyticsBucketRow extends AnalyticsAggregateRow {
@@ -49,64 +80,108 @@ interface PostingAnalyticsHeaderRow {
   name: string;
   status: string;
   primaryPhotoUrl: string | null;
+  publishedAt: Date | null;
+  pausedAt: Date | null;
+  archivedAt: Date | null;
+}
+
+interface PostingOperationalStateRow {
+  postingId: string;
+  status: string;
+  publishedAt: Date | null;
+  pausedAt: Date | null;
+  archivedAt: Date | null;
+}
+
+interface PostingTimeSpanRow {
+  postingId: string;
+  startAt: Date;
+  endAt: Date;
+}
+
+interface PostingOperationalMetrics {
+  activeDaysPublished: number;
+  calendarBlockedDays: number;
+  confirmedBookedDays: number;
 }
 
 type AnalyticsOutboxPersistence = Prisma.PostingAnalyticsOutboxGetPayload<object>;
 
+const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export class PostingsAnalyticsRepository extends BaseRepository {
   async enqueuePostingViewedEvent(input: EnqueuePostingViewedEventInput): Promise<void> {
-    await this.executeAsync(() =>
-      this.prisma.postingAnalyticsOutbox.create({
-        data: {
-          id: randomUUID(),
-          postingId: input.postingId,
-          ownerId: input.ownerId,
-          eventType: "posting_viewed",
-          payload: {
-            occurredAt: input.occurredAt,
-            viewerHash: input.viewerHash,
-            userId: input.userId ?? null,
-            ipAddressHash: input.ipAddressHash ?? null,
-            userAgentHash: input.userAgentHash ?? null,
-            deviceType: input.deviceType,
-          } as Prisma.InputJsonValue,
-        },
-      }),
-    );
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "posting_viewed", {
+      occurredAt: input.occurredAt,
+      viewerHash: input.viewerHash,
+      userId: input.userId ?? null,
+      ipAddressHash: input.ipAddressHash ?? null,
+      userAgentHash: input.userAgentHash ?? null,
+      deviceType: input.deviceType,
+    });
+  }
+
+  async enqueueSearchImpressionEvent(input: EnqueueSearchImpressionEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "search_impression", {
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  async enqueueSearchClickEvent(input: EnqueueSearchClickEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "search_click", {
+      occurredAt: input.occurredAt,
+    });
   }
 
   async enqueueBookingRequestedEvent(input: EnqueueBookingRequestedEventInput): Promise<void> {
-    await this.executeAsync(() =>
-      this.prisma.postingAnalyticsOutbox.create({
-        data: {
-          id: randomUUID(),
-          postingId: input.postingId,
-          ownerId: input.ownerId,
-          eventType: "booking_requested",
-          payload: {
-            occurredAt: input.occurredAt,
-            estimatedTotal: input.estimatedTotal,
-          } as Prisma.InputJsonValue,
-        },
-      }),
-    );
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "booking_requested", {
+      occurredAt: input.occurredAt,
+      estimatedTotal: input.estimatedTotal,
+    });
+  }
+
+  async enqueueBookingApprovedEvent(input: EnqueueBookingApprovedEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "booking_approved", {
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  async enqueueBookingDeclinedEvent(input: EnqueueBookingDeclinedEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "booking_declined", {
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  async enqueueBookingExpiredEvent(input: EnqueueBookingExpiredEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "booking_expired", {
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  async enqueueBookingCancelledEvent(input: EnqueueBookingCancelledEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "booking_cancelled", {
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  async enqueuePaymentFailedEvent(input: EnqueuePaymentFailedEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "payment_failed", {
+      occurredAt: input.occurredAt,
+    });
+  }
+
+  async enqueueRefundRecordedEvent(input: EnqueueRefundRecordedEventInput): Promise<void> {
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "refund_recorded", {
+      occurredAt: input.occurredAt,
+      refundedAmount: input.refundedAmount,
+    });
   }
 
   async enqueueRentingConfirmedEvent(input: EnqueueRentingConfirmedEventInput): Promise<void> {
-    await this.executeAsync(() =>
-      this.prisma.postingAnalyticsOutbox.create({
-        data: {
-          id: randomUUID(),
-          postingId: input.postingId,
-          ownerId: input.ownerId,
-          eventType: "booking_accepted",
-          payload: {
-            occurredAt: input.occurredAt,
-            estimatedTotal: input.estimatedTotal,
-          } as Prisma.InputJsonValue,
-        },
-      }),
-    );
+    await this.enqueueOutboxEvent(input.postingId, input.ownerId, "renting_confirmed", {
+      occurredAt: input.occurredAt,
+      estimatedTotal: input.estimatedTotal,
+    });
   }
 
   async claimOutboxBatch(limit: number): Promise<PostingAnalyticsOutboxRecord[]> {
@@ -243,30 +318,127 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         });
         const uniqueIncrement = uniqueInsert.count > 0 ? 1 : 0;
 
-        await this.upsertHourlyRollup(transaction, input.postingId, input.ownerId, eventHour, uniqueIncrement);
-        await this.upsertDailyRollup(transaction, input.postingId, input.ownerId, eventDate, uniqueIncrement);
+        await this.incrementHourlyMetrics(transaction, input.postingId, input.ownerId, eventHour, {
+          views: 1,
+          uniqueViews: uniqueIncrement,
+        });
+        await this.incrementDailyMetrics(transaction, input.postingId, input.ownerId, eventDate, {
+          views: 1,
+          uniqueViews: uniqueIncrement,
+        });
       }),
     );
   }
 
+  async processSearchImpressionEvent(input: ProcessSearchImpressionEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        searchImpressions: 1,
+      },
+    );
+  }
+
+  async processSearchClickEvent(input: ProcessSearchClickEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        searchClicks: 1,
+      },
+    );
+  }
+
   async processBookingRequestedEvent(input: ProcessBookingRequestedEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        bookingRequests: 1,
+      },
+    );
+  }
+
+  async processBookingApprovedEvent(input: ProcessBookingApprovedEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        approvedRequests: 1,
+      },
+    );
+  }
+
+  async processBookingDeclinedEvent(input: ProcessBookingDeclinedEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        declinedRequests: 1,
+      },
+    );
+  }
+
+  async processBookingExpiredEvent(input: ProcessBookingExpiredEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        expiredRequests: 1,
+      },
+    );
+  }
+
+  async processBookingCancelledEvent(input: ProcessBookingCancelledEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        cancelledRequests: 1,
+      },
+    );
+  }
+
+  async processPaymentFailedEvent(input: ProcessPaymentFailedEventInput): Promise<void> {
+    await this.processSimpleCounterEvent(
+      input.postingId,
+      input.ownerId,
+      input.eventDate,
+      input.eventHour,
+      {
+        paymentFailedRequests: 1,
+      },
+    );
+  }
+
+  async processRefundRecordedEvent(input: ProcessRefundRecordedEventInput): Promise<void> {
     await this.executeAsync(() =>
       this.prisma.$transaction(async (transaction) => {
         const eventDate = new Date(input.eventDate);
         const eventHour = new Date(input.eventHour);
+        const refundedAmount = new Prisma.Decimal(input.refundedAmount);
 
-        await this.upsertHourlyBookingRequestRollup(
-          transaction,
-          input.postingId,
-          input.ownerId,
-          eventHour,
-        );
-        await this.upsertDailyBookingRequestRollup(
-          transaction,
-          input.postingId,
-          input.ownerId,
-          eventDate,
-        );
+        await this.incrementHourlyMetrics(transaction, input.postingId, input.ownerId, eventHour, {
+          refundedRevenue: refundedAmount,
+        });
+        await this.incrementDailyMetrics(transaction, input.postingId, input.ownerId, eventDate, {
+          refundedRevenue: refundedAmount,
+        });
       }),
     );
   }
@@ -278,20 +450,14 @@ export class PostingsAnalyticsRepository extends BaseRepository {
         const eventHour = new Date(input.eventHour);
         const estimatedTotal = new Prisma.Decimal(input.estimatedTotal);
 
-        await this.upsertHourlyBookingAcceptedRollup(
-          transaction,
-          input.postingId,
-          input.ownerId,
-          eventHour,
-          estimatedTotal,
-        );
-        await this.upsertDailyBookingAcceptedRollup(
-          transaction,
-          input.postingId,
-          input.ownerId,
-          eventDate,
-          estimatedTotal,
-        );
+        await this.incrementHourlyMetrics(transaction, input.postingId, input.ownerId, eventHour, {
+          confirmedBookings: 1,
+          estimatedConfirmedRevenue: estimatedTotal,
+        });
+        await this.incrementDailyMetrics(transaction, input.postingId, input.ownerId, eventDate, {
+          confirmedBookings: 1,
+          estimatedConfirmedRevenue: estimatedTotal,
+        });
       }),
     );
   }
@@ -303,22 +469,40 @@ export class PostingsAnalyticsRepository extends BaseRepository {
       owner_id = ${input.ownerId}
       ${range.startAt ? Prisma.sql`AND bucket_start >= ${range.startAt}` : Prisma.empty}
     `;
-    const [row] = await this.executeAsync(() =>
-      this.prisma.$queryRaw<AnalyticsAggregateRow[]>(Prisma.sql`
-        SELECT
-          COALESCE(SUM(views), 0) AS views,
-          COALESCE(SUM(unique_views), 0) AS uniqueViews,
-          COALESCE(SUM(booking_requests), 0) AS bookingRequests,
-          COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
-          COALESCE(SUM(estimated_revenue), 0) AS estimatedRevenue
-        FROM ${tableSql}
-        WHERE ${whereSql}
-      `),
+    const [row, operationalRows] = await this.executeAsync(() =>
+      Promise.all([
+        this.prisma.$queryRaw<AnalyticsAggregateRow[]>(Prisma.sql`
+          SELECT
+            COALESCE(SUM(search_impressions), 0) AS searchImpressions,
+            COALESCE(SUM(search_clicks), 0) AS searchClicks,
+            COALESCE(SUM(views), 0) AS views,
+            COALESCE(SUM(unique_views), 0) AS uniqueViews,
+            COALESCE(SUM(booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(approved_requests), 0) AS approvedRequests,
+            COALESCE(SUM(declined_requests), 0) AS declinedRequests,
+            COALESCE(SUM(expired_requests), 0) AS expiredRequests,
+            COALESCE(SUM(cancelled_requests), 0) AS cancelledRequests,
+            COALESCE(SUM(payment_failed_requests), 0) AS paymentFailedRequests,
+            COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
+            COALESCE(SUM(estimated_confirmed_revenue), 0) AS estimatedConfirmedRevenue,
+            COALESCE(SUM(refunded_revenue), 0) AS refundedRevenue
+          FROM ${tableSql}
+          WHERE ${whereSql}
+        `),
+        this.listOperationalPostingStatesByOwner(input.ownerId),
+      ]),
+    );
+
+    const operationalMetrics = await this.getOperationalMetricsMap(operationalRows, range);
+    const totals = this.combineMetrics(
+      this.mapBucketMetrics(row[0]),
+      this.sumOperationalMetrics(operationalMetrics.values()),
     );
 
     return {
       window: input.window,
-      totals: this.mapMetrics(row),
+      totals,
+      derivedMetrics: this.createDerivedMetrics(totals),
       dataAvailability: this.createDataAvailability(),
       range: this.mapRange(range.startAt, range.endAt),
     };
@@ -347,16 +531,33 @@ export class PostingsAnalyticsRepository extends BaseRepository {
               ORDER BY rp.position ASC
               LIMIT 1
             ) AS primaryPhotoUrl,
+            r.published_at AS publishedAt,
+            r.paused_at AS pausedAt,
+            r.archived_at AS archivedAt,
+            COALESCE(SUM(ra.search_impressions), 0) AS searchImpressions,
+            COALESCE(SUM(ra.search_clicks), 0) AS searchClicks,
             COALESCE(SUM(ra.views), 0) AS views,
             COALESCE(SUM(ra.unique_views), 0) AS uniqueViews,
             COALESCE(SUM(ra.booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(ra.approved_requests), 0) AS approvedRequests,
+            COALESCE(SUM(ra.declined_requests), 0) AS declinedRequests,
+            COALESCE(SUM(ra.expired_requests), 0) AS expiredRequests,
+            COALESCE(SUM(ra.cancelled_requests), 0) AS cancelledRequests,
+            COALESCE(SUM(ra.payment_failed_requests), 0) AS paymentFailedRequests,
             COALESCE(SUM(ra.confirmed_bookings), 0) AS confirmedBookings,
-            COALESCE(SUM(ra.estimated_revenue), 0) AS estimatedRevenue
+            COALESCE(SUM(ra.estimated_confirmed_revenue), 0) AS estimatedConfirmedRevenue,
+            COALESCE(SUM(ra.refunded_revenue), 0) AS refundedRevenue
           FROM ${tableSql} ra
           INNER JOIN postings r ON r.id = ra.posting_id
           WHERE ${whereSql}
-          GROUP BY ra.posting_id, r.name, r.status
-          ORDER BY views DESC, uniqueViews DESC, r.updated_at DESC
+          GROUP BY
+            ra.posting_id,
+            r.name,
+            r.status,
+            r.published_at,
+            r.paused_at,
+            r.archived_at
+          ORDER BY confirmedBookings DESC, bookingRequests DESC, views DESC, r.updated_at DESC
           LIMIT ${input.pageSize}
           OFFSET ${skip}
         `),
@@ -373,16 +574,26 @@ export class PostingsAnalyticsRepository extends BaseRepository {
     );
 
     const total = Number(countRows[0]?.total ?? 0);
+    const postingStates = rows.map((row) => this.toOperationalState(row));
+    const operationalMap = await this.getOperationalMetricsMap(postingStates, range);
 
     return {
       window: input.window,
-      postings: rows.map((row): PostingAnalyticsListItem => ({
-        postingId: row.postingId,
-        name: row.name,
-        status: row.status,
-        primaryPhotoUrl: row.primaryPhotoUrl ?? undefined,
-        totals: this.mapMetrics(row),
-      })),
+      postings: rows.map((row): PostingAnalyticsListItem => {
+        const totals = this.combineMetrics(
+          this.mapBucketMetrics(row),
+          operationalMap.get(row.postingId) ?? this.createEmptyOperationalMetrics(),
+        );
+
+        return {
+          postingId: row.postingId,
+          name: row.name,
+          status: row.status,
+          primaryPhotoUrl: row.primaryPhotoUrl ?? undefined,
+          totals,
+          derivedMetrics: this.createDerivedMetrics(totals),
+        };
+      }),
       pagination: this.createPagination(input.page, input.pageSize, total),
       dataAvailability: this.createDataAvailability(),
       range: this.mapRange(range.startAt, range.endAt),
@@ -407,32 +618,56 @@ export class PostingsAnalyticsRepository extends BaseRepository {
       ${range.startAt ? Prisma.sql`AND bucket_start >= ${range.startAt}` : Prisma.empty}
     `;
 
-    const [totalRows, bucketRows] = await this.executeAsync(() =>
-      Promise.all([
+    const [totalRows, bucketRows, operationalMap] = await this.executeAsync(async () => {
+      const [totals, buckets, operational] = await Promise.all([
         this.prisma.$queryRaw<AnalyticsAggregateRow[]>(Prisma.sql`
           SELECT
+            COALESCE(SUM(search_impressions), 0) AS searchImpressions,
+            COALESCE(SUM(search_clicks), 0) AS searchClicks,
             COALESCE(SUM(views), 0) AS views,
             COALESCE(SUM(unique_views), 0) AS uniqueViews,
             COALESCE(SUM(booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(approved_requests), 0) AS approvedRequests,
+            COALESCE(SUM(declined_requests), 0) AS declinedRequests,
+            COALESCE(SUM(expired_requests), 0) AS expiredRequests,
+            COALESCE(SUM(cancelled_requests), 0) AS cancelledRequests,
+            COALESCE(SUM(payment_failed_requests), 0) AS paymentFailedRequests,
             COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
-            COALESCE(SUM(estimated_revenue), 0) AS estimatedRevenue
+            COALESCE(SUM(estimated_confirmed_revenue), 0) AS estimatedConfirmedRevenue,
+            COALESCE(SUM(refunded_revenue), 0) AS refundedRevenue
           FROM ${totalsTable}
           WHERE ${whereTotalsSql}
         `),
         this.prisma.$queryRaw<PostingAnalyticsBucketRow[]>(Prisma.sql`
           SELECT
             bucket_start AS bucketStart,
+            COALESCE(SUM(search_impressions), 0) AS searchImpressions,
+            COALESCE(SUM(search_clicks), 0) AS searchClicks,
             COALESCE(SUM(views), 0) AS views,
             COALESCE(SUM(unique_views), 0) AS uniqueViews,
             COALESCE(SUM(booking_requests), 0) AS bookingRequests,
+            COALESCE(SUM(approved_requests), 0) AS approvedRequests,
+            COALESCE(SUM(declined_requests), 0) AS declinedRequests,
+            COALESCE(SUM(expired_requests), 0) AS expiredRequests,
+            COALESCE(SUM(cancelled_requests), 0) AS cancelledRequests,
+            COALESCE(SUM(payment_failed_requests), 0) AS paymentFailedRequests,
             COALESCE(SUM(confirmed_bookings), 0) AS confirmedBookings,
-            COALESCE(SUM(estimated_revenue), 0) AS estimatedRevenue
+            COALESCE(SUM(estimated_confirmed_revenue), 0) AS estimatedConfirmedRevenue,
+            COALESCE(SUM(refunded_revenue), 0) AS refundedRevenue
           FROM ${detailTable}
           WHERE ${whereTotalsSql}
           GROUP BY bucket_start
           ORDER BY bucket_start ASC
         `),
-      ]),
+        this.getOperationalMetricsMap([this.toOperationalState(header)], range),
+      ]);
+
+      return [totals, buckets, operational] as const;
+    });
+
+    const totals = this.combineMetrics(
+      this.mapBucketMetrics(totalRows[0]),
+      operationalMap.get(header.postingId) ?? this.createEmptyOperationalMetrics(),
     );
 
     return {
@@ -442,24 +677,68 @@ export class PostingsAnalyticsRepository extends BaseRepository {
       primaryPhotoUrl: header.primaryPhotoUrl ?? undefined,
       window: input.window,
       granularity: input.granularity,
-      totals: this.mapMetrics(totalRows[0]),
+      totals,
+      derivedMetrics: this.createDerivedMetrics(totals),
       buckets: bucketRows.map((row): PostingAnalyticsBucket => {
         const startAt = row.bucketStart;
         const endAt = new Date(
           startAt.getTime() +
             (input.granularity === "hour" ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000),
         );
+        const metrics = this.mapBucketMetrics(row);
 
         return {
           bucketStart: startAt.toISOString(),
           bucketEnd: endAt.toISOString(),
           granularity: input.granularity,
-          metrics: this.mapMetrics(row),
+          metrics,
+          derivedMetrics: this.createDerivedMetrics({
+            ...metrics,
+            activeDaysPublished: 0,
+            confirmedBookedDays: 0,
+          }),
         };
       }),
       dataAvailability: this.createDataAvailability(),
       range: this.mapRange(range.startAt, range.endAt),
     };
+  }
+
+  private async enqueueOutboxEvent(
+    postingId: string,
+    ownerId: string,
+    eventType: PostingAnalyticsEventType,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingAnalyticsOutbox.create({
+        data: {
+          id: randomUUID(),
+          postingId,
+          ownerId,
+          eventType,
+          payload: payload as Prisma.InputJsonValue,
+        },
+      }),
+    );
+  }
+
+  private async processSimpleCounterEvent(
+    postingId: string,
+    ownerId: string,
+    eventDateIso: string,
+    eventHourIso: string,
+    increments: Partial<CounterIncrements>,
+  ): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        const eventDate = new Date(eventDateIso);
+        const eventHour = new Date(eventHourIso);
+
+        await this.incrementHourlyMetrics(transaction, postingId, ownerId, eventHour, increments);
+        await this.incrementDailyMetrics(transaction, postingId, ownerId, eventDate, increments);
+      }),
+    );
   }
 
   private async findPostingAnalyticsHeader(
@@ -478,7 +757,10 @@ export class PostingsAnalyticsRepository extends BaseRepository {
             WHERE rp.posting_id = r.id
             ORDER BY rp.position ASC
             LIMIT 1
-          ) AS primaryPhotoUrl
+          ) AS primaryPhotoUrl,
+          r.published_at AS publishedAt,
+          r.paused_at AS pausedAt,
+          r.archived_at AS archivedAt
         FROM postings r
         WHERE r.id = ${postingId}
           AND r.owner_id = ${ownerId}
@@ -489,12 +771,100 @@ export class PostingsAnalyticsRepository extends BaseRepository {
     return row ?? null;
   }
 
-  private async upsertHourlyRollup(
+  private async listOperationalPostingStatesByOwner(
+    ownerId: string,
+  ): Promise<PostingOperationalStateRow[]> {
+    return this.executeAsync(() =>
+      this.prisma.$queryRaw<PostingOperationalStateRow[]>(Prisma.sql`
+        SELECT
+          id AS postingId,
+          status,
+          published_at AS publishedAt,
+          paused_at AS pausedAt,
+          archived_at AS archivedAt
+        FROM postings
+        WHERE owner_id = ${ownerId}
+      `),
+    );
+  }
+
+  private async getOperationalMetricsMap(
+    postingStates: PostingOperationalStateRow[],
+    range: { startAt?: Date; endAt: Date },
+  ): Promise<Map<string, PostingOperationalMetrics>> {
+    const postingIds = postingStates.map((posting) => posting.postingId);
+    const metrics = new Map<string, PostingOperationalMetrics>(
+      postingIds.map((postingId) => [postingId, this.createEmptyOperationalMetrics()]),
+    );
+
+    if (postingIds.length === 0) {
+      return metrics;
+    }
+
+    const [ownerBlocks, rentings] = await this.executeAsync(() =>
+      Promise.all([
+        this.prisma.$queryRaw<PostingTimeSpanRow[]>(this.createTimeSpanQuery("posting_availability_blocks", "posting_id", postingIds, range, Prisma.sql`source = 'owner'`)),
+        this.prisma.$queryRaw<PostingTimeSpanRow[]>(this.createTimeSpanQuery("rentings", "posting_id", postingIds, range)),
+      ]),
+    );
+
+    for (const posting of postingStates) {
+      const entry = metrics.get(posting.postingId) ?? this.createEmptyOperationalMetrics();
+      entry.activeDaysPublished = this.calculateActiveDaysPublished(posting, range);
+      metrics.set(posting.postingId, entry);
+    }
+
+    for (const block of ownerBlocks) {
+      const entry = metrics.get(block.postingId) ?? this.createEmptyOperationalMetrics();
+      entry.calendarBlockedDays += this.calculateOverlapDays(
+        block.startAt,
+        block.endAt,
+        range.startAt,
+        range.endAt,
+      );
+      metrics.set(block.postingId, entry);
+    }
+
+    for (const renting of rentings) {
+      const entry = metrics.get(renting.postingId) ?? this.createEmptyOperationalMetrics();
+      entry.confirmedBookedDays += this.calculateOverlapDays(
+        renting.startAt,
+        renting.endAt,
+        range.startAt,
+        range.endAt,
+      );
+      metrics.set(renting.postingId, entry);
+    }
+
+    return metrics;
+  }
+
+  private createTimeSpanQuery(
+    tableName: "posting_availability_blocks" | "rentings",
+    postingIdColumn: "posting_id",
+    postingIds: string[],
+    range: { startAt?: Date; endAt: Date },
+    extraWhere?: Prisma.Sql,
+  ): Prisma.Sql {
+    return Prisma.sql`
+      SELECT
+        ${Prisma.raw(postingIdColumn)} AS postingId,
+        start_at AS startAt,
+        end_at AS endAt
+      FROM ${Prisma.raw(tableName)}
+      WHERE ${Prisma.raw(postingIdColumn)} IN (${Prisma.join(postingIds)})
+        AND start_at < ${range.endAt}
+        ${range.startAt ? Prisma.sql`AND end_at > ${range.startAt}` : Prisma.empty}
+        ${extraWhere ? Prisma.sql`AND ${extraWhere}` : Prisma.empty}
+    `;
+  }
+
+  private async incrementHourlyMetrics(
     transaction: Prisma.TransactionClient,
     postingId: string,
     ownerId: string,
     bucketStart: Date,
-    uniqueIncrement: number,
+    increments: Partial<CounterIncrements>,
   ): Promise<void> {
     await transaction.postingAnalyticsHourly.upsert({
       where: {
@@ -503,34 +873,17 @@ export class PostingsAnalyticsRepository extends BaseRepository {
           bucketStart,
         },
       },
-      update: {
-        views: {
-          increment: 1,
-        },
-        uniqueViews: {
-          increment: uniqueIncrement,
-        },
-      },
-      create: {
-        id: randomUUID(),
-        postingId,
-        ownerId,
-        bucketStart,
-        views: 1,
-        uniqueViews: uniqueIncrement,
-        bookingRequests: 0,
-        confirmedBookings: 0,
-        estimatedRevenue: new Prisma.Decimal(0),
-      },
+      update: this.toCounterUpdate(increments),
+      create: this.createRollupCreate(postingId, ownerId, bucketStart, increments),
     });
   }
 
-  private async upsertDailyRollup(
+  private async incrementDailyMetrics(
     transaction: Prisma.TransactionClient,
     postingId: string,
     ownerId: string,
     bucketStart: Date,
-    uniqueIncrement: number,
+    increments: Partial<CounterIncrements>,
   ): Promise<void> {
     await transaction.postingAnalyticsDaily.upsert({
       where: {
@@ -539,162 +892,133 @@ export class PostingsAnalyticsRepository extends BaseRepository {
           bucketStart,
         },
       },
-      update: {
-        views: {
-          increment: 1,
-        },
-        uniqueViews: {
-          increment: uniqueIncrement,
-        },
-      },
-      create: {
-        id: randomUUID(),
-        postingId,
-        ownerId,
-        bucketStart,
-        views: 1,
-        uniqueViews: uniqueIncrement,
-        bookingRequests: 0,
-        confirmedBookings: 0,
-        estimatedRevenue: new Prisma.Decimal(0),
-      },
+      update: this.toCounterUpdate(increments),
+      create: this.createRollupCreate(postingId, ownerId, bucketStart, increments),
     });
   }
 
-  private async upsertHourlyBookingRequestRollup(
-    transaction: Prisma.TransactionClient,
+  private createRollupCreate(
     postingId: string,
     ownerId: string,
     bucketStart: Date,
-  ): Promise<void> {
-    await transaction.postingAnalyticsHourly.upsert({
-      where: {
-        postingId_bucketStart: {
-          postingId,
-          bucketStart,
-        },
-      },
-      update: {
-        bookingRequests: {
-          increment: 1,
-        },
-      },
-      create: {
-        id: randomUUID(),
-        postingId,
-        ownerId,
-        bucketStart,
-        views: 0,
-        uniqueViews: 0,
-        bookingRequests: 1,
-        confirmedBookings: 0,
-        estimatedRevenue: new Prisma.Decimal(0),
-      },
-    });
+    increments: Partial<CounterIncrements>,
+  ) {
+    return {
+      id: randomUUID(),
+      postingId,
+      ownerId,
+      bucketStart,
+      searchImpressions: increments.searchImpressions ?? 0,
+      searchClicks: increments.searchClicks ?? 0,
+      views: increments.views ?? 0,
+      uniqueViews: increments.uniqueViews ?? 0,
+      bookingRequests: increments.bookingRequests ?? 0,
+      approvedRequests: increments.approvedRequests ?? 0,
+      declinedRequests: increments.declinedRequests ?? 0,
+      expiredRequests: increments.expiredRequests ?? 0,
+      cancelledRequests: increments.cancelledRequests ?? 0,
+      paymentFailedRequests: increments.paymentFailedRequests ?? 0,
+      confirmedBookings: increments.confirmedBookings ?? 0,
+      estimatedConfirmedRevenue:
+        increments.estimatedConfirmedRevenue ?? new Prisma.Decimal(0),
+      refundedRevenue: increments.refundedRevenue ?? new Prisma.Decimal(0),
+    };
   }
 
-  private async upsertDailyBookingRequestRollup(
-    transaction: Prisma.TransactionClient,
-    postingId: string,
-    ownerId: string,
-    bucketStart: Date,
-  ): Promise<void> {
-    await transaction.postingAnalyticsDaily.upsert({
-      where: {
-        postingId_bucketStart: {
-          postingId,
-          bucketStart,
-        },
-      },
-      update: {
-        bookingRequests: {
-          increment: 1,
-        },
-      },
-      create: {
-        id: randomUUID(),
-        postingId,
-        ownerId,
-        bucketStart,
-        views: 0,
-        uniqueViews: 0,
-        bookingRequests: 1,
-        confirmedBookings: 0,
-        estimatedRevenue: new Prisma.Decimal(0),
-      },
-    });
-  }
-
-  private async upsertHourlyBookingAcceptedRollup(
-    transaction: Prisma.TransactionClient,
-    postingId: string,
-    ownerId: string,
-    bucketStart: Date,
-    estimatedTotal: Prisma.Decimal,
-  ): Promise<void> {
-    await transaction.postingAnalyticsHourly.upsert({
-      where: {
-        postingId_bucketStart: {
-          postingId,
-          bucketStart,
-        },
-      },
-      update: {
-        confirmedBookings: {
-          increment: 1,
-        },
-        estimatedRevenue: {
-          increment: estimatedTotal,
-        },
-      },
-      create: {
-        id: randomUUID(),
-        postingId,
-        ownerId,
-        bucketStart,
-        views: 0,
-        uniqueViews: 0,
-        bookingRequests: 0,
-        confirmedBookings: 1,
-        estimatedRevenue: estimatedTotal,
-      },
-    });
-  }
-
-  private async upsertDailyBookingAcceptedRollup(
-    transaction: Prisma.TransactionClient,
-    postingId: string,
-    ownerId: string,
-    bucketStart: Date,
-    estimatedTotal: Prisma.Decimal,
-  ): Promise<void> {
-    await transaction.postingAnalyticsDaily.upsert({
-      where: {
-        postingId_bucketStart: {
-          postingId,
-          bucketStart,
-        },
-      },
-      update: {
-        confirmedBookings: {
-          increment: 1,
-        },
-        estimatedRevenue: {
-          increment: estimatedTotal,
-        },
-      },
-      create: {
-        id: randomUUID(),
-        postingId,
-        ownerId,
-        bucketStart,
-        views: 0,
-        uniqueViews: 0,
-        bookingRequests: 0,
-        confirmedBookings: 1,
-        estimatedRevenue: estimatedTotal,
-      },
-    });
+  private toCounterUpdate(increments: Partial<CounterIncrements>) {
+    return {
+      ...(increments.searchImpressions
+        ? {
+            searchImpressions: {
+              increment: increments.searchImpressions,
+            },
+          }
+        : {}),
+      ...(increments.searchClicks
+        ? {
+            searchClicks: {
+              increment: increments.searchClicks,
+            },
+          }
+        : {}),
+      ...(increments.views
+        ? {
+            views: {
+              increment: increments.views,
+            },
+          }
+        : {}),
+      ...(increments.uniqueViews
+        ? {
+            uniqueViews: {
+              increment: increments.uniqueViews,
+            },
+          }
+        : {}),
+      ...(increments.bookingRequests
+        ? {
+            bookingRequests: {
+              increment: increments.bookingRequests,
+            },
+          }
+        : {}),
+      ...(increments.approvedRequests
+        ? {
+            approvedRequests: {
+              increment: increments.approvedRequests,
+            },
+          }
+        : {}),
+      ...(increments.declinedRequests
+        ? {
+            declinedRequests: {
+              increment: increments.declinedRequests,
+            },
+          }
+        : {}),
+      ...(increments.expiredRequests
+        ? {
+            expiredRequests: {
+              increment: increments.expiredRequests,
+            },
+          }
+        : {}),
+      ...(increments.cancelledRequests
+        ? {
+            cancelledRequests: {
+              increment: increments.cancelledRequests,
+            },
+          }
+        : {}),
+      ...(increments.paymentFailedRequests
+        ? {
+            paymentFailedRequests: {
+              increment: increments.paymentFailedRequests,
+            },
+          }
+        : {}),
+      ...(increments.confirmedBookings
+        ? {
+            confirmedBookings: {
+              increment: increments.confirmedBookings,
+            },
+          }
+        : {}),
+      ...(increments.estimatedConfirmedRevenue
+        ? {
+            estimatedConfirmedRevenue: {
+              increment: increments.estimatedConfirmedRevenue,
+            },
+          }
+        : {}),
+      ...(increments.refundedRevenue
+        ? {
+            refundedRevenue: {
+              increment: increments.refundedRevenue,
+            },
+          }
+        : {}),
+    };
   }
 
   private dailyTableSql(): Prisma.Sql {
@@ -711,12 +1035,12 @@ export class PostingsAnalyticsRepository extends BaseRepository {
     switch (window) {
       case "7d":
         return {
-          startAt: new Date(endAt.getTime() - 7 * 24 * 60 * 60 * 1000),
+          startAt: new Date(endAt.getTime() - 7 * MILLIS_PER_DAY),
           endAt,
         };
       case "30d":
         return {
-          startAt: new Date(endAt.getTime() - 30 * 24 * 60 * 60 * 1000),
+          startAt: new Date(endAt.getTime() - 30 * MILLIS_PER_DAY),
           endAt,
         };
       case "all":
@@ -727,23 +1051,74 @@ export class PostingsAnalyticsRepository extends BaseRepository {
     }
   }
 
-  private mapMetrics(row?: AnalyticsAggregateRow): PostingAnalyticsMetrics {
+  private mapBucketMetrics(row?: AnalyticsAggregateRow): PostingAnalyticsBucketMetrics {
     return {
+      searchImpressions: Number(row?.searchImpressions ?? 0),
+      searchClicks: Number(row?.searchClicks ?? 0),
       views: Number(row?.views ?? 0),
       uniqueViews: Number(row?.uniqueViews ?? 0),
       bookingRequests: Number(row?.bookingRequests ?? 0),
+      approvedRequests: Number(row?.approvedRequests ?? 0),
+      declinedRequests: Number(row?.declinedRequests ?? 0),
+      expiredRequests: Number(row?.expiredRequests ?? 0),
+      cancelledRequests: Number(row?.cancelledRequests ?? 0),
+      paymentFailedRequests: Number(row?.paymentFailedRequests ?? 0),
       confirmedBookings: Number(row?.confirmedBookings ?? 0),
-      estimatedRevenue: Number(row?.estimatedRevenue ?? 0),
+      estimatedConfirmedRevenue: Number(row?.estimatedConfirmedRevenue ?? 0),
+      refundedRevenue: Number(row?.refundedRevenue ?? 0),
     };
   }
 
-  private createDataAvailability() {
+  private combineMetrics(
+    bucketMetrics: PostingAnalyticsBucketMetrics,
+    operationalMetrics: PostingOperationalMetrics,
+  ): PostingAnalyticsMetrics {
     return {
-      views: "live" as const,
-      bookingRequests: "live" as const,
-      confirmedBookings: "live" as const,
-      estimatedRevenue: "live" as const,
-      isPartial: false as const,
+      ...bucketMetrics,
+      activeDaysPublished: operationalMetrics.activeDaysPublished,
+      calendarBlockedDays: operationalMetrics.calendarBlockedDays,
+      confirmedBookedDays: operationalMetrics.confirmedBookedDays,
+    };
+  }
+
+  private createDerivedMetrics(
+    metrics: Pick<
+      PostingAnalyticsMetrics,
+      | "searchImpressions"
+      | "searchClicks"
+      | "views"
+      | "bookingRequests"
+      | "approvedRequests"
+      | "confirmedBookings"
+      | "estimatedConfirmedRevenue"
+      | "activeDaysPublished"
+      | "confirmedBookedDays"
+    >,
+  ): PostingAnalyticsDerivedMetrics {
+    return {
+      ctr: this.safeDivide(metrics.searchClicks, metrics.searchImpressions),
+      viewToRequestRate: this.safeDivide(metrics.bookingRequests, metrics.views),
+      clickToRequestRate: this.safeDivide(metrics.bookingRequests, metrics.searchClicks),
+      requestToApprovalRate: this.safeDivide(metrics.approvedRequests, metrics.bookingRequests),
+      requestToConfirmedRate: this.safeDivide(metrics.confirmedBookings, metrics.bookingRequests),
+      utilizationRate: this.safeDivide(metrics.confirmedBookedDays, metrics.activeDaysPublished),
+      averageRevenuePerConfirmedBooking: this.safeDivide(
+        metrics.estimatedConfirmedRevenue,
+        metrics.confirmedBookings,
+      ),
+    };
+  }
+
+  private createDataAvailability(): PostingAnalyticsDataAvailability {
+    return {
+      searchImpressions: "live",
+      searchClicks: "live",
+      views: "live",
+      bookingRequests: "live",
+      requestOutcomes: "live",
+      confirmedBookings: "live",
+      revenue: "live",
+      isPartial: false,
     };
   }
 
@@ -775,7 +1150,7 @@ export class PostingsAnalyticsRepository extends BaseRepository {
       id: outbox.id,
       postingId: outbox.postingId,
       ownerId: outbox.ownerId,
-      eventType: outbox.eventType,
+      eventType: outbox.eventType as PostingAnalyticsEventType,
       payload: (outbox.payload ?? {}) as Record<string, unknown>,
       attempts: outbox.attempts,
       availableAt: outbox.availableAt.toISOString(),
@@ -786,5 +1161,101 @@ export class PostingsAnalyticsRepository extends BaseRepository {
       updatedAt: outbox.updatedAt.toISOString(),
     };
   }
+
+  private createEmptyOperationalMetrics(): PostingOperationalMetrics {
+    return {
+      activeDaysPublished: 0,
+      calendarBlockedDays: 0,
+      confirmedBookedDays: 0,
+    };
+  }
+
+  private sumOperationalMetrics(
+    metrics: Iterable<PostingOperationalMetrics>,
+  ): PostingOperationalMetrics {
+    const totals = this.createEmptyOperationalMetrics();
+
+    for (const metric of metrics) {
+      totals.activeDaysPublished += metric.activeDaysPublished;
+      totals.calendarBlockedDays += metric.calendarBlockedDays;
+      totals.confirmedBookedDays += metric.confirmedBookedDays;
+    }
+
+    return totals;
+  }
+
+  private toOperationalState(
+    row: Pick<
+      PostingAnalyticsHeaderRow | PostingAnalyticsListRow,
+      "postingId" | "status" | "publishedAt" | "pausedAt" | "archivedAt"
+    >,
+  ): PostingOperationalStateRow {
+    return {
+      postingId: row.postingId,
+      status: row.status,
+      publishedAt: row.publishedAt,
+      pausedAt: row.pausedAt,
+      archivedAt: row.archivedAt,
+    };
+  }
+
+  private calculateActiveDaysPublished(
+    posting: PostingOperationalStateRow,
+    range: { startAt?: Date; endAt: Date },
+  ): number {
+    if (!posting.publishedAt) {
+      return 0;
+    }
+
+    const activeEnd =
+      posting.archivedAt ??
+      (posting.status === "paused" && posting.pausedAt ? posting.pausedAt : range.endAt);
+
+    return this.calculateOverlapDays(
+      posting.publishedAt,
+      activeEnd,
+      range.startAt,
+      range.endAt,
+    );
+  }
+
+  private calculateOverlapDays(
+    startAt: Date,
+    endAt: Date,
+    rangeStartAt: Date | undefined,
+    rangeEndAt: Date,
+  ): number {
+    const clampedStart = Math.max(startAt.getTime(), rangeStartAt?.getTime() ?? startAt.getTime());
+    const clampedEnd = Math.min(endAt.getTime(), rangeEndAt.getTime());
+
+    if (clampedEnd <= clampedStart) {
+      return 0;
+    }
+
+    return Math.ceil((clampedEnd - clampedStart) / MILLIS_PER_DAY);
+  }
+
+  private safeDivide(numerator: number, denominator: number): number {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+      return 0;
+    }
+
+    return numerator / denominator;
+  }
 }
 
+interface CounterIncrements {
+  searchImpressions: number;
+  searchClicks: number;
+  views: number;
+  uniqueViews: number;
+  bookingRequests: number;
+  approvedRequests: number;
+  declinedRequests: number;
+  expiredRequests: number;
+  cancelledRequests: number;
+  paymentFailedRequests: number;
+  confirmedBookings: number;
+  estimatedConfirmedRevenue: Prisma.Decimal;
+  refundedRevenue: Prisma.Decimal;
+}

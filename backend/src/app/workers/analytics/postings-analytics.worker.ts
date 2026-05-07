@@ -1,9 +1,17 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
 import type {
+  ProcessBookingApprovedEventInput,
+  ProcessBookingCancelledEventInput,
+  ProcessBookingDeclinedEventInput,
+  ProcessBookingExpiredEventInput,
   ProcessBookingRequestedEventInput,
+  ProcessPaymentFailedEventInput,
   ProcessRentingConfirmedEventInput,
   ProcessPostingViewedEventInput,
+  ProcessRefundRecordedEventInput,
+  ProcessSearchClickEventInput,
+  ProcessSearchImpressionEventInput,
 } from "@/features/postings/postings.analytics.model";
 import { databaseWorkerResource, disconnectResources } from "@/workers/shared/resources";
 import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-runtime";
@@ -57,7 +65,120 @@ export async function bootstrapPostingsAnalyticsWorker(): Promise<void> {
             await repository.processBookingRequestedEvent(input);
           }
 
-          if (job.eventType === "booking_accepted") {
+          if (job.eventType === "search_impression") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessSearchImpressionEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processSearchImpressionEvent(input);
+          }
+
+          if (job.eventType === "search_click") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessSearchClickEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processSearchClickEvent(input);
+          }
+
+          if (job.eventType === "booking_approved") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessBookingApprovedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processBookingApprovedEvent(input);
+          }
+
+          if (job.eventType === "booking_declined") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessBookingDeclinedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processBookingDeclinedEvent(input);
+          }
+
+          if (job.eventType === "booking_expired") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessBookingExpiredEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processBookingExpiredEvent(input);
+          }
+
+          if (job.eventType === "booking_cancelled") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessBookingCancelledEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processBookingCancelledEvent(input);
+          }
+
+          if (job.eventType === "payment_failed") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessPaymentFailedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+            };
+
+            await repository.processPaymentFailedEvent(input);
+          }
+
+          if (job.eventType === "refund_recorded") {
+            const payload = job.payload as Record<string, unknown>;
+            const occurredAt = readString(payload.occurredAt, "occurredAt");
+            const input: ProcessRefundRecordedEventInput = {
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt,
+              eventDate: floorToUtcDay(occurredAt),
+              eventHour: floorToUtcHour(occurredAt),
+              refundedAmount: readOptionalNumber(payload.refundedAmount) ?? 0,
+            };
+
+            await repository.processRefundRecordedEvent(input);
+          }
+
+          if (job.eventType === "renting_confirmed") {
             const payload = job.payload as Record<string, unknown>;
             const occurredAt = readString(payload.occurredAt, "occurredAt");
             const input: ProcessRentingConfirmedEventInput = {

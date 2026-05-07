@@ -14,6 +14,7 @@ export async function bootstrapBookingExpiryWorker(): Promise<void> {
     getPollIntervalMs: () => environment.getBookingExpiryWorkerConfig().pollIntervalMs,
     runOnce: async ({ scope }) => {
       const repository = scope.resolve(containerTokens.bookingsRepository);
+      const postingsAnalyticsRepository = scope.resolve(containerTokens.postingsAnalyticsRepository);
       const postingsRepository = scope.resolve(containerTokens.postingsRepository);
       const postingsPublicCacheService = scope.resolve(containerTokens.postingsPublicCacheService);
       const { batchSize } = environment.getBookingExpiryWorkerConfig();
@@ -24,6 +25,11 @@ export async function bootstrapBookingExpiryWorker(): Promise<void> {
           const expired = await repository.expire(job.id);
 
           if (expired) {
+            await postingsAnalyticsRepository.enqueueBookingExpiredEvent({
+              postingId: job.postingId,
+              ownerId: job.ownerId,
+              occurredAt: new Date().toISOString(),
+            });
             await invalidatePublicPostingProjection(postingsPublicCacheService, job.postingId);
             await postingsRepository.enqueueSearchSync(job.postingId);
           }

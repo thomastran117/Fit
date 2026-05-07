@@ -117,6 +117,8 @@ function createService(options?: {
 
   const analyticsRepository = {
     enqueueBookingRequestedEvent: jest.fn(async () => undefined),
+    enqueueBookingApprovedEvent: jest.fn(async () => undefined),
+    enqueueBookingDeclinedEvent: jest.fn(async () => undefined),
   } as unknown as PostingsAnalyticsRepository;
 
   const rentingsRepository = {
@@ -156,6 +158,8 @@ function createService(options?: {
     },
     analyticsRepository: analyticsRepository as unknown as {
       enqueueBookingRequestedEvent: jest.Mock;
+      enqueueBookingApprovedEvent: jest.Mock;
+      enqueueBookingDeclinedEvent: jest.Mock;
     },
     postingsRepository: postingsRepository as unknown as {
       findById: jest.Mock;
@@ -509,7 +513,7 @@ describe("BookingsService", () => {
     const booking = createBookingRequestRecord({
       holdExpiresAt: "2099-04-21T00:00:00.000Z",
     });
-    const { service, cacheService, postingsPublicCacheService } = createService({
+    const { service, cacheService, postingsPublicCacheService, analyticsRepository } = createService({
       createdBooking: booking,
     });
 
@@ -524,6 +528,7 @@ describe("BookingsService", () => {
       "booking-request:booking-1:state",
       "posting:posting-1:booking-window",
     ]);
+    expect(analyticsRepository.enqueueBookingApprovedEvent).toHaveBeenCalledTimes(1);
     expect(postingsPublicCacheService.invalidatePublic).toHaveBeenCalledWith("posting-1");
   });
 
@@ -531,7 +536,7 @@ describe("BookingsService", () => {
     const booking = createBookingRequestRecord({
       holdExpiresAt: "2099-04-21T00:00:00.000Z",
     });
-    const { service, bookingsRepository } = createService({
+    const { service, bookingsRepository, analyticsRepository } = createService({
       createdBooking: booking,
       posting: createPostingRecord({
         status: "paused",
@@ -546,6 +551,7 @@ describe("BookingsService", () => {
     });
 
     expect(bookingsRepository.approve).toHaveBeenCalledTimes(1);
+    expect(analyticsRepository.enqueueBookingApprovedEvent).toHaveBeenCalledTimes(1);
     expect(approved.status).toBe("awaiting_payment");
   });
 });

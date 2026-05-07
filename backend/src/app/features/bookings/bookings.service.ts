@@ -330,6 +330,11 @@ export class BookingsService {
       "Another request is already deciding this booking request. Please retry.",
     );
 
+    await this.postingsAnalyticsRepository.enqueueBookingApprovedEvent({
+      postingId: approved.postingId,
+      ownerId: approved.ownerId,
+      occurredAt: approved.approvedAt ?? new Date().toISOString(),
+    });
     await invalidatePublicPostingProjection(this.postingsPublicCacheService, approved.postingId);
     await this.postingsRepository.enqueueSearchSync(approved.postingId);
     return approved;
@@ -368,6 +373,11 @@ export class BookingsService {
       "Another request is already deciding this booking request. Please retry.",
     );
 
+    await this.postingsAnalyticsRepository.enqueueBookingDeclinedEvent({
+      postingId: declined.postingId,
+      ownerId: declined.ownerId,
+      occurredAt: declined.declinedAt ?? new Date().toISOString(),
+    });
     await invalidatePublicPostingProjection(this.postingsPublicCacheService, declined.postingId);
     await this.postingsRepository.enqueueSearchSync(declined.postingId);
     return declined;

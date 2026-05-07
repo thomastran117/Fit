@@ -498,11 +498,19 @@ model PostingAnalyticsHourly {
   postingId        String   @map("posting_id") @db.VarChar(36)
   ownerId          String   @map("owner_id") @db.VarChar(36)
   bucketStart      DateTime @map("bucket_start") @db.DateTime(6)
+  searchImpressions Int     @default(0) @map("search_impressions")
+  searchClicks     Int      @default(0) @map("search_clicks")
   views            Int      @default(0)
   uniqueViews      Int      @default(0) @map("unique_views")
   bookingRequests  Int      @default(0) @map("booking_requests")
+  approvedRequests Int      @default(0) @map("approved_requests")
+  declinedRequests Int      @default(0) @map("declined_requests")
+  expiredRequests  Int      @default(0) @map("expired_requests")
+  cancelledRequests Int     @default(0) @map("cancelled_requests")
+  paymentFailedRequests Int @default(0) @map("payment_failed_requests")
   confirmedBookings Int     @default(0) @map("confirmed_bookings")
-  estimatedRevenue Decimal  @default(0) @map("estimated_revenue") @db.Decimal(18, 2)
+  estimatedConfirmedRevenue Decimal @default(0) @map("estimated_confirmed_revenue") @db.Decimal(18, 2)
+  refundedRevenue  Decimal  @default(0) @map("refunded_revenue") @db.Decimal(18, 2)
   createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   posting          Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
@@ -517,11 +525,19 @@ model PostingAnalyticsDaily {
   postingId        String   @map("posting_id") @db.VarChar(36)
   ownerId          String   @map("owner_id") @db.VarChar(36)
   bucketStart      DateTime @map("bucket_start") @db.DateTime(6)
+  searchImpressions Int     @default(0) @map("search_impressions")
+  searchClicks     Int      @default(0) @map("search_clicks")
   views            Int      @default(0)
   uniqueViews      Int      @default(0) @map("unique_views")
   bookingRequests  Int      @default(0) @map("booking_requests")
+  approvedRequests Int      @default(0) @map("approved_requests")
+  declinedRequests Int      @default(0) @map("declined_requests")
+  expiredRequests  Int      @default(0) @map("expired_requests")
+  cancelledRequests Int     @default(0) @map("cancelled_requests")
+  paymentFailedRequests Int @default(0) @map("payment_failed_requests")
   confirmedBookings Int     @default(0) @map("confirmed_bookings")
-  estimatedRevenue Decimal  @default(0) @map("estimated_revenue") @db.Decimal(18, 2)
+  estimatedConfirmedRevenue Decimal @default(0) @map("estimated_confirmed_revenue") @db.Decimal(18, 2)
+  refundedRevenue  Decimal  @default(0) @map("refunded_revenue") @db.Decimal(18, 2)
   createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   posting          Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
@@ -661,9 +677,16 @@ enum SearchReindexStatus {
 
 enum PostingAnalyticsEventType {
   posting_viewed
+  search_impression
+  search_click
   booking_requested
-  booking_accepted
-  payment_captured
+  booking_approved
+  booking_declined
+  booking_expired
+  booking_cancelled
+  payment_failed
+  refund_recorded
+  renting_confirmed
 }
 
 enum RecommendationActivityEventType {

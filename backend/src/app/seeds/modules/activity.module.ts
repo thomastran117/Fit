@@ -178,7 +178,8 @@ export const activitySeedModule: SeedModule = {
 
     const bookingCountByPostingId = new Map<string, number>();
     const confirmedCountByPostingId = new Map<string, number>();
-    const revenueByPostingId = new Map<string, number>();
+    const confirmedRevenueByPostingId = new Map<string, number>();
+    const refundedRevenueByPostingId = new Map<string, number>();
 
     for (const booking of SEED_BOOKINGS) {
       bookingCountByPostingId.set(
@@ -194,9 +195,16 @@ export const activitySeedModule: SeedModule = {
       }
 
       if (["paid", "refunded"].includes(booking.status)) {
-        revenueByPostingId.set(
+        confirmedRevenueByPostingId.set(
           booking.postingId,
-          (revenueByPostingId.get(booking.postingId) ?? 0) + booking.estimatedTotal,
+          (confirmedRevenueByPostingId.get(booking.postingId) ?? 0) + booking.estimatedTotal,
+        );
+      }
+
+      if (booking.status === "refunded") {
+        refundedRevenueByPostingId.set(
+          booking.postingId,
+          (refundedRevenueByPostingId.get(booking.postingId) ?? 0) + booking.estimatedTotal,
         );
       }
     }
@@ -209,11 +217,20 @@ export const activitySeedModule: SeedModule = {
           postingId: aggregate.postingId,
           ownerId: aggregate.ownerId,
           bucketStart: aggregate.eventHour,
+          searchImpressions: 0,
+          searchClicks: 0,
           views: aggregate.views,
           uniqueViews: aggregate.uniqueViews.size,
           bookingRequests: bookingCountByPostingId.get(aggregate.postingId) ?? 0,
+          approvedRequests: 0,
+          declinedRequests: 0,
+          expiredRequests: 0,
+          cancelledRequests: 0,
+          paymentFailedRequests: 0,
           confirmedBookings: confirmedCountByPostingId.get(aggregate.postingId) ?? 0,
-          estimatedRevenue: revenueByPostingId.get(aggregate.postingId) ?? 0,
+          estimatedConfirmedRevenue:
+            confirmedRevenueByPostingId.get(aggregate.postingId) ?? 0,
+          refundedRevenue: refundedRevenueByPostingId.get(aggregate.postingId) ?? 0,
         },
       });
       hourlyIndex += 1;
@@ -227,11 +244,20 @@ export const activitySeedModule: SeedModule = {
           postingId: aggregate.postingId,
           ownerId: aggregate.ownerId,
           bucketStart: aggregate.eventDate,
+          searchImpressions: 0,
+          searchClicks: 0,
           views: aggregate.views,
           uniqueViews: aggregate.uniqueViews.size,
           bookingRequests: bookingCountByPostingId.get(aggregate.postingId) ?? 0,
+          approvedRequests: 0,
+          declinedRequests: 0,
+          expiredRequests: 0,
+          cancelledRequests: 0,
+          paymentFailedRequests: 0,
           confirmedBookings: confirmedCountByPostingId.get(aggregate.postingId) ?? 0,
-          estimatedRevenue: revenueByPostingId.get(aggregate.postingId) ?? 0,
+          estimatedConfirmedRevenue:
+            confirmedRevenueByPostingId.get(aggregate.postingId) ?? 0,
+          refundedRevenue: refundedRevenueByPostingId.get(aggregate.postingId) ?? 0,
         },
       });
       dailyIndex += 1;

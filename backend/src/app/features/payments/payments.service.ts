@@ -89,6 +89,7 @@ export class PaymentsService {
         attempt.attemptId,
         errorInfo,
       );
+      await this.enqueuePaymentFailedAnalytics(payment);
       await this.enqueueSearchSync(payment.postingId);
       return payment;
     }
@@ -131,6 +132,12 @@ export class PaymentsService {
     });
 
     const payment = await this.paymentsRepository.completeRefund(refundId, result);
+    await this.postingsAnalyticsRepository.enqueueRefundRecordedEvent({
+      postingId: payment.postingId,
+      ownerId: payment.ownerId,
+      occurredAt: new Date().toISOString(),
+      refundedAmount: input.amount,
+    });
     await this.enqueueSearchSync(payment.postingId);
     return payment;
   }
@@ -187,6 +194,7 @@ export class PaymentsService {
           },
           status === "FAILED" ? "permanent" : "unknown",
         );
+        await this.enqueuePaymentFailedAnalytics(payment);
         await this.enqueueSearchSync(payment?.postingId);
       }
     }
@@ -233,6 +241,7 @@ export class PaymentsService {
         throw new ResourceNotFoundError("Payment could not be reconciled.");
       }
 
+      await this.enqueuePaymentFailedAnalytics(result);
       await this.enqueueSearchSync(result.postingId);
       return result;
     }
@@ -267,6 +276,7 @@ export class PaymentsService {
         status,
         status.status === "FAILED" ? "permanent" : "unknown",
       );
+      await this.enqueuePaymentFailedAnalytics(result);
       await this.enqueueSearchSync(result?.postingId);
     }
   }
@@ -303,6 +313,7 @@ export class PaymentsService {
           candidate.attemptId,
           errorInfo,
         );
+        await this.enqueuePaymentFailedAnalytics(payment);
         await this.enqueueSearchSync(payment.postingId);
       }
     }
@@ -344,6 +355,18 @@ export class PaymentsService {
 
     await invalidatePublicPostingProjection(this.postingsPublicCacheService, postingId);
     await this.postingsRepository.enqueueSearchSync(postingId);
+  }
+
+  private async enqueuePaymentFailedAnalytics(payment?: PaymentRecord | null): Promise<void> {
+    if (!payment) {
+      return;
+    }
+
+    await this.postingsAnalyticsRepository.enqueuePaymentFailedEvent({
+      postingId: payment.postingId,
+      ownerId: payment.ownerId,
+      occurredAt: payment.failedAt ?? new Date().toISOString(),
+    });
   }
 
   private async markCompletedPaymentStatus(
