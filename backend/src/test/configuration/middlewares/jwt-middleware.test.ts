@@ -251,6 +251,22 @@ describe("jwt middleware helpers", () => {
     expect(context.get("auth")).toEqual(principal);
   });
 
+  it("accepts PAT bearer auth on versioned allowlisted MCP-safe routes", async () => {
+    const principal = createPatPrincipal({
+      sub: "owner-123",
+    });
+    const context = createContext({
+      url: "https://example.test/api/v1/profile/me",
+      authorization:
+        "Bearer rpat_1234567890abcdef123456_abcdef123456abcdef123456abcdef123456abcdef123456",
+      personalAccessTokenService: new FakePersonalAccessTokenService(() => principal),
+    });
+
+    const result = await requireJwtAuth(context);
+
+    expect(result).toEqual(principal);
+  });
+
   it("rejects PAT bearer auth on non-allowlisted routes", async () => {
     const context = createContext({
       url: "https://example.test/postings/post_1/booking-quote",

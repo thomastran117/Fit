@@ -1,4 +1,5 @@
 import type { RouteModule } from "@/configuration/bootstrap/routes/types";
+import { getApiRoutePrefix, getApiVersion } from "@/configuration/http/api-path";
 import { pingDatabase } from "@/configuration/resources/database";
 
 export const systemRouteModule: RouteModule = {
@@ -6,6 +7,8 @@ export const systemRouteModule: RouteModule = {
   register(app) {
     app.get("/", (context) => {
       return context.json({
+        apiVersion: getApiVersion(),
+        apiBasePath: getApiRoutePrefix(),
         message: "TypeScript Hono server is running",
       });
     });

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { mountRoutes } from "@/configuration/bootstrap/routes";
 import { containerTokens, type ServiceContainer } from "@/configuration/bootstrap/container";
+import { buildApiPath } from "@/configuration/http/api-path";
 import type { AppBindings } from "@/configuration/http/bindings";
 
 class FakeRequestContainer implements ServiceContainer {
@@ -61,11 +62,15 @@ describe("mountRoutes", () => {
       new Map([[containerTokens.blobController, blobController]]),
     );
 
-    const response = await app.request("http://rent.test/blob/upload-url", {
+    const response = await app.request(`http://rent.test${buildApiPath("/blob/upload-url")}`, {
+      method: "POST",
+    });
+    const legacyResponse = await app.request("http://rent.test/blob/upload-url", {
       method: "POST",
     });
 
     expect(response.status).toBe(200);
+    expect(legacyResponse.status).toBe(404);
     await expect(response.json()).resolves.toEqual({
       ok: true,
     });
@@ -90,7 +95,7 @@ describe("mountRoutes", () => {
       ]),
     );
 
-    const response = await app.request("http://rent.test/blob/upload-url", {
+    const response = await app.request(`http://rent.test${buildApiPath("/blob/upload-url")}`, {
       method: "POST",
     });
 
@@ -119,10 +124,10 @@ describe("mountRoutes", () => {
       new Map([[containerTokens.authController, authController]]),
     );
 
-    const disabledResponse = await app.request("http://rent.test/auth/local/login", {
+    const disabledResponse = await app.request(`http://rent.test${buildApiPath("/auth/local/login")}`, {
       method: "POST",
     });
-    const enabledResponse = await app.request("http://rent.test/auth/oauth/providers");
+    const enabledResponse = await app.request(`http://rent.test${buildApiPath("/auth/oauth/providers")}`);
 
     expect(disabledResponse.status).toBe(404);
     expect(enabledResponse.status).toBe(200);
@@ -175,10 +180,10 @@ describe("mountRoutes", () => {
     );
 
     const [batchResponse, mineResponse, analyticsResponse, itemResponse] = await Promise.all([
-      app.request("http://rent.test/postings/batch"),
-      app.request("http://rent.test/postings/me"),
-      app.request("http://rent.test/postings/analytics/summary"),
-      app.request("http://rent.test/postings/posting-123"),
+      app.request(`http://rent.test${buildApiPath("/postings/batch")}`),
+      app.request(`http://rent.test${buildApiPath("/postings/me")}`),
+      app.request(`http://rent.test${buildApiPath("/postings/analytics/summary")}`),
+      app.request(`http://rent.test${buildApiPath("/postings/posting-123")}`),
     ]);
 
     await expect(batchResponse.json()).resolves.toEqual({ route: "batchPublic" });

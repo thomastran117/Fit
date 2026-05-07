@@ -27,7 +27,7 @@ export function applyDatabaseSeedTestEnvironment(overrides: {
   process.env.SQUARE_WEBHOOK_SIGNATURE_KEY =
     process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ?? "seed-test-signature";
   process.env.SQUARE_WEBHOOK_NOTIFICATION_URL =
-    process.env.SQUARE_WEBHOOK_NOTIFICATION_URL ?? "http://localhost:8040/payments/webhooks/square";
+    process.env.SQUARE_WEBHOOK_NOTIFICATION_URL ?? "http://localhost:8040/api/v1/payments/webhooks/square";
   process.env.ELASTICSEARCH_ENABLED = process.env.ELASTICSEARCH_ENABLED ?? "false";
   process.env.RABBITMQ_URL = process.env.RABBITMQ_URL ?? "";
   process.env.FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3040";

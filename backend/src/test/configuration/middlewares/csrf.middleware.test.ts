@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getApiRoutePrefix } from "@/configuration/http/api-path";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { csrfMiddleware } from "@/configuration/middlewares/csrf.middleware";
 import { handleApplicationError } from "@/configuration/middlewares/error-handler.middleware";
@@ -68,6 +69,26 @@ describe("csrfMiddleware", () => {
       body: JSON.stringify({
         refreshToken: "native-refresh-token",
       }),
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("supports versioned auth routes when CSRF is mounted on the API base path", async () => {
+    const app = new Hono<AppBindings>();
+    const api = app.basePath(getApiRoutePrefix());
+
+    api.use("/auth/*", csrfMiddleware);
+    app.onError(handleApplicationError);
+    api.post("/auth/refresh", (context) => context.json({ ok: true }));
+
+    const response = await app.request(`http://rent.test${getApiRoutePrefix()}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:3040",
+        cookie: "refresh_token=refresh-token; csrf_token=csrf-token",
+        "x-csrf-token": "csrf-token",
+      },
     });
 
     expect(response.status).toBe(200);

@@ -28,7 +28,7 @@ x-backend-environment: &backend-environment
   SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN}
   SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID}
   SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY}
-  SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-http://127.0.0.1:8040/payments/webhooks/square}
+  SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-http://127.0.0.1:8040/api/v1/payments/webhooks/square}
   CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY}
   TOKEN_ISSUER: ${TOKEN_ISSUER}
   TOKEN_AUDIENCE: ${TOKEN_AUDIENCE}
@@ -38,7 +38,7 @@ x-backend-environment: &backend-environment
   GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
 
 x-frontend-public-environment: &frontend-public-environment
-  NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8040}
+  NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8040/api/v1}
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
   NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID:-}
   NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID:-}
@@ -46,7 +46,7 @@ x-frontend-public-environment: &frontend-public-environment
 
 x-mcp-environment: &mcp-environment
   NODE_ENV: development
-  RENTIFY_API_BASE_URL: http://backend:8040
+  RENTIFY_API_BASE_URL: http://backend:8040/api/v1
   RENTIFY_API_TIMEOUT_MS: 5000
   RENTIFY_PAT: ${RENTIFY_PAT:-}
 
@@ -313,7 +313,7 @@ services:
       <<: *frontend-public-environment
       NODE_ENV: production
       PORT: 3040
-      INTERNAL_API_BASE_URL: http://backend:8040
+      INTERNAL_API_BASE_URL: http://backend:8040/api/v1
     ports:
       - "3040:3040"
 

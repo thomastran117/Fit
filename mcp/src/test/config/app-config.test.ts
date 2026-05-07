@@ -14,7 +14,7 @@ describe("createConfig", () => {
       },
     );
 
-    expect(config.apiBaseUrl).toBe("http://localhost:8040");
+    expect(config.apiBaseUrl).toBe("http://localhost:8040/api/v1");
     expect(config.apiTimeoutMs).toBe(7000);
     expect(config.auth).toEqual({
       personalAccessToken:
@@ -28,6 +28,7 @@ describe("createConfig", () => {
       version: "1.0.0",
     });
 
+    expect(config.apiBaseUrl).toBe("http://127.0.0.1:8040/api/v1");
     expect(config.auth).toEqual({
       personalAccessToken: undefined,
     });

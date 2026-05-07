@@ -118,6 +118,7 @@ Exposed ports:
 
 - frontend: `http://localhost:3040`
 - backend: `http://localhost:8040`
+- backend API root: `http://localhost:8040/api/v1`
 - MySQL: `localhost:3307`
 - Redis: `localhost:6380`
 - Elasticsearch: `http://localhost:9201`

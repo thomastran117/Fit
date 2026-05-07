@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import type { ServiceContainer } from "@/configuration/bootstrap/container";
 import { containerTokens } from "@/configuration/container/tokens";
+import { buildApiPath, getApiRoutePrefix } from "@/configuration/http/api-path";
 import { handleApplicationError } from "@/configuration/middlewares/error-handler.middleware";
 import {
   rateLimiterMiddleware,
@@ -97,6 +98,19 @@ describe("resolveRateLimitPolicy", () => {
     });
   });
 
+  it("assigns the same auth policy to versioned login routes", () => {
+    const policy = resolveRateLimitPolicy(new Request(`http://rent.test${buildApiPath("/auth/local/login")}`, {
+      method: "POST",
+    }));
+
+    expect(policy).toMatchObject({
+      id: "auth-sensitive",
+      strategy: "sliding-window",
+      limit: 10,
+      bucketKey: "POST:auth-sensitive",
+    });
+  });
+
   it("assigns a stable payment-write bucket to dynamic payment mutation routes", () => {
     const firstPolicy = resolveRateLimitPolicy(
       new Request("http://rent.test/payments/payment-1/refunds", { method: "POST" }),
@@ -175,6 +189,41 @@ describe("rateLimiterMiddleware", () => {
     expect(response.headers.get("x-ratelimit-limit")).toBe("60");
     expect(response.headers.get("x-ratelimit-policy")).toBe("auth-refresh");
     expect(response.headers.get("x-ratelimit-strategy")).toBe("sliding-window");
+  });
+
+  it("supports versioned API routes when the middleware is mounted on the API base path", async () => {
+    const { cacheEval, verifyAccessToken } = createApp();
+    const app = new Hono<AppBindings>();
+    const api = app.basePath(getApiRoutePrefix());
+    const cacheService = {
+      eval: cacheEval,
+    };
+    const tokenService = {
+      verifyAccessToken,
+    };
+
+    api.use("*", async (context, next) => {
+      context.set("client", {
+        ip: "203.0.113.10",
+        device: {
+          type: "desktop",
+          isMobile: false,
+        },
+      });
+      context.set("container", new FakeContainer(cacheService, tokenService));
+      context.set("outputFormat", "json");
+      await next();
+    });
+    api.use("*", rateLimiterMiddleware);
+    app.onError(handleApplicationError);
+    api.post("/auth/local/login", (context) => context.json({ ok: true }));
+
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/local/login")}`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-ratelimit-policy")).toBe("auth-sensitive");
   });
 
   it("uses a stable rate-limit key for payment mutation routes with different ids", async () => {

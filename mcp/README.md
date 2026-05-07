@@ -60,7 +60,7 @@ Protected MCP integrations can use a Rentify personal access token through `RENT
 Environment variables:
 
 - `RENTIFY_API_BASE_URL`
-  - Default: `http://127.0.0.1:8040`
+  - Default: `http://127.0.0.1:8040/api/v1`
 - `RENTIFY_API_TIMEOUT_MS`
   - Default: `5000`
 - `RENTIFY_PAT`
@@ -120,7 +120,7 @@ Example desktop-style MCP config on Windows:
         "C:\\Users\\thoma\\Documents\\Rent\\mcp\\dist\\index.js"
       ],
       "env": {
-        "RENTIFY_API_BASE_URL": "http://127.0.0.1:8040",
+        "RENTIFY_API_BASE_URL": "http://127.0.0.1:8040/api/v1",
         "RENTIFY_API_TIMEOUT_MS": "5000",
         "RENTIFY_PAT": "rpat_your_public_id_your_secret"
       }
@@ -166,7 +166,7 @@ For development you can also point a client at:
         "C:\\Users\\thoma\\Documents\\Rent\\mcp\\src\\index.ts"
       ],
       "env": {
-        "RENTIFY_API_BASE_URL": "http://127.0.0.1:8040"
+        "RENTIFY_API_BASE_URL": "http://127.0.0.1:8040/api/v1"
       }
     }
   }

@@ -12,7 +12,7 @@ The frontend loads public env values from the repo-root `.env` file. If you need
 
 Frontend env values:
 
-- `NEXT_PUBLIC_API_BASE_URL` points to the backend API origin
+- `NEXT_PUBLIC_API_BASE_URL` points to the backend API base, typically `http://localhost:8040/api/v1`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` enables the Cloudflare Turnstile widget on auth pages
 - `NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID` enables Google OAuth on auth pages
 - `NEXT_PUBLIC_MICROSOFT_OAUTH_CLIENT_ID` enables Microsoft OAuth on auth pages

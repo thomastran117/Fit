@@ -1,6 +1,7 @@
 import { loggerFactory } from "@/configuration/logging";
 import { environment } from "@/configuration/environment";
 import { resolveHandler } from "@/configuration/bootstrap/routes/helpers";
+import { getApiRoutePrefix } from "@/configuration/http/api-path";
 import {
   authDevicesRouteModule,
   authLocalRouteModule,
@@ -69,6 +70,7 @@ export function logRouteComposition(): void {
     .filter((routeModuleId) => !disabledRouteModuleIds.includes(routeModuleId));
 
   routesLogger.info("Route modules composed.", {
+    apiRoutePrefix: getApiRoutePrefix(),
     disabledRouteModules: disabledRouteModuleIds,
     mountedRouteModules: mountedRouteModuleIds,
   });

@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
+import { stripApiRoutePrefix } from "@/configuration/http/api-path";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type { JwtClaims } from "@/features/auth/token/token.service";
@@ -82,7 +83,7 @@ function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: Au
     return;
   }
 
-  const pathname = new URL(context.req.url).pathname;
+  const pathname = stripApiRoutePrefix(new URL(context.req.url).pathname);
   const requestMethod = context.req.method ?? "GET";
   const policy = PAT_ROUTE_POLICIES.find(
     (entry) => entry.method === requestMethod && entry.pattern.test(pathname),

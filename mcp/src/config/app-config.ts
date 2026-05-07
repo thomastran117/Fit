@@ -19,9 +19,26 @@ const DEFAULT_API_BASE_URL = "http://127.0.0.1:8040";
 const DEFAULT_API_TIMEOUT_MS = 5_000;
 const FALLBACK_SERVER_NAME = "rentify-mcp";
 const FALLBACK_SERVER_VERSION = "0.0.0";
+const API_ROUTE_PREFIX = "/api/v1";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeApiBaseUrl(value: string): string {
+  const normalizedValue = normalizeBaseUrl(value);
+
+  try {
+    const url = new URL(normalizedValue);
+
+    if (url.pathname === "/" || url.pathname === "/api") {
+      url.pathname = API_ROUTE_PREFIX;
+    }
+
+    return normalizeBaseUrl(url.toString());
+  } catch {
+    return normalizedValue;
+  }
 }
 
 function parsePositiveInteger(
@@ -62,6 +79,12 @@ function readOptionalConfiguredString(
 }
 
 function readAuthConfig(env: NodeJS.ProcessEnv): RentifyMcpAuthConfig {
+  const configuredPat = env.RENTIFY_PAT;
+
+  if (configuredPat !== undefined && !configuredPat.trim()) {
+    throw new Error("RENTIFY_PAT must not be empty when configured.");
+  }
+
   const personalAccessToken = readOptionalConfiguredString(env, "RENTIFY_PAT");
 
   return {
@@ -76,7 +99,7 @@ export function createConfig(
   const configuredBaseUrl = env.RENTIFY_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
 
   return {
-    apiBaseUrl: normalizeBaseUrl(configuredBaseUrl),
+    apiBaseUrl: normalizeApiBaseUrl(configuredBaseUrl),
     apiTimeoutMs: parsePositiveInteger(
       env.RENTIFY_API_TIMEOUT_MS,
       DEFAULT_API_TIMEOUT_MS,

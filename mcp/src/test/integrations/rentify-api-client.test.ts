@@ -6,18 +6,20 @@ import {
   buildApiUrl,
 } from "../../integrations/rentify-api/index.js";
 
+const apiBaseUrl = "http://127.0.0.1:8040/api/v1";
+
 function createFetchMock(): jest.MockedFunction<typeof fetch> {
   return jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
 }
 
 describe("buildApiUrl", () => {
   it("serializes repeated array query parameters and forces JSON output", () => {
-    const url = buildApiUrl("http://127.0.0.1:8040", "/postings/batch", {
+    const url = buildApiUrl(apiBaseUrl, "/postings/batch", {
       ids: ["post_1", "post_2"],
       page: 2,
     });
 
-    expect(url.origin + url.pathname).toBe("http://127.0.0.1:8040/postings/batch");
+    expect(url.origin + url.pathname).toBe("http://127.0.0.1:8040/api/v1/postings/batch");
     expect(url.searchParams.get("format")).toBe("json");
     expect(url.searchParams.get("page")).toBe("2");
     expect(url.searchParams.getAll("ids")).toEqual(["post_1", "post_2"]);
@@ -49,7 +51,7 @@ describe("RentifyApiClient", () => {
       ),
     );
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
     });
@@ -62,7 +64,7 @@ describe("RentifyApiClient", () => {
     });
 
     const [requestUrl, requestInit] = fetchMock.mock.calls[0] ?? [];
-    expect(String(requestUrl)).toContain("/postings?");
+    expect(String(requestUrl)).toContain("/api/v1/postings?");
     expect(String(requestUrl)).toContain("format=json");
     expect(String(requestUrl)).toContain("q=bike");
     expect(String(requestUrl)).toContain("page=2");
@@ -101,7 +103,7 @@ describe("RentifyApiClient", () => {
       ),
     );
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
       personalAccessToken:
@@ -185,7 +187,7 @@ describe("RentifyApiClient", () => {
         ),
       );
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
     });
@@ -231,7 +233,7 @@ describe("RentifyApiClient", () => {
       ),
     );
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
     });
@@ -250,7 +252,7 @@ describe("RentifyApiClient", () => {
     const fetchMock = createFetchMock()
       .mockRejectedValue(new DOMException("This operation was aborted.", "AbortError"));
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
     });
@@ -266,7 +268,7 @@ describe("RentifyApiClient", () => {
   it("maps network failures to a backend-unavailable error", async () => {
     const fetchMock = createFetchMock().mockRejectedValue(new Error("connect ECONNREFUSED"));
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
     });
@@ -290,7 +292,7 @@ describe("RentifyApiClient", () => {
       }),
     );
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
       personalAccessToken:
@@ -311,7 +313,7 @@ describe("RentifyApiClient", () => {
 
   it("fails cleanly when a protected request is attempted without auth", async () => {
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: createFetchMock(),
     });
@@ -338,7 +340,7 @@ describe("RentifyApiClient", () => {
         ),
       );
     const client = new RentifyApiClient({
-      baseUrl: "http://127.0.0.1:8040",
+      baseUrl: apiBaseUrl,
       timeoutMs: 5_000,
       fetchImplementation: fetchMock,
       personalAccessToken:

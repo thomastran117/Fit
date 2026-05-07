@@ -12,7 +12,7 @@ function startBackendStub(): Promise<{ server: HttpServer; baseUrl: string }> {
 
     response.setHeader("content-type", "application/json; charset=UTF-8");
 
-    if (request.method === "GET" && url.pathname === "/postings") {
+    if (request.method === "GET" && url.pathname === "/api/v1/postings") {
       response.writeHead(200);
       response.end(
         JSON.stringify({
@@ -67,7 +67,7 @@ describe("Rentify MCP server smoke test", () => {
         version: "1.0.0",
       }),
       new RentifyApiClient({
-        baseUrl: backend.baseUrl,
+        baseUrl: `${backend.baseUrl}/api/v1`,
         timeoutMs: 5_000,
       }),
     );
