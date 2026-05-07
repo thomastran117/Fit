@@ -1,0 +1,41 @@
+import { containerTokens } from "@/configuration/bootstrap/container";
+import type { BookingsController } from "@/features/bookings/bookings.controller";
+import type { RouteModule } from "@/configuration/bootstrap/routes/types";
+
+export const bookingsRouteModule: RouteModule = {
+  id: "bookings",
+  register(app, { resolveHandler }) {
+    app.post(
+      "/postings/:id/booking-requests",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "createForPosting"),
+    );
+    app.post(
+      "/postings/:id/booking-quote",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "quoteForPosting"),
+    );
+    app.get(
+      "/postings/:id/booking-requests",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "listForOwnerPosting"),
+    );
+    app.get(
+      "/booking-requests/me",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "listMine"),
+    );
+    app.get(
+      "/booking-requests/:id",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "getById"),
+    );
+    app.put(
+      "/booking-requests/:id",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "updateOwn"),
+    );
+    app.post(
+      "/booking-requests/:id/approve",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "approve"),
+    );
+    app.post(
+      "/booking-requests/:id/decline",
+      resolveHandler<BookingsController>(containerTokens.bookingsController, "decline"),
+    );
+  },
+};

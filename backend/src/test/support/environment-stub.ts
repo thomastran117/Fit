@@ -65,6 +65,17 @@ function readRabbitMqConfig() {
   };
 }
 
+function readRouteModulesConfig() {
+  const configuredIds = (process.env.DISABLED_ROUTE_MODULES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return {
+    disabledIds: Array.from(new Set(configuredIds)),
+  };
+}
+
 export const environment = {
   isProduction(): boolean {
     return readNodeEnvironment() === "production";
@@ -99,12 +110,16 @@ export const environment = {
   getRabbitMqConfig() {
     return readRabbitMqConfig();
   },
+  getRouteModulesConfig() {
+    return readRouteModulesConfig();
+  },
   load() {
     return {
       auth: tokenConfig,
       captcha: captchaConfig,
       database: databaseConfig,
       logging: readLoggingConfig(),
+      routeModules: readRouteModulesConfig(),
       rabbitmq: readRabbitMqConfig(),
       rateLimiter: rateLimiterConfig,
       server: {

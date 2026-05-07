@@ -1,5 +1,7 @@
 import { config } from "dotenv";
 import { fileURLToPath } from "node:url";
+import { parseDisabledRouteModuleIds } from "@/configuration/bootstrap/routes/config";
+import type { RouteModuleId } from "@/configuration/bootstrap/routes/types";
 
 const envFilePath = fileURLToPath(new URL("../../../../.env", import.meta.url));
 
@@ -28,6 +30,7 @@ type RawEnvironmentValues = {
   DATABASE_SLOW_OPERATION_THRESHOLD_MS?: string;
   DATABASE_SLOW_QUERY_THRESHOLD_MS?: string;
   DATABASE_URL?: string;
+  DISABLED_ROUTE_MODULES?: string;
   ELASTICSEARCH_ENABLED?: string;
   ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS?: string;
   ELASTICSEARCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD?: string;
@@ -263,6 +266,9 @@ export interface AppEnvironment {
     mode: LoggingMode;
     serviceName: string;
   };
+  routeModules: {
+    disabledIds: RouteModuleId[];
+  };
   rabbitmq: {
     url?: string;
   };
@@ -311,6 +317,7 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "DATABASE_SLOW_OPERATION_THRESHOLD_MS",
   "DATABASE_SLOW_QUERY_THRESHOLD_MS",
   "DATABASE_URL",
+  "DISABLED_ROUTE_MODULES",
   "ELASTICSEARCH_ENABLED",
   "ELASTICSEARCH_CIRCUIT_BREAKER_COOLDOWN_MS",
   "ELASTICSEARCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
@@ -501,6 +508,21 @@ function parseRateLimiterStrategy(
 
 function parseLoggingMode(nodeEnv: NodeEnvironment): LoggingMode {
   return nodeEnv === "production" ? "rabbitmq" : "console";
+}
+
+function readDisabledRouteModuleIds(
+  raw: RawEnvironmentValues,
+  errors: string[],
+): RouteModuleId[] {
+  const parsed = parseDisabledRouteModuleIds(raw.DISABLED_ROUTE_MODULES);
+
+  if (parsed.invalidIds.length > 0) {
+    errors.push(
+      `DISABLED_ROUTE_MODULES contains unknown module ids: ${parsed.invalidIds.join(", ")}.`,
+    );
+  }
+
+  return parsed.disabledIds;
 }
 
 type NumberOptions = {
@@ -1100,6 +1122,9 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
       mode: parseLoggingMode(nodeEnv),
       serviceName: raw.LOG_SERVICE_NAME ?? "backend",
     },
+    routeModules: {
+      disabledIds: readDisabledRouteModuleIds(raw, errors),
+    },
     rabbitmq: {
       url: raw.RABBITMQ_URL,
     },
@@ -1326,6 +1351,10 @@ class EnvironmentManager {
 
   getLoggingConfig(): AppEnvironment["logging"] {
     return this.get().logging;
+  }
+
+  getRouteModulesConfig(): AppEnvironment["routeModules"] {
+    return this.get().routeModules;
   }
 
   getRabbitMqConfig(): AppEnvironment["rabbitmq"] {

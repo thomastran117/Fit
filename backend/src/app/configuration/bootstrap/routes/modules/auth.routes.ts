@@ -1,0 +1,137 @@
+import { containerTokens } from "@/configuration/bootstrap/container";
+import type { AuthController } from "@/features/auth/auth.controller";
+import type { PersonalAccessTokenController } from "@/features/auth/personal-access-token/personal-access-token.controller";
+import type { RouteModule } from "@/configuration/bootstrap/routes/types";
+
+export const authLocalRouteModule: RouteModule = {
+  id: "auth-local",
+  register(app, { resolveHandler }) {
+    app.post(
+      "/auth/local/login",
+      resolveHandler<AuthController>(containerTokens.authController, "localAuthenticate"),
+    );
+    app.post(
+      "/auth/local/signup",
+      resolveHandler<AuthController>(containerTokens.authController, "localSignup"),
+    );
+    app.post(
+      "/auth/local/password/forgot",
+      resolveHandler<AuthController>(containerTokens.authController, "forgotPassword"),
+    );
+    app.post(
+      "/auth/local/password/forgot/resend",
+      resolveHandler<AuthController>(containerTokens.authController, "resendForgotPassword"),
+    );
+    app.post(
+      "/auth/local/password/reset",
+      resolveHandler<AuthController>(containerTokens.authController, "resetPassword"),
+    );
+    app.post(
+      "/auth/local/email/verify",
+      resolveHandler<AuthController>(containerTokens.authController, "verifyEmail"),
+    );
+    app.post(
+      "/auth/local/email/resend",
+      resolveHandler<AuthController>(containerTokens.authController, "resendVerificationEmail"),
+    );
+    app.post(
+      "/auth/local/unlock",
+      resolveHandler<AuthController>(containerTokens.authController, "unlockLocalLogin"),
+    );
+    app.post(
+      "/auth/local/unlock/resend",
+      resolveHandler<AuthController>(containerTokens.authController, "resendUnlockLocalLogin"),
+    );
+    app.post(
+      "/auth/local/verify",
+      resolveHandler<AuthController>(containerTokens.authController, "localVerify"),
+    );
+    app.post(
+      "/auth/local/password/change",
+      resolveHandler<AuthController>(containerTokens.authController, "changePassword"),
+    );
+    app.post(
+      "/auth/refresh",
+      resolveHandler<AuthController>(containerTokens.authController, "refresh"),
+    );
+    app.post(
+      "/auth/logout",
+      resolveHandler<AuthController>(containerTokens.authController, "logout"),
+    );
+  },
+};
+
+export const authOauthRouteModule: RouteModule = {
+  id: "auth-oauth",
+  register(app, { resolveHandler }) {
+    app.post(
+      "/auth/oauth/google",
+      resolveHandler<AuthController>(containerTokens.authController, "googleAuthenticate"),
+    );
+    app.post(
+      "/auth/oauth/microsoft",
+      resolveHandler<AuthController>(containerTokens.authController, "microsoftAuthenticate"),
+    );
+    app.post(
+      "/auth/oauth/apple",
+      resolveHandler<AuthController>(containerTokens.authController, "appleAuthenticate"),
+    );
+    app.get(
+      "/auth/oauth/providers",
+      resolveHandler<AuthController>(containerTokens.authController, "linkedOAuthProviders"),
+    );
+    app.post(
+      "/auth/oauth/:provider/link",
+      resolveHandler<AuthController>(containerTokens.authController, "linkOAuthProvider"),
+    );
+    app.delete(
+      "/auth/oauth/:provider",
+      resolveHandler<AuthController>(containerTokens.authController, "unlinkOAuthProvider"),
+    );
+  },
+};
+
+export const authDevicesRouteModule: RouteModule = {
+  id: "auth-devices",
+  register(app, { resolveHandler }) {
+    app.post(
+      "/auth/device/verify",
+      resolveHandler<AuthController>(containerTokens.authController, "deviceVerify"),
+    );
+    app.get(
+      "/auth/devices",
+      resolveHandler<AuthController>(containerTokens.authController, "devices"),
+    );
+    app.delete(
+      "/auth/devices/remove",
+      resolveHandler<AuthController>(containerTokens.authController, "removeKnownDevice"),
+    );
+  },
+};
+
+export const authPersonalAccessTokensRouteModule: RouteModule = {
+  id: "auth-personal-access-tokens",
+  register(app, { resolveHandler }) {
+    app.get(
+      "/auth/personal-access-tokens",
+      resolveHandler<PersonalAccessTokenController>(
+        containerTokens.personalAccessTokenController,
+        "list",
+      ),
+    );
+    app.post(
+      "/auth/personal-access-tokens",
+      resolveHandler<PersonalAccessTokenController>(
+        containerTokens.personalAccessTokenController,
+        "create",
+      ),
+    );
+    app.delete(
+      "/auth/personal-access-tokens/:id",
+      resolveHandler<PersonalAccessTokenController>(
+        containerTokens.personalAccessTokenController,
+        "revoke",
+      ),
+    );
+  },
+};
