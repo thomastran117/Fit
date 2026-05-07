@@ -247,7 +247,13 @@ describe("rateLimiterMiddleware", () => {
   });
 
   it("falls back to in-memory limiting when Redis is unavailable", async () => {
-    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const writeSpy = jest.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array, callback?: unknown) => {
+      if (typeof callback === "function") {
+        callback(null);
+      }
+
+      return true;
+    }) as never);
     const { app } = createApp(
       jest.fn().mockRejectedValue(new Error("Redis has not been initialized. Call connectRedis() first.")),
     );
@@ -259,11 +265,17 @@ describe("rateLimiterMiddleware", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-ratelimit-backend")).toBe("memory");
     expect(response.headers.get("x-ratelimit-degraded")).toBe("true");
-    expect(warnSpy).toHaveBeenCalled();
+    expect(writeSpy).toHaveBeenCalled();
   });
 
   it("still enforces limits when running on the in-memory fallback", async () => {
-    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const writeSpy = jest.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array, callback?: unknown) => {
+      if (typeof callback === "function") {
+        callback(null);
+      }
+
+      return true;
+    }) as never);
     const { app } = createApp(
       jest.fn().mockRejectedValue(new Error("Redis connection closed unexpectedly.")),
     );
@@ -295,6 +307,6 @@ describe("rateLimiterMiddleware", () => {
         retryAfterSeconds: expect.any(Number),
       },
     });
-    expect(warnSpy).toHaveBeenCalled();
+    expect(writeSpy).toHaveBeenCalled();
   });
 });

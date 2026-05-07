@@ -41,8 +41,11 @@ import type { PostingThumbnailQueueService } from "@/features/postings/postings.
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 export class PostingsService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsSearchService: PostingsSearchService,
@@ -53,7 +56,9 @@ export class PostingsService {
     private readonly contentSanitizationService: ContentSanitizationService,
     private readonly cacheService: CacheService,
     private readonly postingsPublicCacheService: PostingsPublicCacheService,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(PostingsService, "service");
+  }
 
   async createDraft(input: UpsertPostingInput): Promise<PostingRecord> {
     const normalizedInput = this.normalizeUpsertInput(input);
@@ -1135,10 +1140,9 @@ export class PostingsService {
     try {
       await this.postingThumbnailQueueService.enqueuePostingThumbnailJob(postingId);
     } catch (error) {
-      console.error("Failed to enqueue posting thumbnail job", {
+      this.logger.error("Failed to enqueue posting thumbnail job.", {
         postingId,
-        error,
-      });
+      }, error);
     }
   }
 

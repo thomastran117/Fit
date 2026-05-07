@@ -1,5 +1,6 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import type {
   ProcessBookingApprovedEventInput,
   ProcessBookingCancelledEventInput,
@@ -18,6 +19,9 @@ import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-run
 
 const workerName = "Postings analytics worker";
 const workerResources = [databaseWorkerResource];
+const workerLogger = loggerFactory.forComponent("postings-analytics.worker", "worker").child({
+  workerName,
+});
 
 export async function bootstrapPostingsAnalyticsWorker(): Promise<void> {
   await bootstrapPollingWorker({
@@ -195,12 +199,11 @@ export async function bootstrapPostingsAnalyticsWorker(): Promise<void> {
 
           await repository.markOutboxProcessed(job.id);
         } catch (error) {
-          console.error("Failed to process postings analytics outbox job", {
+          workerLogger.error("Failed to process postings analytics outbox job.", {
             jobId: job.id,
             postingId: job.postingId,
             eventType: job.eventType,
-            error,
-          });
+          }, error);
           await repository.markOutboxRetry(
             job.id,
             job.attempts + 1,

@@ -1,4 +1,5 @@
 import { environment } from "@/configuration/environment";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 import { getDatabaseClient } from "@/configuration/resources/database";
 import { activitySeedModule } from "@/seeds/modules/activity.module";
 import { bookingsSeedModule } from "@/seeds/modules/bookings.module";
@@ -7,14 +8,20 @@ import { usersSeedModule } from "@/seeds/modules/users.module";
 import { resolveAutoSeedPolicy } from "@/seeds/policy";
 import type { RunSeedOrchestratorOptions, SeedLogger, SeedModule, SeedSummary } from "@/seeds/types";
 
-const defaultLogger: SeedLogger = {
-  info(message: string) {
-    console.info(message);
-  },
-  warn(message: string) {
-    console.warn(message);
-  },
-};
+const seedRuntimeLogger = loggerFactory.forComponent("seed-orchestrator", "seed");
+
+function createSeedLoggerAdapter(sourceLogger: Logger): SeedLogger {
+  return {
+    info(message: string) {
+      sourceLogger.info(message);
+    },
+    warn(message: string) {
+      sourceLogger.warn(message);
+    },
+  };
+}
+
+const defaultLogger: SeedLogger = createSeedLoggerAdapter(seedRuntimeLogger);
 
 export const defaultSeedModules: SeedModule[] = [
   usersSeedModule,

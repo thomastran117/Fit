@@ -118,21 +118,25 @@ export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (contex
     const path = getSanitizedPathWithQuery(context.req.raw);
     const status = context.res.status;
 
-    const methodColor = getMethodColor(method);
-    const statusColor = getStatusColor(status);
-    const latencyColor = getLatencyColor(durationMs);
+    const requestLogger = context.get("logger");
+    const logMethod =
+      status >= 500
+        ? requestLogger.error.bind(requestLogger)
+        : status >= 400
+          ? requestLogger.warn.bind(requestLogger)
+          : requestLogger.info.bind(requestLogger);
 
-    console.info(
-      [
-        `${colors.gray}[HTTP]${colors.reset}`,
-        `${methodColor}${method}${colors.reset}`,
-        `${path}`,
-        `${statusColor}${status}${colors.reset}`,
-        `${latencyColor}${durationMs}ms${colors.reset}`,
-        `${colors.gray}ip=${client?.ip ?? "unknown"}${colors.reset}`,
-        `${colors.gray}requestId=${requestId ?? "unknown"}${colors.reset}`,
-        `${colors.gray}format=${outputFormat}${colors.reset}`,
-      ].join(" "),
-    );
+    logMethod("HTTP request completed.", {
+      durationMs,
+      format: outputFormat,
+      ip: client?.ip ?? "unknown",
+      latencyColor: getLatencyColor(durationMs),
+      method,
+      methodColor: getMethodColor(method),
+      path,
+      requestId: requestId ?? "unknown",
+      status,
+      statusColor: getStatusColor(status),
+    });
   }
 });

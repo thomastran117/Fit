@@ -6,6 +6,7 @@ const envFilePath = fileURLToPath(new URL("../../../../.env", import.meta.url));
 type NodeEnvironment = "development" | "test" | "production";
 type RefreshTokenMode = "stateless" | "stateful";
 type RateLimiterStrategy = "sliding-window" | "token-bucket";
+type LoggingMode = "console" | "rabbitmq";
 
 type RawEnvironmentValues = {
   ACCESS_TOKEN_SECRET?: string;
@@ -45,6 +46,9 @@ type RawEnvironmentValues = {
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_IDS?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
+  LOG_FALLBACK_DIRECTORY?: string;
+  LOG_LEVEL?: string;
+  LOG_SERVICE_NAME?: string;
   MICROSOFT_OAUTH_CLIENT_ID?: string;
   MICROSOFT_OAUTH_CLIENT_IDS?: string;
   MICROSOFT_OAUTH_CLIENT_SECRET?: string;
@@ -253,6 +257,12 @@ export interface AppEnvironment {
     containerName?: string;
     uploadSasTtlSeconds: number;
   };
+  logging: {
+    fallbackDirectory: string;
+    level: "debug" | "info" | "warn" | "error" | "critical";
+    mode: LoggingMode;
+    serviceName: string;
+  };
   rabbitmq: {
     url?: string;
   };
@@ -319,6 +329,9 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "GOOGLE_OAUTH_CLIENT_ID",
   "GOOGLE_OAUTH_CLIENT_IDS",
   "GOOGLE_OAUTH_CLIENT_SECRET",
+  "LOG_FALLBACK_DIRECTORY",
+  "LOG_LEVEL",
+  "LOG_SERVICE_NAME",
   "MICROSOFT_OAUTH_CLIENT_ID",
   "MICROSOFT_OAUTH_CLIENT_IDS",
   "MICROSOFT_OAUTH_CLIENT_SECRET",
@@ -390,6 +403,7 @@ const DEFAULT_CAPTCHA_ALLOWED_HOST = "challenges.cloudflare.com";
 const DEFAULT_REDIS_HOST = "127.0.0.1";
 const DEFAULT_REFRESH_TOKEN_CACHE_PREFIX = "auth:refresh";
 const DEFAULT_ELASTICSEARCH_POSTINGS_INDEX = "postings";
+const DEFAULT_LOG_FALLBACK_DIRECTORY = "/app/logs/fallback";
 const DEFAULT_POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS = 15;
 const DEFAULT_POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS = 60;
 const DEFAULT_POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS = 5_000;
@@ -483,6 +497,10 @@ function parseRateLimiterStrategy(
 
   errors.push("RATE_LIMITER_STRATEGY must be either 'sliding-window' or 'token-bucket'.");
   return "sliding-window";
+}
+
+function parseLoggingMode(nodeEnv: NodeEnvironment): LoggingMode {
+  return nodeEnv === "production" ? "rabbitmq" : "console";
 }
 
 type NumberOptions = {
@@ -627,6 +645,10 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
   const elasticsearchEnabled = parseBoolean(raw.ELASTICSEARCH_ENABLED, false);
   if (elasticsearchEnabled && !raw.ELASTICSEARCH_URL) {
     errors.push("ELASTICSEARCH_URL is required when ELASTICSEARCH_ENABLED is true.");
+  }
+
+  if (nodeEnv === "production" && !raw.RABBITMQ_URL) {
+    errors.push("RABBITMQ_URL is required when NODE_ENV is production.");
   }
 
   const hasBlobConnectionString = Boolean(raw.AZURE_STORAGE_CONNECTION_STRING);
@@ -1072,6 +1094,12 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
         },
       ),
     },
+    logging: {
+      fallbackDirectory: raw.LOG_FALLBACK_DIRECTORY ?? DEFAULT_LOG_FALLBACK_DIRECTORY,
+      level: parseLogLevel(raw.LOG_LEVEL),
+      mode: parseLoggingMode(nodeEnv),
+      serviceName: raw.LOG_SERVICE_NAME ?? "backend",
+    },
     rabbitmq: {
       url: raw.RABBITMQ_URL,
     },
@@ -1296,6 +1324,10 @@ class EnvironmentManager {
     return this.get().blobStorage;
   }
 
+  getLoggingConfig(): AppEnvironment["logging"] {
+    return this.get().logging;
+  }
+
   getRabbitMqConfig(): AppEnvironment["rabbitmq"] {
     return this.get().rabbitmq;
   }
@@ -1341,4 +1373,20 @@ export function getOptionalEnvironmentVariable(
   name: string,
 ): string | undefined {
   return environment.getOptionalEnvironmentVariable(name);
+}
+
+function parseLogLevel(value: string | undefined): AppEnvironment["logging"]["level"] {
+  const normalized = value?.trim().toLowerCase();
+
+  if (
+    normalized === "debug" ||
+    normalized === "info" ||
+    normalized === "warn" ||
+    normalized === "error" ||
+    normalized === "critical"
+  ) {
+    return normalized;
+  }
+
+  return "info";
 }

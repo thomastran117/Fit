@@ -3,10 +3,12 @@ import type {
   ConsumeMessage,
   ConfirmChannel,
 } from "amqplib";
+import { loggerFactory } from "@/configuration/logging";
 import { createRabbitMqChannel } from "@/configuration/resources/rabbitmq";
 import type { RecommendationActivityEventPayload } from "@/features/recommendations/recommendation-activity.model";
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
+const recommendationQueueLogger = loggerFactory.forComponent("recommendation-activity.queue.service", "queue");
 
 export class RecommendationActivityQueueService {
   private readonly exchangeName = "recommendation-activity.exchange";
@@ -81,10 +83,9 @@ export class RecommendationActivityQueueService {
         try {
           payload = JSON.parse(message.content.toString("utf8")) as unknown;
         } catch (error) {
-          console.error("Recommendation activity consumer received an invalid JSON payload.", {
-            error,
+          recommendationQueueLogger.error("Recommendation activity consumer received an invalid JSON payload.", {
             messageId: message.properties.messageId,
-          });
+          }, error);
           await this.publishMalformedMessage(channel, message, error);
           channel.ack(message);
           return;
@@ -92,7 +93,7 @@ export class RecommendationActivityQueueService {
 
         await onMessage(payload, message, channel);
       } catch (error) {
-        console.error("Recommendation activity consumer failed before ack/nack handling", error);
+        recommendationQueueLogger.error("Recommendation activity consumer failed before ack/nack handling.", undefined, error);
         channel.nack(message, false, true);
       }
     });

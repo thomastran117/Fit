@@ -12,6 +12,7 @@ import { outputFormatMiddleware } from "../middlewares/output-format.middleware"
 import { rateLimiterMiddleware } from "../middlewares/rate-limiter.middleware";
 import { requestBodyPolicyMiddleware } from "../middlewares/request-body-policy.middleware";
 import { requestIdMiddleware } from "../middlewares/request-id.middleware";
+import { requestLoggerMiddleware } from "../middlewares/request-logger.middleware";
 import { requestSanitizationMiddleware } from "../middlewares/request-sanitization.middleware";
 import { requestTimeoutMiddleware } from "../middlewares/request-timeout.middleware";
 import { securityHeadersMiddleware } from "../middlewares/security-headers.middleware";
@@ -22,6 +23,7 @@ export function createApplication(): Hono<AppBindings> {
   app.use("*", requestIdMiddleware);
   app.use("*", clientContextMiddleware);
   app.use("*", containerScopeMiddleware);
+  app.use("*", requestLoggerMiddleware);
   app.use("*", requestTimeoutMiddleware);
   app.use("*", requestBodyPolicyMiddleware);
   app.use("*", requestSanitizationMiddleware);

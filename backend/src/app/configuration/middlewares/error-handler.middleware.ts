@@ -1,6 +1,7 @@
 import AppError from "@/errors/http/app.error";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { loggerFactory } from "@/configuration/logging";
 import { detectOutputFormat, serializeToXml } from "./output-format.middleware";
 
 export interface ErrorResponseBody {
@@ -9,13 +10,16 @@ export interface ErrorResponseBody {
   details?: unknown;
 }
 
+const errorLogger = loggerFactory.forComponent("error-handler.middleware", "middleware");
+
 export function handleApplicationError(error: unknown, context: Context<AppBindings>): Response {
   const { status, body } = toErrorResponse(error);
   const outputFormat = context.var.outputFormat ?? detectOutputFormat(context.req.raw);
   const headers = new Headers(context.res?.headers);
 
   if (status >= 500) {
-    console.error("Unhandled application error", error);
+    const requestLogger = context.get("logger");
+    (requestLogger ?? errorLogger).error("Unhandled application error.", undefined, error);
   }
 
   if (outputFormat === "xml") {

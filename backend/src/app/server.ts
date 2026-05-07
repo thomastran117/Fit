@@ -3,6 +3,9 @@ import {
   disconnectApplicationResources,
   initializeServerApplication,
 } from "@/configuration/bootstrap/startup";
+import { disconnectLogging, loggerFactory } from "@/configuration/logging";
+
+const serverLogger = loggerFactory.forComponent("server", "app");
 
 async function bootstrap(): Promise<void> {
   const { app, port } = await initializeServerApplication();
@@ -14,7 +17,10 @@ async function bootstrap(): Promise<void> {
       hostname: "0.0.0.0",
     },
     () => {
-      console.log(`Server listening on http://0.0.0.0:${port}`);
+      serverLogger.info("Server listening.", {
+        hostname: "0.0.0.0",
+        port,
+      });
     },
   );
 
@@ -26,10 +32,12 @@ async function bootstrap(): Promise<void> {
     }
 
     isShuttingDown = true;
-    console.log(`Received ${signal}. Shutting down gracefully...`);
+    serverLogger.info("Server shutdown requested.", {
+      signal,
+    });
 
     server.close();
-    await disconnectApplicationResources();
+    await Promise.allSettled([disconnectApplicationResources(), disconnectLogging()]);
     process.exit(0);
   };
 
@@ -43,7 +51,7 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap().catch(async (error: unknown) => {
-  console.error("Failed to start server", error);
-  await disconnectApplicationResources();
+  serverLogger.critical("Failed to start server.", undefined, error);
+  await Promise.allSettled([disconnectApplicationResources(), disconnectLogging()]);
   process.exit(1);
 });

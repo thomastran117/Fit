@@ -52,9 +52,16 @@ import { SearchQueueService } from "@/features/search/search.queue.service";
 import { SearchService } from "@/features/search/search.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import type { RootServiceContainer } from "@/configuration/container/core";
+import { loggerFactory } from "@/configuration/logging";
 import { containerTokens } from "@/configuration/container/tokens";
 
 export function registerApplicationServices(container: RootServiceContainer): void {
+  container.register({
+    token: containerTokens.loggerFactory,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => loggerFactory,
+  });
   container.register({
     token: containerTokens.cacheService,
     lifetime: "singleton",

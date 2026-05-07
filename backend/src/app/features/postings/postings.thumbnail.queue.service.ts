@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Channel, ConsumeMessage } from "amqplib";
+import { loggerFactory } from "@/configuration/logging";
 import { createRabbitMqChannel } from "@/configuration/resources/rabbitmq";
 import type { PostingThumbnailJobPayload } from "@/features/postings/postings.thumbnail.model";
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
 const POSTING_THUMBNAIL_QUEUE_PREFIX = "postings.thumbnail";
+const postingThumbnailQueueLogger = loggerFactory.forComponent("postings.thumbnail.queue.service", "queue");
 
 export class PostingThumbnailQueueService {
   private readonly exchangeName = `${POSTING_THUMBNAIL_QUEUE_PREFIX}.exchange`;
@@ -56,7 +58,7 @@ export class PostingThumbnailQueueService {
         const payload = JSON.parse(message.content.toString("utf8")) as PostingThumbnailJobPayload;
         await onMessage(payload, message, channel);
       } catch (error) {
-        console.error("Posting thumbnail worker failed before ack/nack handling", error);
+        postingThumbnailQueueLogger.error("Posting thumbnail worker failed before ack/nack handling.", undefined, error);
         channel.nack(message, false, true);
       }
     });

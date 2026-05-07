@@ -1,11 +1,15 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
 import { databaseWorkerResource, disconnectResources } from "@/workers/shared/resources";
 import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-runtime";
 
 const workerName = "Booking request expiry worker";
 const workerResources = [databaseWorkerResource];
+const workerLogger = loggerFactory.forComponent("booking-expiry.worker", "worker").child({
+  workerName,
+});
 
 export async function bootstrapBookingExpiryWorker(): Promise<void> {
   await bootstrapPollingWorker({
@@ -34,12 +38,11 @@ export async function bootstrapBookingExpiryWorker(): Promise<void> {
             await postingsRepository.enqueueSearchSync(job.postingId);
           }
         } catch (error) {
-          console.error("Failed to expire booking request hold", {
+          workerLogger.error("Failed to expire booking request hold.", {
             bookingRequestId: job.id,
             postingId: job.postingId,
             status: job.status,
-            error,
-          });
+          }, error);
         }
       }
 

@@ -1,5 +1,6 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import {
   databaseWorkerResource,
   disconnectResources,
@@ -9,6 +10,9 @@ import { bootstrapWorker, startWorker } from "@/workers/shared/worker-runtime";
 
 const workerName = "Posting thumbnail worker";
 const workerResources = [databaseWorkerResource, rabbitMqWorkerResource];
+const workerLogger = loggerFactory.forComponent("posting-thumbnail.worker", "worker").child({
+  workerName,
+});
 
 export async function bootstrapPostingThumbnailWorker(): Promise<void> {
   await bootstrapWorker({
@@ -31,19 +35,18 @@ export async function bootstrapPostingThumbnailWorker(): Promise<void> {
             const errorMessage =
               error instanceof Error ? error.message : "Unknown posting thumbnail generation error.";
 
-            console.error("Failed to process posting thumbnail job", {
+            workerLogger.error("Failed to process posting thumbnail job.", {
               jobId: payload.jobId,
               postingId: payload.postingId,
               attempt,
-              error,
-            });
+            }, error);
 
             if (attempt >= maxAttempts) {
               await thumbnailQueueService.publishDeadLetterJob({
                 ...payload,
                 attempt,
               });
-              console.error("Posting thumbnail job moved to dead-letter queue", {
+              workerLogger.error("Posting thumbnail job moved to dead-letter queue.", {
                 jobId: payload.jobId,
                 postingId: payload.postingId,
                 error: errorMessage,

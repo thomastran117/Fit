@@ -39,6 +39,7 @@ import { MicrosoftOAuthService } from "@/features/auth/oauth/microsoft.service";
 import type { VerifiedOAuthProfile } from "@/features/auth/oauth/oauth.types";
 import { TokenService } from "@/features/auth/token/token.service";
 import type { AuthPrincipal } from "@/features/auth/auth.principal";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 interface AuthRequestContext {
   auth: AuthPrincipal;
@@ -100,6 +101,8 @@ type LocalPasswordAuthUserRecord = AuthUserRecord & {
 };
 
 export class AuthService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly tokenService: TokenService,
@@ -110,7 +113,9 @@ export class AuthService {
     private readonly microsoftOAuthService: MicrosoftOAuthService,
     private readonly appleOAuthService: AppleOAuthService,
     private readonly cacheService: CacheService,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(AuthService, "service");
+  }
 
   async localAuthenticate(input: LocalAuthenticateInput): Promise<AuthSessionResult> {
     const user = await this.authRepository.findUserByEmail(input.email);
@@ -1070,7 +1075,7 @@ export class AuthService {
   }
 
   private logSuspiciousOtpPattern(result: PublicOtpRateLimitResult): void {
-    console.warn("Suspicious public OTP activity", {
+    this.logger.warn("Suspicious public OTP activity", {
       flow: result.flow,
       purpose: result.purpose,
       subject: this.redactEmail(result.subject),

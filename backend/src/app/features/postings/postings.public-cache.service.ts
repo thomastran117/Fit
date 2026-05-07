@@ -1,4 +1,5 @@
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 import type { CacheService } from "@/features/cache/cache.service";
 import type {
   BatchPostingsResult,
@@ -24,11 +25,15 @@ interface PublicPostingCacheEnvelope {
 }
 
 export class PostingsPublicCacheService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly cacheService: CacheService,
     private readonly postingsRepository: PostingsRepository,
     private readonly config?: PostingsPublicCacheConfig,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(PostingsPublicCacheService, "service");
+  }
 
   async getPublicById(postingId: string): Promise<PublicPostingRecord | null> {
     const normalizedPostingId = postingId.trim();
@@ -106,10 +111,9 @@ export class PostingsPublicCacheService {
 
   private refreshInBackground(postingId: string): void {
     void this.refreshIfLeader(postingId).catch((error) => {
-      console.warn("Failed to refresh stale public posting cache entry", {
+      this.logger.warn("Failed to refresh stale public posting cache entry.", {
         postingId,
-        error,
-      });
+      }, error);
     });
   }
 

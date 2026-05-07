@@ -1,7 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 
 let database: PrismaClient | null = null;
+const databaseLogger = loggerFactory.forComponent("database", "resource");
 
 function createDatabaseClient(): PrismaClient {
   const config = environment.getDatabaseConfig();
@@ -23,16 +25,14 @@ function createDatabaseClient(): PrismaClient {
       return;
     }
 
-    const logger = shouldLogSlowQuery ? console.warn : console.info;
+    const logMethod =
+      shouldLogSlowQuery ? databaseLogger.warn.bind(databaseLogger) : databaseLogger.info.bind(databaseLogger);
 
-    logger(
-      [
-        shouldLogSlowQuery ? "[DATABASE SLOW QUERY]" : "[DATABASE QUERY]",
-        `${event.duration}ms`,
-        `target=${event.target}`,
-        `query=${event.query}`,
-      ].join(" "),
-    );
+    logMethod("Database query completed.", {
+      durationMs: event.duration,
+      query: event.query,
+      target: event.target,
+    });
   });
 
   return client;
@@ -49,7 +49,9 @@ export async function connectDatabase(): Promise<PrismaClient> {
   }
 
   await database.$connect();
-  console.info(`[DATABASE CONNECT] durationMs=${measureDurationMs(startedAt)}`);
+  databaseLogger.info("Database connected.", {
+    durationMs: measureDurationMs(startedAt),
+  });
   return database;
 }
 
@@ -70,7 +72,9 @@ export async function disconnectDatabase(): Promise<void> {
   await database.$disconnect();
   database = null;
   databaseClient = null;
-  console.info(`[DATABASE DISCONNECT] durationMs=${measureDurationMs(startedAt)}`);
+  databaseLogger.info("Database disconnected.", {
+    durationMs: measureDurationMs(startedAt),
+  });
 }
 
 export async function pingDatabase(): Promise<{

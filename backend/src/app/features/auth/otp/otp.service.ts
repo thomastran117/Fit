@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 import BadRequestError from "@/errors/http/bad-request.error";
 import TooManyRequestError from "@/errors/http/too-many-request.error";
 import type { CacheService } from "@/features/cache/cache.service";
@@ -42,6 +43,7 @@ const DEFAULTS = {
 } as const;
 
 export class OtpService {
+  private readonly logger: Logger;
   private readonly cache: CacheService;
   private readonly codeLength: number;
   private readonly ttlInSeconds: number;
@@ -50,6 +52,7 @@ export class OtpService {
   private readonly cachePrefix: string;
 
   constructor(options: OtpServiceOptions) {
+    this.logger = loggerFactory.forClass(OtpService, "service");
     this.cache = options.cache;
     this.codeLength = options.codeLength ?? DEFAULTS.codeLength;
     this.ttlInSeconds = options.ttlInSeconds ?? DEFAULTS.ttlInSeconds;
@@ -146,7 +149,7 @@ export class OtpService {
   }
 
   private logSuspiciousVerificationAttempt(input: VerifyOtpInput, reason: string): void {
-    console.warn("Suspicious OTP verification activity", {
+    this.logger.warn("Suspicious OTP verification activity", {
       purpose: input.purpose,
       subject: this.redactSubject(input.subject),
       reason,

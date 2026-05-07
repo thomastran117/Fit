@@ -52,8 +52,10 @@ import { SearchQueueService } from "@/features/search/search.queue.service";
 import { SearchService } from "@/features/search/search.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import { createServiceToken } from "@/configuration/container/core";
+import type { LoggerFactory } from "@/configuration/logging";
 
 export const containerTokens = {
+  loggerFactory: createServiceToken<LoggerFactory>("LoggerFactory"),
   cacheService: createServiceToken<CacheService>("CacheService"),
   emailQueueService: createServiceToken<EmailQueueService>("EmailQueueService"),
   emailDeliveryService: createServiceToken<EmailDeliveryService>("EmailDeliveryService"),

@@ -3,6 +3,7 @@ import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment";
+import { loggerFactory } from "@/configuration/logging";
 import TooManyRequestError from "@/errors/http/too-many-request.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { getOptionalJwtAuth } from "./jwt-middleware";
@@ -48,6 +49,7 @@ const slidingWindowMemoryStore = new Map<string, number[]>();
 const tokenBucketMemoryStore = new Map<string, MemoryTokenBucketState>();
 const REDIS_FALLBACK_LOG_COOLDOWN_MS = 60_000;
 let lastRedisFallbackLogAt = 0;
+const rateLimiterLogger = loggerFactory.forComponent("rate-limiter.middleware", "middleware");
 
 const SLIDING_WINDOW_SCRIPT = `
 local key = KEYS[1]
@@ -468,7 +470,7 @@ function logRedisFallback(error: unknown, policy: RateLimitPolicy): void {
 
   lastRedisFallbackLogAt = now;
 
-  console.warn("Rate limiter falling back to in-memory evaluation because Redis is unavailable.", {
+  rateLimiterLogger.warn("Rate limiter falling back to in-memory evaluation because Redis is unavailable.", {
     policy: policy.id,
     error: error instanceof Error ? error.message : error,
   });

@@ -14,6 +14,9 @@ x-backend-environment: &backend-environment
   ELASTICSEARCH_ENABLED: ${ELASTICSEARCH_ENABLED:-true}
   ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
   ELASTICSEARCH_POSTINGS_INDEX: ${ELASTICSEARCH_POSTINGS_INDEX:-postings}
+  LOG_LEVEL: ${LOG_LEVEL:-debug}
+  LOG_SERVICE_NAME: ${LOG_SERVICE_NAME:-backend}
+  LOG_FALLBACK_DIRECTORY: ${LOG_FALLBACK_DIRECTORY:-/app/logs/fallback}
   RABBITMQ_URL: ${RABBITMQ_URL:-amqp://rabbitmq:5672}
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3040}
   APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3040}
@@ -46,6 +49,9 @@ x-mcp-environment: &mcp-environment
   RENTIFY_API_BASE_URL: http://backend:8040
   RENTIFY_API_TIMEOUT_MS: 5000
   RENTIFY_PAT: ${RENTIFY_PAT:-}
+
+x-backend-log-volume: &backend-log-volume
+  - backend_logs:/app/logs
 
 x-api-depends-on: &api-depends-on
   backend-migrate:
@@ -166,6 +172,7 @@ services:
       mysql:
         condition: service_healthy
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["npx", "prisma", "migrate", "deploy"]
 
   backend:
@@ -177,6 +184,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 8040
+    volumes: *backend-log-volume
     command: ["node", "dist/server.js"]
     ports:
       - "8040:8040"
@@ -188,6 +196,7 @@ services:
     restart: unless-stopped
     depends_on: *db-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/analytics/postings-analytics.worker.js"]
 
   booking-expiry-worker:
@@ -197,6 +206,7 @@ services:
     restart: unless-stopped
     depends_on: *db-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/bookings/booking-expiry.worker.js"]
 
   posting-thumbnail-worker:
@@ -206,6 +216,7 @@ services:
     restart: unless-stopped
     depends_on: *recommendation-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/postings/posting-thumbnail.worker.js"]
 
   email-worker:
@@ -215,7 +226,18 @@ services:
     restart: unless-stopped
     depends_on: *rabbitmq-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/email/email-delivery.worker.js"]
+
+  log-consumer-worker:
+    build: *backend-build
+    image: rent-backend:local
+    container_name: rent-log-consumer-worker
+    restart: unless-stopped
+    depends_on: *rabbitmq-worker-depends-on
+    environment: *backend-environment
+    volumes: *backend-log-volume
+    command: ["node", "dist/workers/logging/log-consumer.worker.js"]
 
   recommendation-activity-worker:
     build: *backend-build
@@ -224,6 +246,7 @@ services:
     restart: unless-stopped
     depends_on: *recommendation-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/recommendations/recommendation-activity.worker.js"]
 
   payment-retry-worker:
@@ -233,6 +256,7 @@ services:
     restart: unless-stopped
     depends_on: *db-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/payments/payment-retry.worker.js"]
 
   payment-repair-worker:
@@ -242,6 +266,7 @@ services:
     restart: unless-stopped
     depends_on: *db-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/payments/payment-repair.worker.js"]
 
   payout-release-worker:
@@ -251,6 +276,7 @@ services:
     restart: unless-stopped
     depends_on: *db-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/payments/payout-release.worker.js"]
 
   search-maintainer-worker:
@@ -260,6 +286,7 @@ services:
     restart: unless-stopped
     depends_on: *search-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/search/search-maintainer.worker.js"]
 
   search-indexer-worker:
@@ -269,6 +296,7 @@ services:
     restart: unless-stopped
     depends_on: *search-worker-depends-on
     environment: *backend-environment
+    volumes: *backend-log-volume
     command: ["node", "dist/workers/search/search-indexer.worker.js"]
 
   frontend:
@@ -302,6 +330,7 @@ services:
     stdin_open: true
 
 volumes:
+  backend_logs:
   mysql_data:
   redis_data:
   elasticsearch_data:

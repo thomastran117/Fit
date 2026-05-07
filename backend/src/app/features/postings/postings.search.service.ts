@@ -25,6 +25,7 @@ import {
   recordAliasAction,
   recordSearchFallback,
 } from "@/features/search/search.telemetry";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 interface SearchIdsResult {
   ids: string[];
@@ -77,18 +78,22 @@ class ElasticsearchAliasStateError extends ElasticsearchUnavailableError {
 }
 
 export class PostingsSearchService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsPublicCacheService: PostingsPublicCacheService,
     private readonly elasticsearch: ElasticsearchClient = getElasticsearchClient(),
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(PostingsSearchService, "service");
+  }
 
   async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
     let searchIds = await this.searchIdsWithFallback(input);
     let batch = await this.postingsPublicCacheService.getPublicByIds(searchIds.ids);
 
     if (searchIds.source === "elasticsearch" && batch.missingIds.length > 0) {
-      console.warn("Postings search falling back to database because Elasticsearch returned stale ids.", {
+      this.logger.warn("Postings search falling back to database because Elasticsearch returned stale ids.", {
         missingIds: batch.missingIds,
       });
       searchIds = await this.searchIdsFromDatabase(input, "index-drift");
@@ -364,11 +369,11 @@ export class PostingsSearchService {
         return await this.searchIdsInElasticsearch(input);
       } catch (error) {
         if (error instanceof ElasticsearchCircuitOpenError) {
-          console.info("Postings search using database fallback because Elasticsearch circuit is open.");
+          this.logger.info("Postings search using database fallback because Elasticsearch circuit is open.");
           return this.searchIdsFromDatabase(input, "circuit-open");
         }
 
-        console.warn("Postings search falling back to database", error);
+        this.logger.warn("Postings search falling back to database.", undefined, error);
         return this.searchIdsFromDatabase(input, "es-unavailable");
       }
     }

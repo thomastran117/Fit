@@ -1,7 +1,9 @@
 import { createClient } from "redis";
 import { environment } from "@/configuration/environment";
+import { loggerFactory } from "@/configuration/logging";
 
 type RedisClient = ReturnType<typeof createClient>;
+const redisLogger = loggerFactory.forComponent("redis", "resource");
 
 function buildRedisUrl(): string {
   const config = environment.getRedisConfig();
@@ -33,7 +35,7 @@ function createRedisClient(): RedisClient {
   });
 
   client.on("error", (error: unknown) => {
-    console.error("Redis client error", error);
+    redisLogger.error("Redis client error.", undefined, error);
   });
 
   return client;

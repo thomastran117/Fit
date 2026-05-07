@@ -15,12 +15,17 @@ import type {
 } from "@/features/recommendations/recommendation-activity.model";
 import type { RecommendationActivityQueueService } from "@/features/recommendations/recommendation-activity.queue.service";
 import type { RentingRecord } from "@/features/rentings/rentings.model";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 export class RecommendationActivityPublisher {
+  private readonly logger: Logger;
+
   constructor(
     private readonly queueService: RecommendationActivityQueueService,
     private readonly profileRepository: ProfileRepository,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(RecommendationActivityPublisher, "service");
+  }
 
   async publishPostingView(input: {
     posting: PostingRecord | PublicPostingRecord;
@@ -183,12 +188,11 @@ export class RecommendationActivityPublisher {
     try {
       await this.queueService.publishActivityEvent(payload);
     } catch (error) {
-      console.warn("Recommendation activity publish failed.", {
+      this.logger.warn("Recommendation activity publish failed.", {
         eventType,
         postingId: payload.postingId,
         requestId: payload.requestId,
-        error: error instanceof Error ? error.message : "Unknown error.",
-      });
+      }, error);
     }
   }
 

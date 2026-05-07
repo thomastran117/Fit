@@ -4,6 +4,7 @@ import {
   type ServiceContainer,
 } from "@/configuration/bootstrap/container";
 import { loadEnvironment } from "@/configuration/environment/index";
+import { disconnectLogging, loggerFactory } from "@/configuration/logging";
 
 export interface WorkerResource {
   connect: () => Promise<unknown>;
@@ -32,8 +33,11 @@ export async function bootstrapWorker(input: {
 
   const lifecycle = new WorkerLifecycle(input.name, input.resources);
   const container = initializeContainer();
+  const workerLogger = loggerFactory.forComponent("worker-runtime", "worker").child({
+    workerName: input.name,
+  });
 
-  console.log(`${input.name} started.`);
+  workerLogger.info("Worker started.");
   lifecycle.registerShutdownHandlers();
 
   await input.run(
@@ -54,6 +58,9 @@ export async function bootstrapPollingWorker(input: {
     name: input.name,
     resources: input.resources,
     run: async ({ container }, lifecycle) => {
+      const workerLogger = loggerFactory.forComponent("worker-runtime", "worker").child({
+        workerName: input.name,
+      });
       while (!lifecycle.isShuttingDown()) {
         const scope = container.createScope();
 
@@ -67,7 +74,7 @@ export async function bootstrapPollingWorker(input: {
             await sleep(input.getPollIntervalMs());
           }
         } catch (error) {
-          console.error(`${input.name} loop failed`, error);
+          workerLogger.error("Worker loop failed.", undefined, error);
           await sleep(input.getPollIntervalMs());
         } finally {
           await scope.dispose();
@@ -83,8 +90,10 @@ export function startWorker(input: {
   cleanup: () => Promise<unknown>;
 }): void {
   void input.bootstrap().catch(async (error: unknown) => {
-    console.error(`Failed to start ${input.name}`, error);
-    await input.cleanup();
+    loggerFactory.forComponent("worker-runtime", "worker").child({
+      workerName: input.name,
+    }).critical("Failed to start worker.", undefined, error);
+    await Promise.allSettled([input.cleanup(), disconnectLogging()]);
     process.exit(1);
   });
 }
@@ -128,10 +137,15 @@ export class WorkerLifecycle {
     }
 
     this.shuttingDown = true;
-    console.log(`Received ${signal}. Shutting down ${this.name}...`);
+    loggerFactory.forComponent("worker-runtime", "worker").child({
+      workerName: this.name,
+    }).info("Worker shutdown requested.", {
+      signal,
+    });
     await Promise.allSettled([
       ...this.shutdownTasks.map((task) => task()),
       ...this.resources.map((resource) => resource.disconnect()),
+      disconnectLogging(),
     ]);
     process.exit(0);
   }
