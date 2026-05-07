@@ -4,6 +4,8 @@ import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLock } from "@/features/cache/cache-locks";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PaymentProviderAdapter } from "@/features/payments/payment-provider";
 import type {
@@ -45,6 +47,7 @@ export class PaymentsService {
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
     private readonly postingsRepository: PostingsRepository,
     private readonly cacheService: CacheService,
+    private readonly postingsPublicCacheService: PostingsPublicCacheService,
   ) {}
 
   async createPaymentSession(input: CreatePaymentSessionInput): Promise<PaymentRecord> {
@@ -339,6 +342,7 @@ export class PaymentsService {
       return;
     }
 
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, postingId);
     await this.postingsRepository.enqueueSearchSync(postingId);
   }
 

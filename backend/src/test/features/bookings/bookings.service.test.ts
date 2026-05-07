@@ -5,6 +5,7 @@ import type { BookingsRepository } from "@/features/bookings/bookings.repository
 import { BookingsService } from "@/features/bookings/bookings.service";
 import type { CacheService } from "@/features/cache/cache.service";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
@@ -129,6 +130,9 @@ function createService(options?: {
       extend: jest.fn(async () => true),
     })),
   } as unknown as CacheService;
+  const postingsPublicCacheService = {
+    invalidatePublic: jest.fn(async () => 1),
+  } as unknown as PostingsPublicCacheService;
 
   const service = new BookingsService(
     bookingsRepository,
@@ -136,6 +140,7 @@ function createService(options?: {
     analyticsRepository,
     rentingsRepository,
     cacheService,
+    postingsPublicCacheService,
   );
 
   return {
@@ -162,12 +167,21 @@ function createService(options?: {
     cacheService: cacheService as unknown as {
       acquireLock: jest.Mock;
     },
+    postingsPublicCacheService: postingsPublicCacheService as unknown as {
+      invalidatePublic: jest.Mock;
+    },
   };
 }
 
 describe("BookingsService", () => {
   it("allows overlapping booking requests before payment when the posting is otherwise available", async () => {
-    const { service, bookingsRepository, analyticsRepository, postingsRepository } = createService();
+    const {
+      service,
+      bookingsRepository,
+      analyticsRepository,
+      postingsRepository,
+      postingsPublicCacheService,
+    } = createService();
 
     const result = await service.create({
       postingId: "posting-1",
@@ -189,6 +203,7 @@ describe("BookingsService", () => {
     expect(bookingsRepository.countActiveRequestsForRenterPosting).toHaveBeenCalledTimes(2);
     expect(bookingsRepository.createIfWithinActiveRequestLimit).toHaveBeenCalledTimes(1);
     expect(analyticsRepository.enqueueBookingRequestedEvent).toHaveBeenCalledTimes(1);
+    expect(postingsPublicCacheService.invalidatePublic).toHaveBeenCalledWith("posting-1");
     expect(postingsRepository.enqueueSearchSync).toHaveBeenCalledWith("posting-1");
     expect(result.id).toBe("booking-1");
   });

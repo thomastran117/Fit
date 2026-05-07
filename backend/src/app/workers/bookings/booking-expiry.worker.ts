@@ -1,5 +1,6 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
 import { databaseWorkerResource, disconnectResources } from "@/workers/shared/resources";
 import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-runtime";
 
@@ -14,6 +15,7 @@ export async function bootstrapBookingExpiryWorker(): Promise<void> {
     runOnce: async ({ scope }) => {
       const repository = scope.resolve(containerTokens.bookingsRepository);
       const postingsRepository = scope.resolve(containerTokens.postingsRepository);
+      const postingsPublicCacheService = scope.resolve(containerTokens.postingsPublicCacheService);
       const { batchSize } = environment.getBookingExpiryWorkerConfig();
       const jobs = await repository.listExpiredCandidates(batchSize);
 
@@ -22,6 +24,7 @@ export async function bootstrapBookingExpiryWorker(): Promise<void> {
           const expired = await repository.expire(job.id);
 
           if (expired) {
+            await invalidatePublicPostingProjection(postingsPublicCacheService, job.postingId);
             await postingsRepository.enqueueSearchSync(job.postingId);
           }
         } catch (error) {

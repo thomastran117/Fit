@@ -26,6 +26,8 @@ import type { BookingsRepository } from "@/features/bookings/bookings.repository
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLocks } from "@/features/cache/cache-locks";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
@@ -60,6 +62,7 @@ export class BookingsService {
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
     private readonly rentingsRepository: RentingsRepository,
     private readonly cacheService: CacheService,
+    private readonly postingsPublicCacheService: PostingsPublicCacheService,
   ) {}
 
   async create(input: CreateBookingRequestInput): Promise<BookingRequestRecord> {
@@ -118,6 +121,7 @@ export class BookingsService {
       occurredAt: created.createdAt,
       estimatedTotal: created.estimatedTotal,
     });
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, created.postingId);
     await this.postingsRepository.enqueueSearchSync(created.postingId);
 
     return created;
@@ -258,6 +262,7 @@ export class BookingsService {
       "Another request is already modifying this booking request. Please retry.",
     );
 
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, updated.postingId);
     await this.postingsRepository.enqueueSearchSync(updated.postingId);
     return updated;
   }
@@ -325,6 +330,7 @@ export class BookingsService {
       "Another request is already deciding this booking request. Please retry.",
     );
 
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, approved.postingId);
     await this.postingsRepository.enqueueSearchSync(approved.postingId);
     return approved;
   }
@@ -362,6 +368,7 @@ export class BookingsService {
       "Another request is already deciding this booking request. Please retry.",
     );
 
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, declined.postingId);
     await this.postingsRepository.enqueueSearchSync(declined.postingId);
     return declined;
   }

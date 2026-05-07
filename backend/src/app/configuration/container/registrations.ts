@@ -36,6 +36,7 @@ import { RecommendationActivityRepository } from "@/features/recommendations/rec
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
+import { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
@@ -332,6 +333,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsAnalyticsRepository,
       containerTokens.rentingsRepository,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new BookingsService(
@@ -340,6 +342,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsAnalyticsRepository),
         resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
@@ -376,6 +379,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsAnalyticsRepository,
       containerTokens.postingsRepository,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new PaymentsService(
@@ -384,6 +388,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsAnalyticsRepository),
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
@@ -401,6 +406,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsAnalyticsRepository,
       containerTokens.postingsRepository,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new RentingsService(
@@ -409,6 +415,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsAnalyticsRepository),
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
@@ -446,20 +453,38 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       ),
   });
   container.register({
+    token: containerTokens.postingsPublicCacheService,
+    lifetime: "singleton",
+    dependencies: [containerTokens.cacheService, containerTokens.postingsRepository],
+    resolve: ({ resolve }) =>
+      new PostingsPublicCacheService(
+        resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsRepository),
+      ),
+  });
+  container.register({
     token: containerTokens.postingsSearchService,
     lifetime: "scoped",
-    dependencies: [containerTokens.postingsRepository],
+    dependencies: [containerTokens.postingsRepository, containerTokens.postingsPublicCacheService],
     resolve: ({ resolve }) =>
-      new PostingsSearchService(resolve(containerTokens.postingsRepository)),
+      new PostingsSearchService(
+        resolve(containerTokens.postingsRepository),
+        resolve(containerTokens.postingsPublicCacheService),
+      ),
   });
   container.register({
     token: containerTokens.postingThumbnailService,
     lifetime: "scoped",
-    dependencies: [containerTokens.postingsRepository, containerTokens.blobService],
+    dependencies: [
+      containerTokens.postingsRepository,
+      containerTokens.blobService,
+      containerTokens.postingsPublicCacheService,
+    ],
     resolve: ({ resolve }) =>
       new PostingThumbnailService(
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.blobService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
@@ -513,6 +538,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingThumbnailQueueService,
       containerTokens.contentSanitizationService,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new PostingsService(
@@ -524,6 +550,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingThumbnailQueueService),
         resolve(containerTokens.contentSanitizationService),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({

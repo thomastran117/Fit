@@ -420,6 +420,28 @@ export function isPostingSearchIndexable(status: PostingStatus): boolean {
   return status === "published";
 }
 
+export function toPublicPostingRecord(
+  posting: PostingRecord | PublicPostingRecord,
+): PublicPostingRecord {
+  const primaryPhoto = posting.photos.find((photo) => photo.position === 0) ?? posting.photos[0];
+
+  return {
+    ...posting,
+    primaryPhotoUrl: primaryPhoto?.blobUrl,
+    primaryThumbnailUrl: primaryPhoto?.thumbnailBlobUrl,
+    effectiveMaxBookingDurationDays:
+      posting.maxBookingDurationDays ?? DEFAULT_MAX_BOOKING_DURATION_DAYS,
+    location: {
+      city: posting.location.city,
+      region: posting.location.region,
+      country: posting.location.country,
+      postalCode: posting.location.postalCode,
+      latitude: Number(posting.location.latitude.toFixed(2)),
+      longitude: Number(posting.location.longitude.toFixed(2)),
+    },
+  };
+}
+
 export interface PostingSearchOutboxRecord {
   id: string;
   postingId?: string;

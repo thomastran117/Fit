@@ -1,5 +1,7 @@
 import sharp from "sharp";
 import type { BlobService } from "@/features/blob/blob.service";
+import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 
 const THUMBNAIL_WIDTH = 640;
@@ -10,6 +12,7 @@ export class PostingThumbnailService {
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly blobService: BlobService,
+    private readonly postingsPublicCacheService: PostingsPublicCacheService,
   ) {}
 
   async generateForPosting(postingId: string): Promise<void> {
@@ -46,6 +49,7 @@ export class PostingThumbnailService {
       thumbnailBlobName: uploaded.blobName,
       thumbnailBlobUrl: uploaded.blobUrl,
     });
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, postingId);
     await this.postingsRepository.enqueueSearchSync(postingId);
   }
 }

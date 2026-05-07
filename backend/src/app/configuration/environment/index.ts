@@ -55,6 +55,12 @@ type RawEnvironmentValues = {
   POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_THUMBNAIL_PREFETCH?: string;
   POSTINGS_THUMBNAIL_MAX_ATTEMPTS?: string;
+  POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS?: string;
+  POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS?: string;
+  POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS?: string;
+  POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS?: string;
+  POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS?: string;
+  POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS?: string;
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
@@ -234,6 +240,14 @@ export interface AppEnvironment {
       batchSize: number;
     };
   };
+  postingsCache: {
+    freshTtlSeconds: number;
+    staleTtlSeconds: number;
+    rebuildLockTtlMs: number;
+    followerWaitTimeoutMs: number;
+    followerPollIntervalMs: number;
+    negativeTtlSeconds: number;
+  };
   blobStorage: {
     connectionString?: string;
     containerName?: string;
@@ -315,6 +329,12 @@ const RAW_ENVIRONMENT_VARIABLE_NAMES: EnvironmentVariableName[] = [
   "POSTINGS_ANALYTICS_OUTBOX_POLL_INTERVAL_MS",
   "POSTINGS_THUMBNAIL_PREFETCH",
   "POSTINGS_THUMBNAIL_MAX_ATTEMPTS",
+  "POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS",
+  "POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS",
+  "POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS",
+  "POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS",
+  "POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS",
+  "POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS",
   "POSTINGS_SEARCH_INDEXER_PREFETCH",
   "POSTINGS_SEARCH_INDEXER_BATCH_SIZE",
   "POSTINGS_SEARCH_INDEXER_FLUSH_INTERVAL_MS",
@@ -370,6 +390,12 @@ const DEFAULT_CAPTCHA_ALLOWED_HOST = "challenges.cloudflare.com";
 const DEFAULT_REDIS_HOST = "127.0.0.1";
 const DEFAULT_REFRESH_TOKEN_CACHE_PREFIX = "auth:refresh";
 const DEFAULT_ELASTICSEARCH_POSTINGS_INDEX = "postings";
+const DEFAULT_POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS = 15;
+const DEFAULT_POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS = 60;
+const DEFAULT_POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS = 5_000;
+const DEFAULT_POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS = 150;
+const DEFAULT_POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS = 15;
+const DEFAULT_POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS = 10;
 
 function normalizeRawEnvironment(source: NodeJS.ProcessEnv): RawEnvironmentValues {
   const raw: RawEnvironmentValues = {};
@@ -969,6 +995,68 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
         }),
       },
     },
+    postingsCache: {
+      freshTtlSeconds: parseNumber(
+        raw,
+        "POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS",
+        DEFAULT_POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      staleTtlSeconds: parseNumber(
+        raw,
+        "POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS",
+        DEFAULT_POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS,
+        errors,
+        {
+          integer: true,
+          min: DEFAULT_POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS,
+        },
+      ),
+      rebuildLockTtlMs: parseNumber(
+        raw,
+        "POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS",
+        DEFAULT_POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      followerWaitTimeoutMs: parseNumber(
+        raw,
+        "POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS",
+        DEFAULT_POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      followerPollIntervalMs: parseNumber(
+        raw,
+        "POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS",
+        DEFAULT_POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+      negativeTtlSeconds: parseNumber(
+        raw,
+        "POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS",
+        DEFAULT_POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS,
+        errors,
+        {
+          integer: true,
+          min: 1,
+        },
+      ),
+    },
     blobStorage: {
       connectionString: raw.AZURE_STORAGE_CONNECTION_STRING,
       containerName: raw.AZURE_STORAGE_CONTAINER_NAME,
@@ -1030,6 +1118,21 @@ function parseEnvironmentState(source: NodeJS.ProcessEnv): EnvironmentState {
           : "https://connect.squareupsandbox.com",
     },
   };
+
+  if (config.postingsCache.staleTtlSeconds < config.postingsCache.freshTtlSeconds) {
+    errors.push(
+      "POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS must be greater than or equal to POSTINGS_PUBLIC_CACHE_FRESH_TTL_SECONDS.",
+    );
+  }
+
+  if (
+    config.postingsCache.followerPollIntervalMs >
+    config.postingsCache.followerWaitTimeoutMs
+  ) {
+    errors.push(
+      "POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS must be less than or equal to POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS.",
+    );
+  }
 
   if (errors.length > 0) {
     throw new Error(
@@ -1183,6 +1286,10 @@ class EnvironmentManager {
 
   getPayoutReleaseWorkerConfig(): AppEnvironment["workers"]["payoutRelease"] {
     return this.get().workers.payoutRelease;
+  }
+
+  getPostingsPublicCacheConfig(): AppEnvironment["postingsCache"] {
+    return this.get().postingsCache;
   }
 
   getBlobStorageConfig(): AppEnvironment["blobStorage"] {

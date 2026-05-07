@@ -4,6 +4,7 @@ import { BaseRepository } from "@/features/base/base.repository";
 import {
   DEFAULT_MAX_BOOKING_DURATION_DAYS,
   isPostingSearchIndexable,
+  toPublicPostingRecord,
 } from "@/features/postings/postings.model";
 import type {
   BatchPublicPostingsInput,
@@ -110,7 +111,6 @@ interface LockRow {
   released?: bigint | number | boolean | null;
 }
 
-const PUBLIC_LOCATION_PRECISION = 2;
 const SEARCH_REINDEX_START_LOCK_NAME = "rentify:search-reindex:start";
 const postingInclude = {
   photos: {
@@ -596,6 +596,36 @@ export class PostingsRepository extends BaseRepository {
     );
 
     return posting ? this.mapPosting(posting) : null;
+  }
+
+  async findPublicReadMetadataById(id: string): Promise<{
+    id: string;
+    ownerId: string;
+    status: PostingStatus;
+    archivedAt?: string;
+  } | null> {
+    const posting = await this.executeAsync(() =>
+      this.prisma.posting.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          ownerId: true,
+          status: true,
+          archivedAt: true,
+        },
+      }),
+    );
+
+    return posting
+      ? {
+          id: posting.id,
+          ownerId: posting.ownerId,
+          status: posting.status as PostingStatus,
+          archivedAt: posting.archivedAt?.toISOString(),
+        }
+      : null;
   }
 
   async listByOwner(input: ListOwnerPostingsInput): Promise<ListOwnerPostingsResult> {
@@ -2007,22 +2037,7 @@ export class PostingsRepository extends BaseRepository {
   }
 
   private mapPublicPosting(posting: PostingPersistence): PublicPostingRecord {
-    const record = this.mapPosting(posting);
-    const primaryPhoto = record.photos.find((photo) => photo.position === 0) ?? record.photos[0];
-
-    return {
-      ...record,
-      primaryPhotoUrl: primaryPhoto?.blobUrl,
-      primaryThumbnailUrl: primaryPhoto?.thumbnailBlobUrl,
-      location: {
-        city: record.location.city,
-        region: record.location.region,
-        country: record.location.country,
-        postalCode: record.location.postalCode,
-        latitude: this.roundCoordinate(record.location.latitude),
-        longitude: this.roundCoordinate(record.location.longitude),
-      },
-    };
+    return toPublicPostingRecord(this.mapPosting(posting));
   }
 
   private mapSearchDocument(posting: PostingPersistence): PostingSearchDocument {
@@ -2185,10 +2200,6 @@ export class PostingsRepository extends BaseRepository {
       createdAt: run.createdAt.toISOString(),
       updatedAt: run.updatedAt.toISOString(),
     };
-  }
-
-  private roundCoordinate(value: number): number {
-    return Number(value.toFixed(PUBLIC_LOCATION_PRECISION));
   }
 
   private createPagination(page: number, pageSize: number, total: number) {
