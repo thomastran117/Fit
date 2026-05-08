@@ -1,6 +1,7 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import type { BookingsController } from "@/features/bookings/bookings.controller";
 import type { PostingsController } from "@/features/postings/postings.controller";
+import type { RecommendationsController } from "@/features/recommendations/recommendations.controller";
 import type { RouteModule } from "@/configuration/bootstrap/routes/types";
 
 export const postingsOwnerRouteModule: RouteModule = {
@@ -119,6 +120,10 @@ export const postingsPublicRouteModule: RouteModule = {
     app.get(
       "/postings",
       resolveHandler<PostingsController>(containerTokens.postingsController, "search"),
+    );
+    app.get(
+      "/postings/recommendations",
+      resolveHandler<RecommendationsController>(containerTokens.recommendationsController, "list"),
     );
     app.get(
       "/postings/batch",

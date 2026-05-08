@@ -35,6 +35,9 @@ import { RecommendationActivityQueueService } from "@/features/recommendations/r
 import { RecommendationActivityRepository } from "@/features/recommendations/recommendation-activity.repository";
 import { RecommendationPrecomputeRepository } from "@/features/recommendations/recommendation-precompute.repository";
 import { RecommendationPrecomputeService } from "@/features/recommendations/recommendation-precompute.service";
+import { RecommendationQueryRepository } from "@/features/recommendations/recommendation-query.repository";
+import { RecommendationQueryService } from "@/features/recommendations/recommendation-query.service";
+import { RecommendationsController } from "@/features/recommendations/recommendations.controller";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
@@ -322,6 +325,32 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       new RecommendationPrecomputeService(
         resolve(containerTokens.recommendationPrecomputeRepository),
       ),
+  });
+  container.register({
+    token: containerTokens.recommendationQueryRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new RecommendationQueryRepository(),
+  });
+  container.register({
+    token: containerTokens.recommendationQueryService,
+    lifetime: "scoped",
+    dependencies: [
+      containerTokens.recommendationQueryRepository,
+      containerTokens.postingsPublicCacheService,
+    ],
+    resolve: ({ resolve }) =>
+      new RecommendationQueryService(
+        resolve(containerTokens.recommendationQueryRepository),
+        resolve(containerTokens.postingsPublicCacheService),
+      ),
+  });
+  container.register({
+    token: containerTokens.recommendationsController,
+    lifetime: "scoped",
+    dependencies: [containerTokens.recommendationQueryService],
+    resolve: ({ resolve }) =>
+      new RecommendationsController(resolve(containerTokens.recommendationQueryService)),
   });
   container.register({
     token: containerTokens.postingsRepository,

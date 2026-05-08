@@ -35,6 +35,9 @@ import { RecommendationActivityQueueService } from "@/features/recommendations/r
 import { RecommendationActivityRepository } from "@/features/recommendations/recommendation-activity.repository";
 import { RecommendationPrecomputeRepository } from "@/features/recommendations/recommendation-precompute.repository";
 import { RecommendationPrecomputeService } from "@/features/recommendations/recommendation-precompute.service";
+import { RecommendationQueryRepository } from "@/features/recommendations/recommendation-query.repository";
+import { RecommendationQueryService } from "@/features/recommendations/recommendation-query.service";
+import { RecommendationsController } from "@/features/recommendations/recommendations.controller";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
@@ -112,6 +115,15 @@ export const containerTokens = {
   ),
   recommendationPrecomputeService: createServiceToken<RecommendationPrecomputeService>(
     "RecommendationPrecomputeService",
+  ),
+  recommendationQueryRepository: createServiceToken<RecommendationQueryRepository>(
+    "RecommendationQueryRepository",
+  ),
+  recommendationQueryService: createServiceToken<RecommendationQueryService>(
+    "RecommendationQueryService",
+  ),
+  recommendationsController: createServiceToken<RecommendationsController>(
+    "RecommendationsController",
   ),
   postingsRepository: createServiceToken<PostingsRepository>("PostingsRepository"),
   rentingsRepository: createServiceToken<RentingsRepository>("RentingsRepository"),
