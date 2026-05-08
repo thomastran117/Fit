@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
 
 const REDACTED_QUERY_VALUE = "[REDACTED]";
+
 const SENSITIVE_EXACT_QUERY_KEYS = new Set([
   "access_token",
   "api_key",
@@ -30,38 +31,9 @@ const SENSITIVE_EXACT_QUERY_KEYS = new Set([
   "state",
   "token",
 ]);
-const SENSITIVE_QUERY_KEY_PATTERN = /(token|secret|password|passwd|signature|assertion|nonce|otp|jwt|saml)/i;
 
-function normalizeQueryKey(key: string): string {
-  return key
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase();
-}
-
-function isSensitiveQueryKey(key: string): boolean {
-  const normalized = normalizeQueryKey(key);
-
-  return SENSITIVE_EXACT_QUERY_KEYS.has(normalized) || SENSITIVE_QUERY_KEY_PATTERN.test(normalized);
-}
-
-function getSanitizedPathWithQuery(request: Request): string {
-  const url = new URL(request.url);
-
-  for (const key of new Set(url.searchParams.keys())) {
-    if (!isSensitiveQueryKey(key)) {
-      continue;
-    }
-
-    url.searchParams.delete(key);
-    url.searchParams.append(key, REDACTED_QUERY_VALUE);
-  }
-
-  const search = url.searchParams.toString();
-  return `${url.pathname}${search ? `?${search}` : ""}`;
-}
+const SENSITIVE_QUERY_KEY_PATTERN =
+  /(token|secret|password|passwd|signature|assertion|nonce|otp|jwt|saml)/i;
 
 const colors = {
   reset: "\x1b[0m",
@@ -73,14 +45,64 @@ const colors = {
   magenta: "\x1b[35m",
 };
 
-function getStatusColor(status: number) {
+function shouldUseColors(): boolean {
+  // Keeps this safe for non-Node runtimes.
+  if (typeof process === "undefined") {
+    return false;
+  }
+
+  return process.env.NO_COLOR !== "1" && process.env.FORCE_COLOR !== "0";
+}
+
+function colorize(value: string, color: string): string {
+  if (!shouldUseColors()) {
+    return value;
+  }
+
+  return `${color}${value}${colors.reset}`;
+}
+
+function normalizeQueryKey(key: string): string {
+  return key
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
+function isSensitiveQueryKey(key: string): boolean {
+  const normalizedKey = normalizeQueryKey(key);
+
+  return (
+    SENSITIVE_EXACT_QUERY_KEYS.has(normalizedKey) ||
+    SENSITIVE_QUERY_KEY_PATTERN.test(normalizedKey)
+  );
+}
+
+function getSanitizedPathWithQuery(request: Request): string {
+  const url = new URL(request.url);
+
+  for (const key of new Set(url.searchParams.keys())) {
+    if (isSensitiveQueryKey(key)) {
+      url.searchParams.set(key, REDACTED_QUERY_VALUE);
+    }
+  }
+
+  const queryString = url.searchParams.toString();
+
+  return queryString ? `${url.pathname}?${queryString}` : url.pathname;
+}
+
+function getStatusColor(status: number): string {
   if (status >= 500) return colors.red;
   if (status >= 400) return colors.yellow;
   if (status >= 300) return colors.cyan;
+
   return colors.green;
 }
 
-function getMethodColor(method: string) {
+function getMethodColor(method: string): string {
   switch (method) {
     case "GET":
       return colors.green;
@@ -96,10 +118,54 @@ function getMethodColor(method: string) {
   }
 }
 
-function getLatencyColor(ms: number) {
-  if (ms > 1000) return colors.red;
-  if (ms > 300) return colors.yellow;
+function getDurationColor(durationMs: number): string {
+  if (durationMs > 1000) return colors.red;
+  if (durationMs > 300) return colors.yellow;
+
   return colors.green;
+}
+
+function getLogLevel(status: number): "info" | "warn" | "error" {
+  if (status >= 500) return "error";
+  if (status >= 400) return "warn";
+
+  return "info";
+}
+
+function roundDurationMs(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
+
+function formatHttpLogLine(input: {
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  requestId: string;
+  ip: string;
+  format?: string;
+}): string {
+  const method = colorize(input.method.padEnd(6), getMethodColor(input.method));
+  const status = colorize(String(input.status), getStatusColor(input.status));
+  const duration = colorize(`${input.durationMs}ms`, getDurationColor(input.durationMs));
+
+  const requestId = colorize(`req=${input.requestId}`, colors.gray);
+  const ip = colorize(`ip=${input.ip}`, colors.gray);
+  const format = input.format ? colorize(`format=${input.format}`, colors.gray) : undefined;
+
+  return [
+    "HTTP",
+    method,
+    input.path,
+    "->",
+    status,
+    duration,
+    requestId,
+    ip,
+    format,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (context, next) => {
@@ -108,8 +174,9 @@ export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (contex
   try {
     await next();
   } finally {
-    const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+    const durationMs = roundDurationMs(startedAt);
 
+    const logger = context.get("logger");
     const client = context.get("client");
     const outputFormat = context.get("outputFormat");
     const requestId = context.get("requestId");
@@ -118,25 +185,26 @@ export const httpLoggingMiddleware = createMiddleware<AppBindings>(async (contex
     const path = getSanitizedPathWithQuery(context.req.raw);
     const status = context.res.status;
 
-    const requestLogger = context.get("logger");
-    const logMethod =
-      status >= 500
-        ? requestLogger.error.bind(requestLogger)
-        : status >= 400
-          ? requestLogger.warn.bind(requestLogger)
-          : requestLogger.info.bind(requestLogger);
+    const logLevel = getLogLevel(status);
 
-    logMethod("HTTP request completed.", {
+    const logLine = formatHttpLogLine({
+      method,
+      path,
+      status,
+      durationMs,
+      requestId: requestId ?? "unknown",
+      ip: client?.ip ?? "unknown",
+      format: outputFormat,
+    });
+
+    logger[logLevel](logLine, {
       durationMs,
       format: outputFormat,
       ip: client?.ip ?? "unknown",
-      latencyColor: getLatencyColor(durationMs),
       method,
-      methodColor: getMethodColor(method),
       path,
       requestId: requestId ?? "unknown",
       status,
-      statusColor: getStatusColor(status),
     });
   }
 });
