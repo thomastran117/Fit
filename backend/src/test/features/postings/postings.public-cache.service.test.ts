@@ -141,7 +141,7 @@ function createEnvelope(
 
   return {
     kind: posting ? "hit" : "miss",
-    ...(posting ? { posting } : {}),
+    ...(posting ? { value: posting } : {}),
     cachedAt: new Date(now).toISOString(),
     freshUntil: new Date(now + options.freshOffsetMs).toISOString(),
     staleUntil: new Date(now + options.staleOffsetMs).toISOString(),
@@ -171,6 +171,7 @@ function createService(options?: {
       followerWaitTimeoutMs: 50,
       followerPollIntervalMs: 5,
       negativeTtlSeconds: 5,
+      ttlJitterRatio: 0,
       ...options?.config,
     },
   );
@@ -205,32 +206,23 @@ describe("PostingsPublicCacheService", () => {
   });
 
   it("falls back to a direct database read when the leader rebuild does not finish in time", async () => {
-    const deferred = createDeferred<BatchPostingsResult<PublicPostingRecord>>();
-    const { batchFindPublic, service } = createService({
+    const { batchFindPublic, cacheService, service } = createService({
       batchFindPublic: jest
         .fn()
-        .mockImplementationOnce(() => deferred.promise)
-        .mockResolvedValueOnce(createBatchResult([createPublicPosting({ name: "Follower read" })])),
+        .mockResolvedValue(createBatchResult([createPublicPosting({ name: "Follower read" })])),
       config: {
         followerWaitTimeoutMs: 20,
         followerPollIntervalMs: 5,
       },
     });
-
-    const leaderRead = service.getPublicById("posting-1");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 1);
-    });
+    const externalLock = await cacheService.acquireLock("postings:public:rebuild:posting-1", 5_000);
 
     await expect(service.getPublicById("posting-1")).resolves.toMatchObject({
       name: "Follower read",
     });
 
-    deferred.resolve(createBatchResult([createPublicPosting({ name: "Leader read" })]));
-    await expect(leaderRead).resolves.toMatchObject({
-      name: "Leader read",
-    });
-    expect(batchFindPublic).toHaveBeenCalledTimes(2);
+    expect(batchFindPublic).toHaveBeenCalledTimes(1);
+    await externalLock?.release();
   });
 
   it("serves stale data while triggering a single background refresh", async () => {

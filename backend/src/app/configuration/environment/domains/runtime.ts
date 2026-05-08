@@ -5,6 +5,7 @@ import {
   DEFAULT_POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS,
   DEFAULT_POSTINGS_PUBLIC_CACHE_REBUILD_LOCK_TTL_MS,
   DEFAULT_POSTINGS_PUBLIC_CACHE_STALE_TTL_SECONDS,
+  DEFAULT_POSTINGS_PUBLIC_CACHE_TTL_JITTER_RATIO,
 } from "@/configuration/environment/constants";
 import { parseBoolean, parseNumber } from "@/configuration/environment/shared";
 import type {
@@ -313,6 +314,15 @@ export function buildPostingsCacheConfig(
         min: 1,
       },
     ),
+    ttlJitterRatio: parseNumber(
+      raw,
+      "POSTINGS_PUBLIC_CACHE_TTL_JITTER_RATIO",
+      DEFAULT_POSTINGS_PUBLIC_CACHE_TTL_JITTER_RATIO,
+      errors,
+      {
+        min: 0,
+      },
+    ),
   };
 }
 
@@ -333,5 +343,9 @@ export function validateRuntimeConfig(
     errors.push(
       "POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS must be less than or equal to POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS.",
     );
+  }
+
+  if (config.postingsCache.ttlJitterRatio >= 1) {
+    errors.push("POSTINGS_PUBLIC_CACHE_TTL_JITTER_RATIO must be less than 1.");
   }
 }
