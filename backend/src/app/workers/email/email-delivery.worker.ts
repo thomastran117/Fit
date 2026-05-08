@@ -1,5 +1,6 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import {
   disconnectResources,
   rabbitMqWorkerResource,
@@ -8,6 +9,9 @@ import { bootstrapWorker, startWorker } from "@/workers/shared/worker-runtime";
 
 const workerName = "Email delivery worker";
 const workerResources = [rabbitMqWorkerResource];
+const workerLogger = loggerFactory.forComponent("email-delivery.worker", "worker").child({
+  workerName,
+});
 
 export async function bootstrapEmailDeliveryWorker(): Promise<void> {
   await bootstrapWorker({
@@ -30,12 +34,11 @@ export async function bootstrapEmailDeliveryWorker(): Promise<void> {
             const errorMessage =
               error instanceof Error ? error.message : "Unknown email delivery error.";
 
-            console.error("Failed to deliver email job", {
+            workerLogger.error("Failed to deliver email job.", {
               jobId: payload.jobId,
               kind: payload.kind,
               attempt,
-              error,
-            });
+            }, error);
 
             if (attempt >= maxAttempts) {
               await emailQueueService.publishDeadLetterJob({
@@ -49,7 +52,7 @@ export async function bootstrapEmailDeliveryWorker(): Promise<void> {
             channel.ack(message);
 
             if (attempt >= maxAttempts) {
-              console.error("Email job moved to dead-letter queue", {
+              workerLogger.error("Email job moved to dead-letter queue.", {
                 jobId: payload.jobId,
                 kind: payload.kind,
                 error: errorMessage,

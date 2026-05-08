@@ -6,10 +6,17 @@ import type {
   PostingAvailabilityBlockInput,
   PostingAvailabilityBlockRecord,
   PostingRecord,
+  PublicPostingRecord,
   UpsertPostingInput,
 } from "@/features/postings/postings.model";
+import {
+  isPostingPubliclyVisible,
+  toPublicPostingRecord,
+} from "@/features/postings/postings.model";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
+import type { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
@@ -62,6 +69,20 @@ class FakePostingsRepository {
     return {
       ...this.posting,
       id,
+    };
+  }
+
+  async findPublicReadMetadataById(id: string): Promise<{
+    id: string;
+    ownerId: string;
+    status: PostingRecord["status"];
+    archivedAt?: string;
+  }> {
+    return {
+      id,
+      ownerId: this.posting.ownerId,
+      status: this.posting.status,
+      archivedAt: this.posting.archivedAt,
     };
   }
 
@@ -178,11 +199,49 @@ class FakeRentingsRepository {
   }
 }
 
+class FakePostingsPublicCacheService {
+  invalidatedPostingIds: string[] = [];
+  posting: PublicPostingRecord | null = null;
+
+  async getPublicById(): Promise<PublicPostingRecord | null> {
+    return this.posting;
+  }
+
+  async getPublicByIds(ids: string[]): Promise<{ postings: PublicPostingRecord[]; missingIds: string[] }> {
+    if (!this.posting) {
+      return {
+        postings: [],
+        missingIds: ids,
+      };
+    }
+
+    const byId = new Map([[this.posting.id, this.posting]]);
+
+    return {
+      postings: ids.map((id) => byId.get(id)).filter(Boolean) as PublicPostingRecord[],
+      missingIds: ids.filter((id) => !byId.has(id)),
+    };
+  }
+
+  async invalidatePublic(postingId: string): Promise<number> {
+    this.invalidatedPostingIds.push(postingId);
+    return this.invalidatedPostingIds.length;
+  }
+}
+
 function createService(
   repository: FakePostingsRepository,
   postingsReviewsRepository = new FakePostingsReviewsRepository(),
   rentingsRepository = new FakeRentingsRepository(),
 ): PostingsService {
+  return createServiceHarness(repository, postingsReviewsRepository, rentingsRepository).service;
+}
+
+function createServiceHarness(
+  repository: FakePostingsRepository,
+  postingsReviewsRepository = new FakePostingsReviewsRepository(),
+  rentingsRepository = new FakeRentingsRepository(),
+) {
   const searchService = {} as PostingsSearchService;
   const blobService = {
     isConfigured: () => true,
@@ -196,16 +255,29 @@ function createService(
       extend: jest.fn(async () => true),
     })),
   } as unknown as CacheService;
+  const postingThumbnailQueueService = {
+    enqueuePostingThumbnailJob: jest.fn(async () => undefined),
+  };
+  const postingsPublicCacheService = new FakePostingsPublicCacheService();
+  postingsPublicCacheService.posting = isPostingPubliclyVisible(repository.posting)
+    ? toPublicPostingRecord(repository.posting)
+    : null;
 
-  return new PostingsService(
-    repository as unknown as PostingsRepository,
-    searchService,
-    postingsReviewsRepository as unknown as PostingsReviewsRepository,
-    rentingsRepository as unknown as RentingsRepository,
-    blobService,
-    new ContentSanitizationService(),
-    cacheService,
-  );
+  return {
+    service: new PostingsService(
+      repository as unknown as PostingsRepository,
+      searchService,
+      postingsReviewsRepository as unknown as PostingsReviewsRepository,
+      rentingsRepository as unknown as RentingsRepository,
+      blobService,
+      postingThumbnailQueueService as unknown as PostingThumbnailQueueService,
+      new ContentSanitizationService(),
+      cacheService,
+      postingsPublicCacheService as unknown as PostingsPublicCacheService,
+    ),
+    postingThumbnailQueueService,
+    postingsPublicCacheService,
+  };
 }
 
 function createValidInput(): UpsertPostingInput {
@@ -271,6 +343,8 @@ function buildPostingRecord(input: UpsertPostingInput): PostingRecord {
       id: `photo-${index + 1}`,
       blobUrl: photo.blobUrl,
       blobName: photo.blobName,
+      thumbnailBlobUrl: photo.thumbnailBlobUrl,
+      thumbnailBlobName: photo.thumbnailBlobName,
       position: photo.position,
       createdAt: "2026-04-18T00:00:00.000Z",
       updatedAt: "2026-04-18T00:00:00.000Z",
@@ -373,13 +447,16 @@ describe("PostingsService", () => {
 
   it("accepts clean content and persists normalized data", async () => {
     const repository = new FakePostingsRepository();
-    const service = createService(repository);
+    const { service, postingThumbnailQueueService, postingsPublicCacheService } =
+      createServiceHarness(repository);
     const input = createValidInput();
     input.tags = ["  Loft  ", "loft", "Transit"];
 
     const created = await service.createDraft(input);
 
     expect(repository.createCalls).toBe(1);
+    expect(postingThumbnailQueueService.enqueuePostingThumbnailJob).toHaveBeenCalledWith("posting-1");
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual(["posting-1"]);
     expect(created.tags).toEqual(["loft", "transit"]);
   });
 
@@ -390,6 +467,11 @@ describe("PostingsService", () => {
       id: "posting-source",
       status: "published",
       publishedAt: "2026-04-21T00:00:00.000Z",
+      photos: repository.posting.photos.map((photo) => ({
+        ...photo,
+        thumbnailBlobName: "postings/thumbnails/photo-1.webp",
+        thumbnailBlobUrl: "https://example.blob.core.windows.net/postings/thumbnails/photo-1.webp",
+      })),
       availabilityBlocks: [
         buildAvailabilityBlockRecord("hold-1", {
           startAt: "2026-06-10T00:00:00.000Z",
@@ -405,7 +487,8 @@ describe("PostingsService", () => {
         note: "Owner stay",
       }),
     ];
-    const service = createService(repository);
+    const { service, postingThumbnailQueueService, postingsPublicCacheService } =
+      createServiceHarness(repository);
 
     const duplicated = await service.duplicate("posting-source", "owner-1");
 
@@ -429,6 +512,8 @@ describe("PostingsService", () => {
       photos: repository.posting.photos.map((photo) => ({
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
+        thumbnailBlobUrl: photo.thumbnailBlobUrl,
+        thumbnailBlobName: photo.thumbnailBlobName,
         position: photo.position,
       })),
       availabilityBlocks: repository.ownerBlocks.map((block) => ({
@@ -441,6 +526,10 @@ describe("PostingsService", () => {
     expect(duplicated.status).toBe("draft");
     expect(duplicated.publishedAt).toBeUndefined();
     expect(duplicated.photos).toHaveLength(repository.posting.photos.length);
+    expect(postingThumbnailQueueService.enqueuePostingThumbnailJob).toHaveBeenCalledWith(
+      duplicated.id,
+    );
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual([duplicated.id]);
     expect(duplicated.availabilityBlocks).toEqual([
       expect.objectContaining({
         startAt: "2026-07-01T00:00:00.000Z",
@@ -470,7 +559,7 @@ describe("PostingsService", () => {
       status: "published",
       publishedAt: "2026-04-21T00:00:00.000Z",
     };
-    const service = createService(repository);
+    const { service, postingsPublicCacheService } = createServiceHarness(repository);
 
     const paused = await service.pause("posting-1", "owner-1");
 
@@ -478,6 +567,7 @@ describe("PostingsService", () => {
     expect(paused.publishedAt).toBe("2026-04-21T00:00:00.000Z");
     expect(paused.pausedAt).toBeDefined();
     expect(repository.pauseCalls).toBe(1);
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual(["posting-1"]);
   });
 
   it("unpauses a paused posting without changing its original published timestamp", async () => {
@@ -489,7 +579,8 @@ describe("PostingsService", () => {
       publishedAt: "2026-04-21T00:00:00.000Z",
       pausedAt: "2026-04-23T00:00:00.000Z",
     };
-    const service = createService(repository);
+    const { service, postingThumbnailQueueService, postingsPublicCacheService } =
+      createServiceHarness(repository);
 
     const unpaused = await service.unpause("posting-1", "owner-1");
 
@@ -497,6 +588,30 @@ describe("PostingsService", () => {
     expect(unpaused.publishedAt).toBe("2026-04-21T00:00:00.000Z");
     expect(unpaused.pausedAt).toBeUndefined();
     expect(repository.unpauseCalls).toBe(1);
+    expect(postingThumbnailQueueService.enqueuePostingThumbnailJob).toHaveBeenCalledWith(
+      "posting-1",
+    );
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual(["posting-1"]);
+  });
+
+  it("publishes a draft posting and enqueues thumbnail generation", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "draft",
+    };
+    const { service, postingThumbnailQueueService, postingsPublicCacheService } =
+      createServiceHarness(repository);
+
+    const published = await service.publish("posting-1", "owner-1");
+
+    expect(published.status).toBe("published");
+    expect(repository.publishCalls).toBe(1);
+    expect(postingThumbnailQueueService.enqueuePostingThumbnailJob).toHaveBeenCalledWith(
+      "posting-1",
+    );
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual(["posting-1"]);
   });
 
   it("rejects invalid posting lifecycle transitions", async () => {
@@ -540,6 +655,47 @@ describe("PostingsService", () => {
 
     const ownerView = await service.getById("posting-1", "owner-1");
     expect(ownerView.status).toBe("paused");
+  });
+
+  it("bypasses the public cache for owner getById reads", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "draft",
+      ownerId: "owner-1",
+    };
+    const { service, postingsPublicCacheService } = createServiceHarness(repository);
+    postingsPublicCacheService.posting = null;
+
+    const posting = await service.getById("posting-1", "owner-1");
+
+    expect(posting.status).toBe("draft");
+    expect(repository.findByIdCalls).toBe(1);
+  });
+
+  it("uses the cached public projection for anonymous getById reads", async () => {
+    const repository = new FakePostingsRepository();
+    repository.posting = {
+      ...repository.posting,
+      id: "posting-1",
+      status: "published",
+      ownerId: "owner-1",
+      publishedAt: "2026-04-21T00:00:00.000Z",
+    };
+    const { service, postingsPublicCacheService } = createServiceHarness(repository);
+    postingsPublicCacheService.posting = {
+      ...toPublicPostingRecord(repository.posting),
+      name: "Cached name",
+    };
+
+    const posting = await service.getById("posting-1");
+
+    expect(posting).toMatchObject({
+      id: "posting-1",
+      name: "Cached name",
+    });
+    expect(repository.findByIdCalls).toBe(0);
   });
 
   it("includes viewer review state for an eligible renter on public getById", async () => {
@@ -663,7 +819,7 @@ describe("PostingsService", () => {
 
   it("creates an owner availability block after validating conflicts", async () => {
     const repository = new FakePostingsRepository();
-    const service = createService(repository);
+    const { service, postingsPublicCacheService } = createServiceHarness(repository);
 
     const created = await service.createOwnerAvailabilityBlock("posting-1", "owner-1", {
       startAt: "2026-06-01T00:00:00.000Z",
@@ -676,6 +832,7 @@ describe("PostingsService", () => {
       note: "maintenance",
     });
     expect(repository.createOwnerAvailabilityBlockCalls).toBe(1);
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual(["posting-1"]);
   });
 
   it("rejects owner availability blocks that overlap another owner block", async () => {
@@ -729,7 +886,7 @@ describe("PostingsService", () => {
   it("updates an owner availability block while excluding itself from overlap checks", async () => {
     const repository = new FakePostingsRepository();
     repository.ownerOverlap = true;
-    const service = createService(repository);
+    const { service, postingsPublicCacheService } = createServiceHarness(repository);
 
     const updated = await service.updateOwnerAvailabilityBlock("posting-1", "owner-1", "block-1", {
       startAt: "2026-05-01T00:00:00.000Z",
@@ -738,6 +895,7 @@ describe("PostingsService", () => {
 
     expect(updated.id).toBe("block-1");
     expect(repository.updateOwnerAvailabilityBlockCalls).toBe(1);
+    expect(postingsPublicCacheService.invalidatedPostingIds).toEqual(["posting-1"]);
   });
 
   it("does not update or delete non-owner availability blocks", async () => {
@@ -768,14 +926,23 @@ describe("PostingsService", () => {
     const cacheService = {
       acquireLock: jest.fn(async () => null),
     } as unknown as CacheService;
+    const postingThumbnailQueueService = {
+      enqueuePostingThumbnailJob: jest.fn(async () => undefined),
+    } as unknown as PostingThumbnailQueueService;
+    const postingsPublicCacheService = new FakePostingsPublicCacheService();
+    postingsPublicCacheService.posting = isPostingPubliclyVisible(repository.posting)
+      ? toPublicPostingRecord(repository.posting)
+      : null;
     const service = new PostingsService(
       repository as unknown as PostingsRepository,
       searchService,
       {} as unknown as PostingsReviewsRepository,
       {} as unknown as RentingsRepository,
       blobService,
+      postingThumbnailQueueService,
       new ContentSanitizationService(),
       cacheService,
+      postingsPublicCacheService as unknown as PostingsPublicCacheService,
     );
 
     await expect(

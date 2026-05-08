@@ -1,5 +1,6 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import {
   disconnectResources,
   searchBrokerWorkerResources,
@@ -14,6 +15,9 @@ import {
 const workerName = "Search maintainer worker";
 const workerResources = searchBrokerWorkerResources;
 const MIN_IDLE_SLEEP_MS = 100;
+const workerLogger = loggerFactory.forComponent("search-maintainer.worker", "worker").child({
+  workerName,
+});
 
 export async function bootstrapSearchMaintainerWorker(): Promise<void> {
   await bootstrapWorker({
@@ -80,7 +84,10 @@ async function runScheduledTask(
   try {
     return (await task({ scope })) ?? 0;
   } catch (error) {
-    console.error(`${parentWorkerName} ${taskName} task failed`, error);
+    workerLogger.error("Scheduled search maintenance task failed.", {
+      parentWorkerName,
+      taskName,
+    }, error);
     return 0;
   } finally {
     await scope.dispose();

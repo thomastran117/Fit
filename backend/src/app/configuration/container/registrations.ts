@@ -29,14 +29,26 @@ import { SquarePaymentAdapter } from "@/features/payments/square.adapter";
 import { ProfileController } from "@/features/profile/profile.controller";
 import { ProfileRepository } from "@/features/profile/profile.repository";
 import { ProfileService } from "@/features/profile/profile.service";
+import { RecommendationActivityProcessor } from "@/features/recommendations/recommendation-activity.processor";
+import { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
+import { RecommendationActivityQueueService } from "@/features/recommendations/recommendation-activity.queue.service";
+import { RecommendationActivityRepository } from "@/features/recommendations/recommendation-activity.repository";
+import { RecommendationPrecomputeRepository } from "@/features/recommendations/recommendation-precompute.repository";
+import { RecommendationPrecomputeService } from "@/features/recommendations/recommendation-precompute.service";
+import { RecommendationQueryRepository } from "@/features/recommendations/recommendation-query.repository";
+import { RecommendationQueryService } from "@/features/recommendations/recommendation-query.service";
+import { RecommendationsController } from "@/features/recommendations/recommendations.controller";
 import { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
 import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
 import { PostingsController } from "@/features/postings/postings.controller";
+import { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
 import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
 import { PostingsService } from "@/features/postings/postings.service";
+import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
 import { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
@@ -45,9 +57,16 @@ import { SearchQueueService } from "@/features/search/search.queue.service";
 import { SearchService } from "@/features/search/search.service";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import type { RootServiceContainer } from "@/configuration/container/core";
+import { loggerFactory } from "@/configuration/logging";
 import { containerTokens } from "@/configuration/container/tokens";
 
 export function registerApplicationServices(container: RootServiceContainer): void {
+  container.register({
+    token: containerTokens.loggerFactory,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => loggerFactory,
+  });
   container.register({
     token: containerTokens.cacheService,
     lifetime: "singleton",
@@ -259,6 +278,81 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     resolve: ({ resolve }) => new ProfileController(resolve(containerTokens.profileService)),
   });
   container.register({
+    token: containerTokens.recommendationActivityQueueService,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new RecommendationActivityQueueService(),
+  });
+  container.register({
+    token: containerTokens.recommendationActivityRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new RecommendationActivityRepository(),
+  });
+  container.register({
+    token: containerTokens.recommendationActivityProcessor,
+    lifetime: "scoped",
+    dependencies: [containerTokens.recommendationActivityRepository],
+    resolve: ({ resolve }) =>
+      new RecommendationActivityProcessor(
+        resolve(containerTokens.recommendationActivityRepository),
+      ),
+  });
+  container.register({
+    token: containerTokens.recommendationActivityPublisher,
+    lifetime: "scoped",
+    dependencies: [
+      containerTokens.recommendationActivityQueueService,
+      containerTokens.profileRepository,
+    ],
+    resolve: ({ resolve }) =>
+      new RecommendationActivityPublisher(
+        resolve(containerTokens.recommendationActivityQueueService),
+        resolve(containerTokens.profileRepository),
+      ),
+  });
+  container.register({
+    token: containerTokens.recommendationPrecomputeRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new RecommendationPrecomputeRepository(),
+  });
+  container.register({
+    token: containerTokens.recommendationPrecomputeService,
+    lifetime: "scoped",
+    dependencies: [containerTokens.recommendationPrecomputeRepository],
+    resolve: ({ resolve }) =>
+      new RecommendationPrecomputeService(
+        resolve(containerTokens.recommendationPrecomputeRepository),
+      ),
+  });
+  container.register({
+    token: containerTokens.recommendationQueryRepository,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new RecommendationQueryRepository(),
+  });
+  container.register({
+    token: containerTokens.recommendationQueryService,
+    lifetime: "scoped",
+    dependencies: [
+      containerTokens.recommendationQueryRepository,
+      containerTokens.postingsPublicCacheService,
+    ],
+    resolve: ({ resolve }) =>
+      new RecommendationQueryService(
+        resolve(containerTokens.recommendationQueryRepository),
+        resolve(containerTokens.postingsPublicCacheService),
+      ),
+  });
+  container.register({
+    token: containerTokens.recommendationsController,
+    lifetime: "scoped",
+    dependencies: [containerTokens.recommendationQueryService],
+    resolve: ({ resolve }) =>
+      new RecommendationsController(resolve(containerTokens.recommendationQueryService)),
+  });
+  container.register({
     token: containerTokens.postingsRepository,
     lifetime: "singleton",
     dependencies: [],
@@ -292,6 +386,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsAnalyticsRepository,
       containerTokens.rentingsRepository,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new BookingsService(
@@ -300,13 +395,21 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsAnalyticsRepository),
         resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
     token: containerTokens.bookingsController,
     lifetime: "scoped",
-    dependencies: [containerTokens.bookingsService],
-    resolve: ({ resolve }) => new BookingsController(resolve(containerTokens.bookingsService)),
+    dependencies: [
+      containerTokens.bookingsService,
+      containerTokens.recommendationActivityPublisher,
+    ],
+    resolve: ({ resolve }) =>
+      new BookingsController(
+        resolve(containerTokens.bookingsService),
+        resolve(containerTokens.recommendationActivityPublisher),
+      ),
   });
   container.register({
     token: containerTokens.paymentsRepository,
@@ -329,6 +432,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsAnalyticsRepository,
       containerTokens.postingsRepository,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new PaymentsService(
@@ -337,6 +441,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsAnalyticsRepository),
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
@@ -354,6 +459,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsAnalyticsRepository,
       containerTokens.postingsRepository,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new RentingsService(
@@ -362,13 +468,21 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsAnalyticsRepository),
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
     token: containerTokens.rentingsController,
     lifetime: "scoped",
-    dependencies: [containerTokens.rentingsService],
-    resolve: ({ resolve }) => new RentingsController(resolve(containerTokens.rentingsService)),
+    dependencies: [
+      containerTokens.rentingsService,
+      containerTokens.recommendationActivityPublisher,
+    ],
+    resolve: ({ resolve }) =>
+      new RentingsController(
+        resolve(containerTokens.rentingsService),
+        resolve(containerTokens.recommendationActivityPublisher),
+      ),
   });
   container.register({
     token: containerTokens.postingsReviewsRepository,
@@ -392,11 +506,45 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       ),
   });
   container.register({
+    token: containerTokens.postingsPublicCacheService,
+    lifetime: "singleton",
+    dependencies: [containerTokens.cacheService, containerTokens.postingsRepository],
+    resolve: ({ resolve }) =>
+      new PostingsPublicCacheService(
+        resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsRepository),
+      ),
+  });
+  container.register({
     token: containerTokens.postingsSearchService,
     lifetime: "scoped",
-    dependencies: [containerTokens.postingsRepository],
+    dependencies: [containerTokens.postingsRepository, containerTokens.postingsPublicCacheService],
     resolve: ({ resolve }) =>
-      new PostingsSearchService(resolve(containerTokens.postingsRepository)),
+      new PostingsSearchService(
+        resolve(containerTokens.postingsRepository),
+        resolve(containerTokens.postingsPublicCacheService),
+      ),
+  });
+  container.register({
+    token: containerTokens.postingThumbnailService,
+    lifetime: "scoped",
+    dependencies: [
+      containerTokens.postingsRepository,
+      containerTokens.blobService,
+      containerTokens.postingsPublicCacheService,
+    ],
+    resolve: ({ resolve }) =>
+      new PostingThumbnailService(
+        resolve(containerTokens.postingsRepository),
+        resolve(containerTokens.blobService),
+        resolve(containerTokens.postingsPublicCacheService),
+      ),
+  });
+  container.register({
+    token: containerTokens.postingThumbnailQueueService,
+    lifetime: "singleton",
+    dependencies: [],
+    resolve: () => new PostingThumbnailQueueService(),
   });
   container.register({
     token: containerTokens.searchQueueService,
@@ -440,8 +588,10 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsReviewsRepository,
       containerTokens.rentingsRepository,
       containerTokens.blobService,
+      containerTokens.postingThumbnailQueueService,
       containerTokens.contentSanitizationService,
       containerTokens.cacheService,
+      containerTokens.postingsPublicCacheService,
     ],
     resolve: ({ resolve }) =>
       new PostingsService(
@@ -450,8 +600,10 @@ export function registerApplicationServices(container: RootServiceContainer): vo
         resolve(containerTokens.postingsReviewsRepository),
         resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.blobService),
+        resolve(containerTokens.postingThumbnailQueueService),
         resolve(containerTokens.contentSanitizationService),
         resolve(containerTokens.cacheService),
+        resolve(containerTokens.postingsPublicCacheService),
       ),
   });
   container.register({
@@ -461,12 +613,14 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       containerTokens.postingsService,
       containerTokens.postingsAnalyticsService,
       containerTokens.postingsReviewsService,
+      containerTokens.recommendationActivityPublisher,
     ],
     resolve: ({ resolve }) =>
       new PostingsController(
         resolve(containerTokens.postingsService),
         resolve(containerTokens.postingsAnalyticsService),
         resolve(containerTokens.postingsReviewsService),
+        resolve(containerTokens.recommendationActivityPublisher),
       ),
   });
 }

@@ -7,6 +7,7 @@ import {
   type databaseClient,
 } from "@/configuration/resources/database";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 type DatabaseClient = NonNullable<typeof databaseClient>;
 type TransactionClient = Prisma.TransactionClient;
@@ -54,9 +55,11 @@ const TRANSIENT_NODE_ERROR_CODES = new Set([
 
 export abstract class BaseRepository {
   protected readonly database: DatabaseClient;
+  private readonly logger: Logger;
 
   constructor(database: DatabaseClient = getDatabaseClient()) {
     this.database = database;
+    this.logger = loggerFactory.forClass(this.constructor.name || "BaseRepository", "repository");
   }
 
   protected async executeAsync<T>(
@@ -147,17 +150,14 @@ export abstract class BaseRepository {
     delayMs: number,
     error: unknown,
   ): void {
-    console.warn(
-      [
-        "[DATABASE RETRY]",
-        `operation=${operationName}`,
-        `attempt=${attempt}`,
-        `delayMs=${delayMs}`,
-        `errorName=${this.readErrorName(error)}`,
-        `errorCode=${this.readErrorCode(error) ?? "unknown"}`,
-        `message=${this.readErrorMessage(error)}`,
-      ].join(" "),
-    );
+    this.logger.warn("Database operation retry scheduled.", {
+      attempt,
+      delayMs,
+      errorCode: this.readErrorCode(error) ?? "unknown",
+      errorName: this.readErrorName(error),
+      message: this.readErrorMessage(error),
+      operation: operationName,
+    });
   }
 
   private logOperationDuration(
@@ -177,24 +177,19 @@ export abstract class BaseRepository {
       return;
     }
 
-    const logger = succeeded && !shouldLogSlowOperation ? console.info : console.warn;
+    const logMethod =
+      succeeded && !shouldLogSlowOperation ? this.logger.info.bind(this.logger) : this.logger.warn.bind(this.logger);
 
-    logger(
-      [
-        shouldLogSlowOperation ? "[DATABASE SLOW OPERATION]" : "[DATABASE OPERATION]",
-        `operation=${operationName}`,
-        `durationMs=${durationMs}`,
-        `status=${succeeded ? "success" : "failure"}`,
-        `attempts=${attempts + 1}`,
-        ...(succeeded
-          ? []
-          : [
-              `errorName=${this.readErrorName(error)}`,
-              `errorCode=${this.readErrorCode(error) ?? "unknown"}`,
-              `message=${this.readErrorMessage(error)}`,
-            ]),
-      ].join(" "),
-    );
+    logMethod("Database operation completed.", {
+      attempts: attempts + 1,
+      durationMs,
+      errorCode: succeeded ? undefined : this.readErrorCode(error) ?? "unknown",
+      errorName: succeeded ? undefined : this.readErrorName(error),
+      message: succeeded ? undefined : this.readErrorMessage(error),
+      operation: operationName,
+      slow: shouldLogSlowOperation,
+      status: succeeded ? "success" : "failure",
+    });
   }
 
   private isTransientError(

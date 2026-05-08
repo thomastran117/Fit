@@ -25,6 +25,7 @@ function createUser(): AuthUserRecord {
       avatarUrl: undefined,
       avatarBlobName: undefined,
       isPrivate: false,
+      recommendationPersonalizationEnabled: true,
       trustworthinessScore: 80,
       rentPostingsCount: 0,
       availableRentPostingsCount: 0,

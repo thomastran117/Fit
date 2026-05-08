@@ -46,6 +46,7 @@ export class ProfileController {
       username: input.username,
       phoneNumber: input.phoneNumber,
       isPrivate: input.isPrivate,
+      recommendationPersonalizationEnabled: input.recommendationPersonalizationEnabled,
       avatarUrl: input.avatarUrl,
       avatarBlobName: input.avatarBlobName,
       trustworthinessScore: input.trustworthinessScore,

@@ -1,4 +1,5 @@
 import { loadEnvironment } from "@/configuration/environment";
+import { disconnectLogging, loggerFactory } from "@/configuration/logging";
 import {
   connectDatabase,
   disconnectDatabase,
@@ -11,6 +12,8 @@ type SeedCliOptions = {
   showHelp: boolean;
 };
 
+const seedScriptLogger = loggerFactory.forComponent("seed-script", "script");
+
 function parseArgs(args: string[]): SeedCliOptions {
   return {
     onlyIfEmpty: args.includes("--only-if-empty"),
@@ -20,7 +23,7 @@ function parseArgs(args: string[]): SeedCliOptions {
 }
 
 function printHelp(): void {
-  console.info(
+  seedScriptLogger.info(
     [
       "Usage: npm run seed -- [--refresh] [--only-if-empty]",
       "",
@@ -50,12 +53,12 @@ async function main(): Promise<void> {
       source: "script",
     });
   } finally {
-    await disconnectDatabase();
+    await Promise.allSettled([disconnectDatabase(), disconnectLogging()]);
   }
 }
 
 void main().catch(async (error: unknown) => {
-  console.error("Failed to run seed orchestrator.", error);
-  await disconnectDatabase();
+  seedScriptLogger.critical("Failed to run seed orchestrator.", undefined, error);
+  await Promise.allSettled([disconnectDatabase(), disconnectLogging()]);
   process.exit(1);
 });

@@ -3,6 +3,8 @@ import { createMiddleware } from "hono/factory";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment";
+import { stripApiRoutePrefix } from "@/configuration/http/api-path";
+import { loggerFactory } from "@/configuration/logging";
 import TooManyRequestError from "@/errors/http/too-many-request.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import { getOptionalJwtAuth } from "./jwt-middleware";
@@ -48,6 +50,7 @@ const slidingWindowMemoryStore = new Map<string, number[]>();
 const tokenBucketMemoryStore = new Map<string, MemoryTokenBucketState>();
 const REDIS_FALLBACK_LOG_COOLDOWN_MS = 60_000;
 let lastRedisFallbackLogAt = 0;
+const rateLimiterLogger = loggerFactory.forComponent("rate-limiter.middleware", "middleware");
 
 const SLIDING_WINDOW_SCRIPT = `
 local key = KEYS[1]
@@ -141,11 +144,11 @@ function createPolicy(
   request: Request,
   policy: Omit<RateLimitPolicy, "bucketKey"> & { bucketKey?: string },
 ): RateLimitPolicy {
-  const url = new URL(request.url);
+  const pathname = stripApiRoutePrefix(new URL(request.url).pathname);
 
   return {
     ...policy,
-    bucketKey: policy.bucketKey ?? `${request.method}:${url.pathname}`,
+    bucketKey: policy.bucketKey ?? `${request.method}:${pathname}`,
   };
 }
 
@@ -199,7 +202,7 @@ function isPaymentWebhookRoute(request: Request, pathname: string): boolean {
 }
 
 export function resolveRateLimitPolicy(request: Request): RateLimitPolicy {
-  const pathname = new URL(request.url).pathname;
+  const pathname = stripApiRoutePrefix(new URL(request.url).pathname);
 
   if (isAuthSensitiveRoute(request, pathname)) {
     return createPolicy(request, {
@@ -468,7 +471,7 @@ function logRedisFallback(error: unknown, policy: RateLimitPolicy): void {
 
   lastRedisFallbackLogAt = now;
 
-  console.warn("Rate limiter falling back to in-memory evaluation because Redis is unavailable.", {
+  rateLimiterLogger.warn("Rate limiter falling back to in-memory evaluation because Redis is unavailable.", {
     policy: policy.id,
     error: error instanceof Error ? error.message : error,
   });

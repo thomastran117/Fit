@@ -5,6 +5,8 @@ import type { BookingsRepository } from "@/features/bookings/bookings.repository
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLocks } from "@/features/cache/cache-locks";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { ConvertBookingRequestInput, ListMyRentingsInput, ListRentingsResult, RentingRecord } from "@/features/rentings/rentings.model";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
@@ -16,6 +18,7 @@ export class RentingsService {
     private readonly postingsAnalyticsRepository: PostingsAnalyticsRepository,
     private readonly postingsRepository: PostingsRepository,
     private readonly cacheService: CacheService,
+    private readonly postingsPublicCacheService: PostingsPublicCacheService,
   ) {}
 
   async convertApprovedBookingRequest(input: ConvertBookingRequestInput): Promise<RentingRecord> {
@@ -73,6 +76,7 @@ export class RentingsService {
       occurredAt: renting.confirmedAt,
       estimatedTotal: renting.estimatedTotal,
     });
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, renting.postingId);
     await this.postingsRepository.enqueueSearchSync(renting.postingId);
 
     return renting;

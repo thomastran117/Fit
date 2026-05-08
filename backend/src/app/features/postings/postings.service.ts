@@ -7,19 +7,18 @@ import type { BlobService } from "@/features/blob/blob.service";
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLock } from "@/features/cache/cache-locks";
 import {
-  DEFAULT_MAX_BOOKING_DURATION_DAYS,
   MAX_BATCH_IDS,
   MAX_BOOKING_DURATION_DAYS_LIMIT,
   MAX_POSTING_PHOTOS,
   type BatchPostingsResult,
   type ListOwnerPostingsInput,
   type ListOwnerPostingsResult,
+  type ManagedPostingPhotoInput,
   type PublicPostingRecord,
   type PostingAvailabilityBlockRecord,
   type PostingAvailabilityBlockInput,
   type PostingAttributeValue,
   type PostingFamily,
-  type PostingPhotoInput,
   type PostingPricing,
   type PostingRecord,
   type SearchAttributeFilterInput,
@@ -29,6 +28,8 @@ import {
   type UpsertPostingInput,
   isPostingPubliclyVisible,
 } from "@/features/postings/postings.model";
+import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import {
   getPostingSearchableAttributeDefinitions,
   getPostingVariantDefinition,
@@ -36,27 +37,38 @@ import {
 } from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import type { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
 import type { PostingsSearchService } from "@/features/postings/postings.search.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 export class PostingsService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsSearchService: PostingsSearchService,
     private readonly postingsReviewsRepository: PostingsReviewsRepository,
     private readonly rentingsRepository: RentingsRepository,
     private readonly blobService: BlobService,
+    private readonly postingThumbnailQueueService: PostingThumbnailQueueService,
     private readonly contentSanitizationService: ContentSanitizationService,
     private readonly cacheService: CacheService,
-  ) {}
+    private readonly postingsPublicCacheService: PostingsPublicCacheService,
+  ) {
+    this.logger = loggerFactory.forClass(PostingsService, "service");
+  }
 
   async createDraft(input: UpsertPostingInput): Promise<PostingRecord> {
     const normalizedInput = this.normalizeUpsertInput(input);
     this.assertSafeTextContent(normalizedInput);
     this.assertPublishableDraftShape(normalizedInput);
 
-    return this.postingsRepository.create(normalizedInput);
+    const created = await this.postingsRepository.create(normalizedInput);
+    await this.invalidatePublicProjection(created.id);
+    await this.enqueueThumbnailGeneration(created.id);
+    return created;
   }
 
   async duplicate(id: string, ownerId: string): Promise<PostingRecord> {
@@ -68,7 +80,10 @@ export class PostingsService {
     this.assertSafeTextContent(duplicateInput);
     this.assertPublishableDraftShape(duplicateInput);
 
-    return this.postingsRepository.create(duplicateInput);
+    const duplicated = await this.postingsRepository.create(duplicateInput);
+    await this.invalidatePublicProjection(duplicated.id);
+    await this.enqueueThumbnailGeneration(duplicated.id);
+    return duplicated;
   }
 
   async update(id: string, input: UpsertPostingInput): Promise<PostingRecord> {
@@ -83,6 +98,8 @@ export class PostingsService {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
+    await this.invalidatePublicProjection(updated.id);
+    await this.enqueueThumbnailGeneration(updated.id);
     return updated;
   }
 
@@ -114,7 +131,12 @@ export class PostingsService {
       flowLockKeys.postingBookingWindow(posting.id),
       async () => {
         await this.assertAvailabilityBlockCanBeWritten(posting.id, normalized);
-        return this.postingsRepository.createOwnerAvailabilityBlock(posting.id, normalized);
+        const created = await this.postingsRepository.createOwnerAvailabilityBlock(
+          posting.id,
+          normalized,
+        );
+        await this.invalidatePublicProjection(posting.id);
+        return created;
       },
       "Another request is already modifying this posting's availability. Please retry.",
     );
@@ -149,6 +171,7 @@ export class PostingsService {
           );
         }
 
+        await this.invalidatePublicProjection(posting.id);
         return updated;
       },
       "Another request is already modifying this posting's availability. Please retry.",
@@ -174,6 +197,8 @@ export class PostingsService {
         if (!deleted) {
           throw new ResourceNotFoundError("Availability block could not be found.");
         }
+
+        await this.invalidatePublicProjection(posting.id);
       },
       "Another request is already modifying this posting's availability. Please retry.",
     );
@@ -189,6 +214,8 @@ export class PostingsService {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
+    await this.invalidatePublicProjection(published.id);
+    await this.enqueueThumbnailGeneration(published.id);
     return published;
   }
 
@@ -208,6 +235,7 @@ export class PostingsService {
           throw new ResourceNotFoundError("Posting could not be found.");
         }
 
+        await this.invalidatePublicProjection(paused.id);
         return paused;
       },
       "Another request is already modifying this posting's booking availability. Please retry.",
@@ -230,6 +258,8 @@ export class PostingsService {
           throw new ResourceNotFoundError("Posting could not be found.");
         }
 
+        await this.invalidatePublicProjection(unpaused.id);
+        await this.enqueueThumbnailGeneration(unpaused.id);
         return unpaused;
       },
       "Another request is already modifying this posting's booking availability. Please retry.",
@@ -245,25 +275,38 @@ export class PostingsService {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
 
+    await this.invalidatePublicProjection(archived.id);
     return archived;
   }
 
   async getById(id: string, viewerId?: string): Promise<PostingRecord | PublicPostingRecord> {
-    const posting = await this.postingsRepository.findById(id);
+    if (viewerId) {
+      const metadata = await this.postingsRepository.findPublicReadMetadataById(id);
 
-    if (!posting) {
+      if (!metadata) {
+        throw new ResourceNotFoundError("Posting could not be found.");
+      }
+
+      if (metadata.ownerId === viewerId) {
+        const ownerPosting = await this.postingsRepository.findById(id);
+
+        if (!ownerPosting) {
+          throw new ResourceNotFoundError("Posting could not be found.");
+        }
+
+        return ownerPosting;
+      }
+
+      if (!isPostingPubliclyVisible(metadata)) {
+        throw new ResourceNotFoundError("Posting could not be found.");
+      }
+    }
+
+    const publicPosting = await this.postingsPublicCacheService.getPublicById(id);
+
+    if (!publicPosting) {
       throw new ResourceNotFoundError("Posting could not be found.");
     }
-
-    if (viewerId && posting.ownerId === viewerId) {
-      return posting;
-    }
-
-    if (!isPostingPubliclyVisible(posting)) {
-      throw new ResourceNotFoundError("Posting could not be found.");
-    }
-
-    const publicPosting = this.toPublicPosting(posting);
 
     if (!viewerId) {
       return publicPosting;
@@ -271,11 +314,11 @@ export class PostingsService {
 
     const [hasEligibleReviewRenting, ownReview] = await Promise.all([
       this.rentingsRepository.hasEligibleReviewRenting({
-        postingId: posting.id,
+        postingId: publicPosting.id,
         renterId: viewerId,
         now: new Date(),
       }),
-      this.postingsReviewsRepository.findOwnReview(posting.id, viewerId),
+      this.postingsReviewsRepository.findOwnReview(publicPosting.id, viewerId),
     ]);
 
     return {
@@ -302,14 +345,7 @@ export class PostingsService {
 
   async batchPublic(ids: string[]): Promise<BatchPostingsResult<PublicPostingRecord>> {
     const normalizedIds = this.normalizeBatchIds(ids);
-    const batch = await this.postingsRepository.batchFindPublic({
-      ids: normalizedIds,
-    });
-
-    return {
-      postings: batch.postings.map((posting) => this.toPublicPosting(posting)),
-      missingIds: batch.missingIds,
-    };
+    return this.postingsPublicCacheService.getPublicByIds(normalizedIds);
   }
 
   async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
@@ -369,7 +405,7 @@ export class PostingsService {
     };
   }
 
-  private normalizePhotos(photos: PostingPhotoInput[]): PostingPhotoInput[] {
+  private normalizePhotos(photos: ManagedPostingPhotoInput[]): ManagedPostingPhotoInput[] {
     if (photos.length === 0) {
       throw new BadRequestError("At least one photo is required.");
     }
@@ -387,6 +423,15 @@ export class PostingsService {
 
       uniquePositions.add(photo.position);
       this.assertManagedBlob(photo.blobUrl, photo.blobName);
+
+      const hasThumbnailBlobName = typeof photo.thumbnailBlobName === "string";
+      const hasThumbnailBlobUrl = typeof photo.thumbnailBlobUrl === "string";
+
+      if (hasThumbnailBlobName !== hasThumbnailBlobUrl) {
+        throw new BadRequestError(
+          "Thumbnail blob URL and thumbnail blob name must be provided together.",
+        );
+      }
     }
 
     return photos
@@ -510,6 +555,8 @@ export class PostingsService {
       photos: posting.photos.map((photo) => ({
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
+        thumbnailBlobUrl: photo.thumbnailBlobUrl,
+        thumbnailBlobName: photo.thumbnailBlobName,
         position: photo.position,
       })),
       tags: [...posting.tags],
@@ -1058,6 +1105,10 @@ export class PostingsService {
     return posting;
   }
 
+  private async invalidatePublicProjection(postingId?: string): Promise<void> {
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, postingId);
+  }
+
   private async requireOwnerPostingForAvailability(
     id: string,
     ownerId: string,
@@ -1085,20 +1136,14 @@ export class PostingsService {
     return normalized;
   }
 
-  private toPublicPosting(posting: PostingRecord | PublicPostingRecord): PublicPostingRecord {
-    return {
-      ...posting,
-      effectiveMaxBookingDurationDays:
-        posting.maxBookingDurationDays ?? DEFAULT_MAX_BOOKING_DURATION_DAYS,
-      location: {
-        city: posting.location.city,
-        region: posting.location.region,
-        country: posting.location.country,
-        postalCode: posting.location.postalCode,
-        latitude: Number(posting.location.latitude.toFixed(2)),
-        longitude: Number(posting.location.longitude.toFixed(2)),
-      },
-    };
+  private async enqueueThumbnailGeneration(postingId: string): Promise<void> {
+    try {
+      await this.postingThumbnailQueueService.enqueuePostingThumbnailJob(postingId);
+    } catch (error) {
+      this.logger.error("Failed to enqueue posting thumbnail job.", {
+        postingId,
+      }, error);
+    }
   }
 
   private isValidCoordinate(value: number, min: number, max: number): boolean {

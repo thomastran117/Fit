@@ -185,6 +185,10 @@ export type PostingPricing = z.infer<typeof postingPricingSchema>;
 export type PostingVariant = z.infer<typeof postingVariantSchema>;
 export type PostingAttributeValue = VariantPostingAttributeValue;
 export type PostingPhotoInput = z.infer<typeof postingPhotoSchema>;
+export interface ManagedPostingPhotoInput extends PostingPhotoInput {
+  thumbnailBlobUrl?: string;
+  thumbnailBlobName?: string;
+}
 export type PostingAvailabilityBlockInput = z.infer<typeof postingAvailabilityBlockSchema>;
 export type UpsertPostingRequestBody = z.infer<typeof upsertPostingRequestSchema>;
 export type UpdatePostingRequestBody = z.infer<typeof updatePostingRequestSchema>;
@@ -205,6 +209,8 @@ export interface PostingPhotoRecord {
   id: string;
   blobUrl: string;
   blobName: string;
+  thumbnailBlobUrl?: string;
+  thumbnailBlobName?: string;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -269,6 +275,8 @@ export interface PostingRecord {
 
 export interface PublicPostingRecord extends Omit<PostingRecord, "location"> {
   location: PublicPostingLocationRecord;
+  primaryPhotoUrl?: string;
+  primaryThumbnailUrl?: string;
   viewerReviewState?: PostingViewerReviewState;
 }
 
@@ -310,7 +318,7 @@ export interface UpsertPostingInput {
   name: string;
   description: string;
   pricing: PostingPricing;
-  photos: PostingPhotoInput[];
+  photos: ManagedPostingPhotoInput[];
   tags: string[];
   attributes: Record<string, PostingAttributeValue>;
   availabilityStatus: PostingAvailabilityStatus;
@@ -412,6 +420,28 @@ export function isPostingSearchIndexable(status: PostingStatus): boolean {
   return status === "published";
 }
 
+export function toPublicPostingRecord(
+  posting: PostingRecord | PublicPostingRecord,
+): PublicPostingRecord {
+  const primaryPhoto = posting.photos.find((photo) => photo.position === 0) ?? posting.photos[0];
+
+  return {
+    ...posting,
+    primaryPhotoUrl: primaryPhoto?.blobUrl,
+    primaryThumbnailUrl: primaryPhoto?.thumbnailBlobUrl,
+    effectiveMaxBookingDurationDays:
+      posting.maxBookingDurationDays ?? DEFAULT_MAX_BOOKING_DURATION_DAYS,
+    location: {
+      city: posting.location.city,
+      region: posting.location.region,
+      country: posting.location.country,
+      postalCode: posting.location.postalCode,
+      latitude: Number(posting.location.latitude.toFixed(2)),
+      longitude: Number(posting.location.longitude.toFixed(2)),
+    },
+  };
+}
+
 export interface PostingSearchOutboxRecord {
   id: string;
   postingId?: string;
@@ -431,4 +461,5 @@ export interface PostingSearchOutboxRecord {
   createdAt: string;
   updatedAt: string;
 }
+
 

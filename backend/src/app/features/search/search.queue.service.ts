@@ -4,6 +4,7 @@ import type {
   ConfirmChannel,
 } from "amqplib";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import { createRabbitMqChannel } from "@/configuration/resources/rabbitmq";
 import type {
   SearchIndexJobPayload,
@@ -11,6 +12,7 @@ import type {
 } from "@/features/search/search.model";
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
+const searchQueueLogger = loggerFactory.forComponent("search.queue.service", "queue");
 
 interface SearchQueueBatchEntry {
   payload: SearchIndexJobPayload;
@@ -80,10 +82,9 @@ export class SearchQueueService {
         try {
           payload = JSON.parse(message.content.toString("utf8")) as SearchIndexJobPayload;
         } catch (error) {
-          console.error("Search index consumer received an invalid JSON payload.", {
-            error,
+          searchQueueLogger.error("Search index consumer received an invalid JSON payload.", {
             messageId: message.properties.messageId,
-          });
+          }, error);
           await this.publishMalformedMessage(channel, message, error);
           channel.ack(message);
           return;
@@ -91,7 +92,7 @@ export class SearchQueueService {
 
         await onMessage(payload, message, channel);
       } catch (error) {
-        console.error("Search index consumer failed before ack/nack handling", error);
+        searchQueueLogger.error("Search index consumer failed before ack/nack handling.", undefined, error);
         channel.nack(message, false, true);
       }
     });
@@ -152,7 +153,7 @@ export class SearchQueueService {
         try {
           await onBatch(batch, channel);
         } catch (error) {
-          console.error("Search index batch consumer failed before ack/nack handling", error);
+          searchQueueLogger.error("Search index batch consumer failed before ack/nack handling.", undefined, error);
           for (const entry of batch) {
             channel.nack(entry.message, false, true);
           }
@@ -184,10 +185,9 @@ export class SearchQueueService {
         try {
           payload = JSON.parse(message.content.toString("utf8")) as SearchIndexJobPayload;
         } catch (error) {
-          console.error("Search index consumer received an invalid JSON payload.", {
-            error,
+          searchQueueLogger.error("Search index consumer received an invalid JSON payload.", {
             messageId: message.properties.messageId,
-          });
+          }, error);
           await this.publishMalformedMessage(channel, message, error);
           channel.ack(message);
           return;
@@ -204,7 +204,7 @@ export class SearchQueueService {
           scheduleFlush();
         }
       } catch (error) {
-        console.error("Search index consumer failed before ack/nack handling", error);
+        searchQueueLogger.error("Search index consumer failed before ack/nack handling.", undefined, error);
         channel.nack(message, false, true);
       }
     });

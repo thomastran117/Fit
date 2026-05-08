@@ -12,7 +12,7 @@ describe("seeded analytics outbox fixtures", () => {
         expect(event.payload.deviceType).toBeDefined();
       }
 
-      if (event.eventType === "booking_requested" || event.eventType === "booking_accepted") {
+      if (event.eventType === "booking_requested" || event.eventType === "renting_confirmed") {
         expect(event.payload.occurredAt).toBeDefined();
         expect(event.payload.estimatedTotal).toBeDefined();
       }

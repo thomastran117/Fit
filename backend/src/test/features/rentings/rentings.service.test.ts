@@ -1,6 +1,7 @@
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import type { CacheService } from "@/features/cache/cache.service";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
@@ -43,6 +44,9 @@ describe("RentingsService", () => {
         extend: jest.fn(async () => true),
       })),
     } as unknown as CacheService;
+    const postingsPublicCacheService = {
+      invalidatePublic: jest.fn(async () => 1),
+    } as unknown as PostingsPublicCacheService;
 
     const service = new RentingsService(
       rentingsRepository,
@@ -50,6 +54,7 @@ describe("RentingsService", () => {
       analyticsRepository,
       postingsRepository,
       cacheService,
+      postingsPublicCacheService,
     );
 
     await expect(
@@ -130,6 +135,9 @@ describe("RentingsService", () => {
         extend: jest.fn(async () => true),
       })),
     } as unknown as CacheService;
+    const postingsPublicCacheService = {
+      invalidatePublic: jest.fn(async () => 1),
+    } as unknown as PostingsPublicCacheService;
 
     const service = new RentingsService(
       rentingsRepository,
@@ -137,6 +145,7 @@ describe("RentingsService", () => {
       analyticsRepository,
       postingsRepository,
       cacheService,
+      postingsPublicCacheService,
     );
 
     const renting = await service.convertApprovedBookingRequest({
@@ -148,5 +157,8 @@ describe("RentingsService", () => {
     expect(
       (rentingsRepository.convertApprovedBookingRequest as unknown as jest.Mock),
     ).toHaveBeenCalledWith("booking-1", "owner-1");
+    expect(
+      (postingsPublicCacheService.invalidatePublic as unknown as jest.Mock),
+    ).toHaveBeenCalledWith("posting-1");
   });
 });

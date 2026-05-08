@@ -5,6 +5,7 @@ import type { BookingsRepository } from "@/features/bookings/bookings.repository
 import { BookingsService } from "@/features/bookings/bookings.service";
 import type { CacheService } from "@/features/cache/cache.service";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
@@ -116,6 +117,8 @@ function createService(options?: {
 
   const analyticsRepository = {
     enqueueBookingRequestedEvent: jest.fn(async () => undefined),
+    enqueueBookingApprovedEvent: jest.fn(async () => undefined),
+    enqueueBookingDeclinedEvent: jest.fn(async () => undefined),
   } as unknown as PostingsAnalyticsRepository;
 
   const rentingsRepository = {
@@ -129,6 +132,9 @@ function createService(options?: {
       extend: jest.fn(async () => true),
     })),
   } as unknown as CacheService;
+  const postingsPublicCacheService = {
+    invalidatePublic: jest.fn(async () => 1),
+  } as unknown as PostingsPublicCacheService;
 
   const service = new BookingsService(
     bookingsRepository,
@@ -136,6 +142,7 @@ function createService(options?: {
     analyticsRepository,
     rentingsRepository,
     cacheService,
+    postingsPublicCacheService,
   );
 
   return {
@@ -151,6 +158,8 @@ function createService(options?: {
     },
     analyticsRepository: analyticsRepository as unknown as {
       enqueueBookingRequestedEvent: jest.Mock;
+      enqueueBookingApprovedEvent: jest.Mock;
+      enqueueBookingDeclinedEvent: jest.Mock;
     },
     postingsRepository: postingsRepository as unknown as {
       findById: jest.Mock;
@@ -162,12 +171,21 @@ function createService(options?: {
     cacheService: cacheService as unknown as {
       acquireLock: jest.Mock;
     },
+    postingsPublicCacheService: postingsPublicCacheService as unknown as {
+      invalidatePublic: jest.Mock;
+    },
   };
 }
 
 describe("BookingsService", () => {
   it("allows overlapping booking requests before payment when the posting is otherwise available", async () => {
-    const { service, bookingsRepository, analyticsRepository, postingsRepository } = createService();
+    const {
+      service,
+      bookingsRepository,
+      analyticsRepository,
+      postingsRepository,
+      postingsPublicCacheService,
+    } = createService();
 
     const result = await service.create({
       postingId: "posting-1",
@@ -189,6 +207,7 @@ describe("BookingsService", () => {
     expect(bookingsRepository.countActiveRequestsForRenterPosting).toHaveBeenCalledTimes(2);
     expect(bookingsRepository.createIfWithinActiveRequestLimit).toHaveBeenCalledTimes(1);
     expect(analyticsRepository.enqueueBookingRequestedEvent).toHaveBeenCalledTimes(1);
+    expect(postingsPublicCacheService.invalidatePublic).toHaveBeenCalledWith("posting-1");
     expect(postingsRepository.enqueueSearchSync).toHaveBeenCalledWith("posting-1");
     expect(result.id).toBe("booking-1");
   });
@@ -494,7 +513,7 @@ describe("BookingsService", () => {
     const booking = createBookingRequestRecord({
       holdExpiresAt: "2099-04-21T00:00:00.000Z",
     });
-    const { service, cacheService } = createService({
+    const { service, cacheService, postingsPublicCacheService, analyticsRepository } = createService({
       createdBooking: booking,
     });
 
@@ -509,13 +528,15 @@ describe("BookingsService", () => {
       "booking-request:booking-1:state",
       "posting:posting-1:booking-window",
     ]);
+    expect(analyticsRepository.enqueueBookingApprovedEvent).toHaveBeenCalledTimes(1);
+    expect(postingsPublicCacheService.invalidatePublic).toHaveBeenCalledWith("posting-1");
   });
 
   it("allows owners to approve existing requests while the posting is paused", async () => {
     const booking = createBookingRequestRecord({
       holdExpiresAt: "2099-04-21T00:00:00.000Z",
     });
-    const { service, bookingsRepository } = createService({
+    const { service, bookingsRepository, analyticsRepository } = createService({
       createdBooking: booking,
       posting: createPostingRecord({
         status: "paused",
@@ -530,6 +551,7 @@ describe("BookingsService", () => {
     });
 
     expect(bookingsRepository.approve).toHaveBeenCalledTimes(1);
+    expect(analyticsRepository.enqueueBookingApprovedEvent).toHaveBeenCalledTimes(1);
     expect(approved.status).toBe("awaiting_payment");
   });
 });

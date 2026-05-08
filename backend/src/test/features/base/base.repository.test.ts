@@ -17,15 +17,18 @@ class TestRepository extends BaseRepository {
 }
 
 describe("BaseRepository", () => {
-  const originalWarn = console.warn;
-
   afterEach(() => {
-    console.warn = originalWarn;
+    jest.restoreAllMocks();
   });
 
   it("logs retry attempts with operation labels for transient database errors", async () => {
-    const warn = jest.fn();
-    console.warn = warn;
+    const writeSpy = jest.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array, callback?: unknown) => {
+      if (typeof callback === "function") {
+        callback(null);
+      }
+
+      return true;
+    }) as never);
     const repository = new TestRepository({} as never);
     const transientError = Object.assign(new Error("connection dropped"), {
       code: "ECONNRESET",
@@ -45,10 +48,10 @@ describe("BaseRepository", () => {
     ).resolves.toBe("ok");
 
     expect(operation).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("[DATABASE RETRY] operation=TestRepository.testOperation"),
-    );
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("errorCode=ECONNRESET"));
+    const output = writeSpy.mock.calls.map(([message]) => String(message)).join("\n");
+    expect(output).toContain("Database operation retry scheduled.");
+    expect(output).toContain("operation=TestRepository.testOperation");
+    expect(output).toContain("errorCode=ECONNRESET");
   });
 
   it("wraps Prisma transactions in the shared execution helper", async () => {

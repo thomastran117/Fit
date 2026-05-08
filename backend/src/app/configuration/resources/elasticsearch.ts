@@ -9,6 +9,9 @@ import {
   recordElasticsearchTimeout,
   recordElasticsearchTransportError,
 } from "@/features/search/search.telemetry";
+import { loggerFactory } from "@/configuration/logging";
+
+const elasticsearchLogger = loggerFactory.forComponent("elasticsearch", "resource");
 
 export interface ElasticsearchConfig {
   enabled: boolean;
@@ -136,7 +139,7 @@ export class ElasticsearchClient {
           recordElasticsearchServerError();
           this.recordFailure();
         } else {
-          console.error("Elasticsearch request returned a client error.", {
+          elasticsearchLogger.error("Elasticsearch request returned a client error.", {
             method: init.method ?? "GET",
             path,
             status: response.status,

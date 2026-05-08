@@ -35,18 +35,59 @@ const rateLimiterConfig = {
   refillTokensPerSecond: 1,
 };
 
+function readNodeEnvironment() {
+  const nodeEnv = process.env.NODE_ENV?.trim().toLowerCase();
+  return nodeEnv === "production" || nodeEnv === "test" || nodeEnv === "development"
+    ? nodeEnv
+    : "development";
+}
+
+function readLoggingConfig() {
+  const nodeEnv = readNodeEnvironment();
+
+  return {
+    fallbackDirectory: process.env.LOG_FALLBACK_DIRECTORY ?? "C:/tmp/rent-test-logs",
+    level: (process.env.LOG_LEVEL as
+      | "debug"
+      | "info"
+      | "warn"
+      | "error"
+      | "critical"
+      | undefined) ?? "debug",
+    mode: nodeEnv === "production" ? ("rabbitmq" as const) : ("console" as const),
+    serviceName: process.env.LOG_SERVICE_NAME ?? "backend-test",
+  };
+}
+
+function readRabbitMqConfig() {
+  return {
+    url: process.env.RABBITMQ_URL ?? "amqp://localhost:5672",
+  };
+}
+
+function readRouteModulesConfig() {
+  const configuredIds = (process.env.DISABLED_ROUTE_MODULES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return {
+    disabledIds: Array.from(new Set(configuredIds)),
+  };
+}
+
 export const environment = {
   isProduction(): boolean {
-    return false;
+    return readNodeEnvironment() === "production";
   },
   isDevelopment(): boolean {
-    return true;
+    return readNodeEnvironment() === "development";
   },
   isTest(): boolean {
-    return false;
+    return readNodeEnvironment() === "test";
   },
   getNodeEnvironment() {
-    return "development" as const;
+    return readNodeEnvironment();
   },
   getServerPort() {
     return 8040;
@@ -63,15 +104,27 @@ export const environment = {
   getRateLimiterConfig() {
     return rateLimiterConfig;
   },
+  getLoggingConfig() {
+    return readLoggingConfig();
+  },
+  getRabbitMqConfig() {
+    return readRabbitMqConfig();
+  },
+  getRouteModulesConfig() {
+    return readRouteModulesConfig();
+  },
   load() {
     return {
       auth: tokenConfig,
       captcha: captchaConfig,
       database: databaseConfig,
+      logging: readLoggingConfig(),
+      routeModules: readRouteModulesConfig(),
+      rabbitmq: readRabbitMqConfig(),
       rateLimiter: rateLimiterConfig,
       server: {
-        nodeEnv: "development",
-        isProduction: false,
+        nodeEnv: readNodeEnvironment(),
+        isProduction: readNodeEnvironment() === "production",
       },
     };
   },

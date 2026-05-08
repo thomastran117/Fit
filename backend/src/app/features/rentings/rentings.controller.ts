@@ -6,10 +6,14 @@ import { RequestValidationError } from "@/configuration/validation/request";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import type { ListMyRentingsInput, ListRentingsQuery } from "@/features/rentings/rentings.model";
 import { listRentingsQuerySchema } from "@/features/rentings/rentings.model";
+import type { RecommendationActivityPublisher } from "@/features/recommendations/recommendation-activity.publisher";
 import type { RentingsService } from "@/features/rentings/rentings.service";
 
 export class RentingsController {
-  constructor(private readonly rentingsService: RentingsService) {}
+  constructor(
+    private readonly rentingsService: RentingsService,
+    private readonly recommendationActivityPublisher: RecommendationActivityPublisher,
+  ) {}
 
   convertBookingRequest = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
@@ -17,6 +21,11 @@ export class RentingsController {
     const result = await this.rentingsService.convertApprovedBookingRequest({
       bookingRequestId: this.requireBookingRequestId(context),
       ownerId: auth.sub,
+    });
+    await this.recommendationActivityPublisher.publishRentingConfirmed({
+      renting: result,
+      client: context.get("client"),
+      requestId: this.readRequestId(context),
     });
     return context.json(result, 201);
   };
@@ -79,5 +88,9 @@ export class RentingsController {
 
   private async requireAuth(context: Context<AppBindings>) {
     return requireJwtAuth(context);
+  }
+
+  private readRequestId(context: Context<AppBindings>): string | undefined {
+    return context.get("requestId");
   }
 }

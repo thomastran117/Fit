@@ -317,6 +317,7 @@ export interface UserProfileRecord {
   avatarUrl?: string;
   avatarBlobName?: string;
   isPrivate: boolean;
+  recommendationPersonalizationEnabled: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
@@ -361,6 +362,7 @@ export interface AuthUserProfile {
   phoneNumber?: string;
   avatarUrl?: string;
   isPrivate: boolean;
+  recommendationPersonalizationEnabled: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;

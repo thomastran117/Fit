@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { getCookie } from "hono/cookie";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { getOptionalEnvironmentVariable } from "@/configuration/environment";
+import { stripApiRoutePrefix } from "@/configuration/http/api-path";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import {
   CSRF_TOKEN_COOKIE_NAME,
@@ -72,7 +73,7 @@ export const csrfMiddleware = createMiddleware<AppBindings>(async (context, next
     return;
   }
 
-  const path = new URL(request.url).pathname;
+  const path = stripApiRoutePrefix(new URL(request.url).pathname);
 
   if (path.startsWith("/auth/oauth/")) {
     await next();

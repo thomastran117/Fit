@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Channel, ConsumeMessage } from "amqplib";
+import { loggerFactory } from "@/configuration/logging";
 import { createRabbitMqChannel } from "@/configuration/resources/rabbitmq";
 import type { EmailJobInputByKind, EmailJobKind, EmailJobPayload } from "@/features/email/email.model";
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
 const EMAIL_QUEUE_PREFIX = "email.delivery";
+const emailQueueLogger = loggerFactory.forComponent("email.queue.service", "queue");
 
 export class EmailQueueService {
   private readonly exchangeName = `${EMAIL_QUEUE_PREFIX}.exchange`;
@@ -60,7 +62,7 @@ export class EmailQueueService {
         const payload = JSON.parse(message.content.toString("utf8")) as EmailJobPayload;
         await onMessage(payload, message, channel);
       } catch (error) {
-        console.error("Email worker failed before ack/nack handling", error);
+        emailQueueLogger.error("Email worker failed before ack/nack handling.", undefined, error);
         channel.nack(message, false, true);
       }
     });

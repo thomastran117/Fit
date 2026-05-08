@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
 import { containerTokens, getRequestContainer } from "@/configuration/bootstrap/container";
+import { stripApiRoutePrefix } from "@/configuration/http/api-path";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import type { JwtClaims } from "@/features/auth/token/token.service";
@@ -41,6 +42,7 @@ type PatRoutePolicy = {
 const PAT_ROUTE_POLICIES: PatRoutePolicy[] = [
   { method: "GET", pattern: /^\/profile\/me$/, requiredScope: "mcp:read" },
   { method: "GET", pattern: /^\/postings$/, requiredScope: "mcp:read" },
+  { method: "GET", pattern: /^\/postings\/recommendations$/, requiredScope: "mcp:read" },
   { method: "GET", pattern: /^\/postings\/batch$/, requiredScope: "mcp:read" },
   { method: "GET", pattern: /^\/postings\/me$/, requiredScope: "mcp:read" },
   { method: "GET", pattern: /^\/postings\/me\/batch$/, requiredScope: "mcp:read" },
@@ -57,6 +59,7 @@ const PAT_ROUTE_POLICIES: PatRoutePolicy[] = [
   { method: "GET", pattern: /^\/rentings\/me$/, requiredScope: "mcp:read" },
   { method: "GET", pattern: /^\/rentings\/[^/]+$/, requiredScope: "mcp:read" },
   { method: "POST", pattern: /^\/postings\/[^/]+\/booking-quote$/, requiredScope: "mcp:read" },
+  { method: "POST", pattern: /^\/postings\/[^/]+\/activity\/search-click$/, requiredScope: "mcp:read" },
   { method: "POST", pattern: /^\/postings$/, requiredScope: "mcp:write" },
   { method: "POST", pattern: /^\/postings\/[^/]+\/booking-requests$/, requiredScope: "mcp:write" },
   { method: "PUT", pattern: /^\/postings\/[^/]+$/, requiredScope: "mcp:write" },
@@ -73,6 +76,7 @@ const PAT_ROUTE_POLICIES: PatRoutePolicy[] = [
   { method: "PUT", pattern: /^\/booking-requests\/[^/]+$/, requiredScope: "mcp:write" },
   { method: "POST", pattern: /^\/booking-requests\/[^/]+\/approve$/, requiredScope: "mcp:write" },
   { method: "POST", pattern: /^\/booking-requests\/[^/]+\/decline$/, requiredScope: "mcp:write" },
+  { method: "POST", pattern: /^\/booking-requests\/[^/]+\/convert$/, requiredScope: "mcp:write" },
 ];
 
 function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: AuthPrincipal): void {
@@ -80,7 +84,7 @@ function assertPersonalAccessTokenAccess(context: Context<AppBindings>, auth: Au
     return;
   }
 
-  const pathname = new URL(context.req.url).pathname;
+  const pathname = stripApiRoutePrefix(new URL(context.req.url).pathname);
   const requestMethod = context.req.method ?? "GET";
   const policy = PAT_ROUTE_POLICIES.find(
     (entry) => entry.method === requestMethod && entry.pattern.test(pathname),

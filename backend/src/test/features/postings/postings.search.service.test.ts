@@ -1,4 +1,5 @@
 import { PostingsSearchService } from "@/features/postings/postings.search.service";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";
 import { ElasticsearchUnavailableError } from "@/configuration/resources/elasticsearch";
@@ -57,12 +58,11 @@ function createDocument(
 }
 
 function createElasticsearchSearchService() {
-  const batchFindPublic = jest.fn(async () => ({
+  const getPublicByIds = jest.fn(async () => ({
     postings: [],
     missingIds: [],
   }));
   const repository = {
-    batchFindPublic,
     searchPublicFallback: jest.fn(),
   } as unknown as PostingsRepository;
   const requestJson = jest.fn(async () => ({
@@ -73,14 +73,17 @@ function createElasticsearchSearchService() {
       hits: [],
     },
   }));
-  const service = new PostingsSearchService(repository, {
+  const postingsPublicCacheService = {
+    getPublicByIds,
+  } as unknown as PostingsPublicCacheService;
+  const service = new PostingsSearchService(repository, postingsPublicCacheService, {
     getPostingsIndexName: () => "postings-test",
     requestJson,
     isEnabled: () => true,
   } as never);
 
   return {
-    batchFindPublic,
+    getPublicByIds,
     requestJson,
     service,
   };
@@ -128,6 +131,11 @@ describe("PostingsSearchService", () => {
     const repository = {} as PostingsRepository;
     const requestJson = jest.fn(async () => undefined);
     const service = new PostingsSearchService(repository, {
+      getPublicByIds: jest.fn(async () => ({
+        postings: [],
+        missingIds: [],
+      })),
+    } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,
@@ -155,7 +163,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds family and subtype filters to Elasticsearch search requests", async () => {
-    const { batchFindPublic, requestJson, service } = createElasticsearchSearchService();
+    const { getPublicByIds, requestJson, service } = createElasticsearchSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -182,9 +190,7 @@ describe("PostingsSearchService", () => {
         },
       ]),
     );
-    expect(batchFindPublic).toHaveBeenCalledWith({
-      ids: [],
-    });
+    expect(getPublicByIds).toHaveBeenCalledWith([]);
   });
 
   it("requires every requested tag in Elasticsearch search requests", async () => {
@@ -495,13 +501,14 @@ describe("PostingsSearchService", () => {
       total: 1,
     }));
     const repository = {
-      batchFindPublic,
       searchPublicFallback,
     } as unknown as PostingsRepository;
     const requestJson = jest.fn(async () => {
       throw new ElasticsearchUnavailableError("Elasticsearch is unavailable.");
     });
     const service = new PostingsSearchService(repository, {
+      getPublicByIds: batchFindPublic,
+    } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,
@@ -521,9 +528,7 @@ describe("PostingsSearchService", () => {
       query: "loft",
       sort: "relevance",
     });
-    expect(batchFindPublic).toHaveBeenCalledWith({
-      ids: ["posting-1"],
-    });
+    expect(batchFindPublic).toHaveBeenCalledWith(["posting-1"]);
   });
 
   it("falls back to database search when Elasticsearch returns stale ids", async () => {
@@ -542,7 +547,6 @@ describe("PostingsSearchService", () => {
       total: 1,
     }));
     const repository = {
-      batchFindPublic,
       searchPublicFallback,
     } as unknown as PostingsRepository;
     const requestJson = jest.fn(async () => ({
@@ -558,6 +562,8 @@ describe("PostingsSearchService", () => {
       },
     }));
     const service = new PostingsSearchService(repository, {
+      getPublicByIds: batchFindPublic,
+    } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,
@@ -577,12 +583,8 @@ describe("PostingsSearchService", () => {
       query: "loft",
       sort: "relevance",
     });
-    expect(batchFindPublic).toHaveBeenNthCalledWith(1, {
-      ids: ["posting-1"],
-    });
-    expect(batchFindPublic).toHaveBeenNthCalledWith(2, {
-      ids: ["posting-2"],
-    });
+    expect(batchFindPublic).toHaveBeenNthCalledWith(1, ["posting-1"]);
+    expect(batchFindPublic).toHaveBeenNthCalledWith(2, ["posting-2"]);
   });
 
   it("repairs a missing read alias from the write alias target", async () => {
@@ -595,6 +597,11 @@ describe("PostingsSearchService", () => {
       })
       .mockResolvedValueOnce({});
     const service = new PostingsSearchService(repository, {
+      getPublicByIds: jest.fn(async () => ({
+        postings: [],
+        missingIds: [],
+      })),
+    } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,
@@ -632,6 +639,11 @@ describe("PostingsSearchService", () => {
         postings_test_write: {},
       });
     const service = new PostingsSearchService(repository, {
+      getPublicByIds: jest.fn(async () => ({
+        postings: [],
+        missingIds: [],
+      })),
+    } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,

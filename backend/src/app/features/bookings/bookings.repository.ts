@@ -659,6 +659,7 @@ export class BookingsRepository extends BaseRepository {
         select: {
           id: true,
           postingId: true,
+          ownerId: true,
           status: true,
           holdBlockId: true,
         },
@@ -668,6 +669,7 @@ export class BookingsRepository extends BaseRepository {
     return rows.map((row) => ({
       id: row.id,
       postingId: row.postingId,
+      ownerId: row.ownerId,
       status: row.status as BookingRequestStatus,
       holdBlockId: row.holdBlockId ?? undefined,
     }));

@@ -50,6 +50,7 @@ type AuthProfilePersistence = {
   avatarUrl: string | null;
   avatarBlobName: string | null;
   isPrivate: boolean;
+  recommendationPersonalizationEnabled?: boolean;
   trustworthinessScore: number;
   rentPostingsCount: number;
   availableRentPostingsCount: number;
@@ -404,6 +405,8 @@ export class AuthRepository extends BaseRepository {
       avatarUrl: profile.avatarUrl ?? undefined,
       avatarBlobName: profile.avatarBlobName ?? undefined,
       isPrivate: profile.isPrivate,
+      recommendationPersonalizationEnabled:
+        profile.recommendationPersonalizationEnabled ?? true,
       trustworthinessScore: profile.trustworthinessScore,
       rentPostingsCount: profile.rentPostingsCount,
       availableRentPostingsCount: profile.availableRentPostingsCount,

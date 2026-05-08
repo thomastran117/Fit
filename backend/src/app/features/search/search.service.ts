@@ -20,6 +20,7 @@ import {
   recordReindexRunCompleted,
   recordReindexRunFailed,
 } from "@/features/search/search.telemetry";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 
 function createEmptyQueueCounts(): SearchQueueCounts {
   return {
@@ -55,11 +56,15 @@ type BatchedDeleteGroup = {
 };
 
 export class SearchService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly postingsRepository: PostingsRepository,
     private readonly postingsSearchService: PostingsSearchService,
     private readonly searchQueueService: SearchQueueService,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(SearchService, "service");
+  }
 
   async startReindex(): Promise<SearchReindexRunRecord> {
     const run = await this.postingsRepository.withSearchReindexStartLock(
@@ -201,10 +206,9 @@ export class SearchService {
           );
         }
       } catch (error) {
-        console.error("Failed to persist relay failure state", {
+        this.logger.error("Failed to persist relay failure state.", {
           outboxId: job.id,
-          error,
-        });
+        }, error);
       }
     }
 
@@ -362,11 +366,10 @@ export class SearchService {
             group.entries.map(({ job }) => job.id),
           );
         } catch (error) {
-          console.warn("Falling back to per-job upsert processing after bulk indexing failed.", {
+          this.logger.warn("Falling back to per-job upsert processing after bulk indexing failed.", {
             targetIndexName,
             jobIds: group.entries.map(({ job }) => job.id),
-            error,
-          });
+          }, error);
           fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
         }
       }),
@@ -383,11 +386,10 @@ export class SearchService {
             group.entries.map(({ job }) => job.id),
           );
         } catch (error) {
-          console.warn("Falling back to per-job delete processing after bulk delete failed.", {
+          this.logger.warn("Falling back to per-job delete processing after bulk delete failed.", {
             targetIndexName,
             jobIds: group.entries.map(({ job }) => job.id),
-            error,
-          });
+          }, error);
           fallbackPayloads.push(...group.entries.map(({ payload }) => payload));
         }
       }),
@@ -435,11 +437,10 @@ export class SearchService {
     } catch (error) {
       if (this.isTransientReindexError(error)) {
         await this.postingsRepository.clearSearchReindexRunProcessing(run.id);
-        console.warn("Search reindex run hit a transient infrastructure error and will be retried.", {
+        this.logger.warn("Search reindex run hit a transient infrastructure error and will be retried.", {
           runId: run.id,
           targetIndexName: run.targetIndexName,
-          error,
-        });
+        }, error);
         return 0;
       }
 
@@ -448,11 +449,10 @@ export class SearchService {
         error instanceof Error ? error.message : "Unknown reindex error.",
       );
       recordReindexRunFailed(this.readReindexDurationMs(run));
-      console.error("Search reindex run failed.", {
+      this.logger.error("Search reindex run failed.", {
         runId: run.id,
         targetIndexName: run.targetIndexName,
-        error,
-      });
+      }, error);
       return 1;
     }
   }
@@ -515,11 +515,10 @@ export class SearchService {
       try {
         await this.postingsSearchService.bulkUpsertDocuments(upserts, targetIndexName);
       } catch (error) {
-        console.warn("Search reconciliation bulk upsert failed; falling back to per-document sync.", {
+        this.logger.warn("Search reconciliation bulk upsert failed; falling back to per-document sync.", {
           targetIndexName,
           documentIds: upserts.map((document) => document.id),
-          error,
-        });
+        }, error);
         for (const document of upserts) {
           await this.postingsSearchService.upsertDocument(document);
         }
@@ -530,11 +529,10 @@ export class SearchService {
       try {
         await this.postingsSearchService.bulkDeleteDocuments(deletes, targetIndexName);
       } catch (error) {
-        console.warn("Search reconciliation bulk delete failed; falling back to per-document sync.", {
+        this.logger.warn("Search reconciliation bulk delete failed; falling back to per-document sync.", {
           targetIndexName,
           documentIds: deletes,
-          error,
-        });
+        }, error);
         for (const id of deletes) {
           await this.postingsSearchService.deleteDocument(id);
         }
@@ -664,7 +662,7 @@ export class SearchService {
   }
 
   private logStaleOutboxJob(job: PostingSearchOutboxRecord): void {
-    console.info("Skipping stale search outbox job because a newer job exists.", {
+    this.logger.info("Skipping stale search outbox job because a newer job exists.", {
       outboxId: job.id,
       postingId: job.postingId,
       targetIndexName: job.targetIndexName,

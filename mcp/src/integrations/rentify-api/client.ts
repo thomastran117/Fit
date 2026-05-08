@@ -229,7 +229,9 @@ function appendQueryValue(searchParams: URLSearchParams, key: string, value: Que
 }
 
 export function buildApiUrl(baseUrl: string, path: string, query: QueryParams = {}): URL {
-  const url = new URL(path, baseUrl);
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const normalizedPath = path.replace(/^\/+/, "");
+  const url = new URL(normalizedPath, normalizedBaseUrl);
   url.searchParams.set("format", "json");
 
   for (const [key, value] of Object.entries(query)) {

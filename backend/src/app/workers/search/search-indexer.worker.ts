@@ -1,5 +1,6 @@
 import { containerTokens } from "@/configuration/bootstrap/container";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 import {
   disconnectResources,
   searchBrokerWorkerResources,
@@ -11,6 +12,9 @@ import {
 
 const workerName = "Search indexer worker";
 const workerResources = searchBrokerWorkerResources;
+const workerLogger = loggerFactory.forComponent("search-indexer.worker", "worker").child({
+  workerName,
+});
 
 export async function bootstrapSearchIndexerWorker(): Promise<void> {
   await bootstrapWorker({
@@ -39,11 +43,10 @@ export async function bootstrapSearchIndexerWorker(): Promise<void> {
               channel.ack(entry.message);
             }
           } catch (error) {
-            console.error("Failed to process search index job batch", {
+            workerLogger.error("Failed to process search index job batch.", {
               outboxIds: entries.map((entry) => entry.payload.outboxId),
               postingIds: entries.map((entry) => entry.payload.postingId),
-              error,
-            });
+            }, error);
             for (const entry of entries) {
               channel.nack(entry.message, false, true);
             }

@@ -1,6 +1,7 @@
 import ConflictError from "@/errors/http/conflict.error";
 import type { CacheService } from "@/features/cache/cache.service";
 import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PaymentProviderAdapter } from "@/features/payments/payment-provider";
 import { PaymentsService } from "@/features/payments/payments.service";
@@ -52,7 +53,10 @@ describe("PaymentsService", () => {
         raw: {},
       })),
     } as unknown as PaymentProviderAdapter;
-    const analyticsRepository = {} as PostingsAnalyticsRepository;
+    const analyticsRepository = {
+      enqueuePaymentFailedEvent: jest.fn(async () => undefined),
+      enqueueRefundRecordedEvent: jest.fn(async () => undefined),
+    } as unknown as PostingsAnalyticsRepository;
     const postingsRepository = {
       enqueueSearchSync: jest.fn(async () => undefined),
     } as unknown as PostingsRepository;
@@ -64,6 +68,9 @@ describe("PaymentsService", () => {
         extend: jest.fn(async () => true),
       })),
     } as unknown as CacheService;
+    const postingsPublicCacheService = {
+      invalidatePublic: jest.fn(async () => 1),
+    } as unknown as PostingsPublicCacheService;
 
     const service = new PaymentsService(
       paymentsRepository,
@@ -71,6 +78,7 @@ describe("PaymentsService", () => {
       analyticsRepository,
       postingsRepository,
       cacheService,
+      postingsPublicCacheService,
     );
 
     await expect(service.reconcilePayment("payment-1", "renter-1")).rejects.toBeInstanceOf(
@@ -79,6 +87,9 @@ describe("PaymentsService", () => {
     expect((cacheService.acquireLock as unknown as jest.Mock).mock.calls[0]?.[0]).toBe(
       "posting:posting-1:booking-window",
     );
+    expect(
+      (postingsPublicCacheService.invalidatePublic as unknown as jest.Mock),
+    ).toHaveBeenCalledWith("posting-1");
   });
 
   it("does not throw from webhook processing when payment success needs reconciliation", async () => {
@@ -112,7 +123,10 @@ describe("PaymentsService", () => {
         isValid: true,
       })),
     } as unknown as PaymentProviderAdapter;
-    const analyticsRepository = {} as PostingsAnalyticsRepository;
+    const analyticsRepository = {
+      enqueuePaymentFailedEvent: jest.fn(async () => undefined),
+      enqueueRefundRecordedEvent: jest.fn(async () => undefined),
+    } as unknown as PostingsAnalyticsRepository;
     const postingsRepository = {
       enqueueSearchSync: jest.fn(async () => undefined),
     } as unknown as PostingsRepository;
@@ -124,6 +138,9 @@ describe("PaymentsService", () => {
         extend: jest.fn(async () => true),
       })),
     } as unknown as CacheService;
+    const postingsPublicCacheService = {
+      invalidatePublic: jest.fn(async () => 1),
+    } as unknown as PostingsPublicCacheService;
 
     const service = new PaymentsService(
       paymentsRepository,
@@ -131,11 +148,15 @@ describe("PaymentsService", () => {
       analyticsRepository,
       postingsRepository,
       cacheService,
+      postingsPublicCacheService,
     );
 
     await expect(service.processSquareWebhook("{}", "sig")).resolves.toBeUndefined();
     expect((paymentsRepository.markWebhookProcessed as unknown as jest.Mock)).toHaveBeenCalledWith(
       "event-1",
     );
+    expect(
+      (postingsPublicCacheService.invalidatePublic as unknown as jest.Mock),
+    ).toHaveBeenCalledWith("posting-1");
   });
 });

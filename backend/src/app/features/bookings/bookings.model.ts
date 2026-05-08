@@ -277,6 +277,7 @@ export interface ActiveBookingOverlapInput {
 export interface BookingRequestExpirationRecord {
   id: string;
   postingId: string;
+  ownerId: string;
   status: BookingRequestStatus;
   holdBlockId?: string;
 }

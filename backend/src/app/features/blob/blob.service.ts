@@ -77,11 +77,47 @@ export class BlobService {
     return this.config !== null;
   }
 
+  async downloadBlob(blobName: string): Promise<{
+    body: Buffer;
+    contentType?: string;
+  }> {
+    const blobClient = this.createBlobClient(blobName);
+    const [body, properties] = await Promise.all([
+      blobClient.downloadToBuffer(),
+      blobClient.getProperties(),
+    ]);
+
+    return {
+      body,
+      contentType: properties.contentType ?? undefined,
+    };
+  }
+
+  async uploadBuffer(input: {
+    blobName: string;
+    body: Buffer;
+    contentType: string;
+  }): Promise<{
+    blobName: string;
+    blobUrl: string;
+  }> {
+    const contentType = this.normalizeContentType(input.contentType);
+    const blobClient = this.createBlobClient(input.blobName);
+
+    await blobClient.uploadData(input.body, {
+      blobHTTPHeaders: {
+        blobContentType: contentType,
+      },
+    });
+
+    return {
+      blobName: input.blobName,
+      blobUrl: blobClient.url,
+    };
+  }
+
   getBlobUrl(blobName: string): string {
-    const config = this.requireConfiguration();
-    const credential = new StorageSharedKeyCredential(config.accountName, config.accountKey);
-    const serviceClient = new BlobServiceClient(config.serviceUrl, credential);
-    return serviceClient.getContainerClient(config.containerName).getBlockBlobClient(blobName).url;
+    return this.createBlobClient(blobName).url;
   }
 
   isManagedBlobUrl(blobUrl: string, blobName: string): boolean {
@@ -92,6 +128,18 @@ export class BlobService {
     return this.getBlobUrl(blobName) === blobUrl;
   }
 
+  buildPostingPhotoThumbnailBlobName(blobName: string): string {
+    const normalizedBlobName = path.posix.normalize(blobName.trim()).replace(/^\/+/, "");
+    const directory = path.posix.dirname(normalizedBlobName);
+    const baseName = path.posix.basename(normalizedBlobName, path.posix.extname(normalizedBlobName));
+
+    if (!baseName) {
+      throw new BadRequestError("Blob name is invalid.");
+    }
+
+    return `${directory === "." ? "" : `${directory}/`}thumbnails/${baseName}.webp`;
+  }
+
   private requireConfiguration(): AzureBlobConfiguration {
     if (!this.config) {
       throw new ServiceNotImplementedError(
@@ -100,6 +148,13 @@ export class BlobService {
     }
 
     return this.config;
+  }
+
+  private createBlobClient(blobName: string) {
+    const config = this.requireConfiguration();
+    const credential = new StorageSharedKeyCredential(config.accountName, config.accountKey);
+    const serviceClient = new BlobServiceClient(config.serviceUrl, credential);
+    return serviceClient.getContainerClient(config.containerName).getBlockBlobClient(blobName);
   }
 
   private readConfiguration(): AzureBlobConfiguration | null {

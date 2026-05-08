@@ -4,8 +4,10 @@ import {
   type ConfirmChannel,
 } from "amqplib";
 import { environment } from "@/configuration/environment/index";
+import { loggerFactory } from "@/configuration/logging";
 
 let rabbitMqConnection: ChannelModel | null = null;
+const rabbitMqLogger = loggerFactory.forComponent("rabbitmq", "resource");
 
 function getRabbitMqUrl(): string {
   const { url } = environment.getRabbitMqConfig();
@@ -29,7 +31,7 @@ export async function connectRabbitMq(): Promise<ChannelModel> {
   const connection = await connect(getRabbitMqUrl());
 
   connection.on("error", (error) => {
-    console.error("RabbitMQ connection error", error);
+    rabbitMqLogger.error("RabbitMQ connection error.", undefined, error);
   });
 
   connection.on("close", () => {

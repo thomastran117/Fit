@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { mountRoutes } from "@/configuration/bootstrap/routes";
 import { containerTokens, type ServiceContainer } from "@/configuration/bootstrap/container";
+import { buildApiPath } from "@/configuration/http/api-path";
 import type { AppBindings, ClientRequestContext } from "@/configuration/http/bindings";
 import { clientContextMiddleware } from "@/configuration/middlewares/client-context.middleware";
 import { handleApplicationError } from "@/configuration/middlewares/error-handler.middleware";
@@ -20,6 +21,7 @@ function createAuthUser(overrides: Partial<AuthUserProfile> = {}): AuthUserProfi
     phoneNumber: undefined,
     avatarUrl: undefined,
     isPrivate: false,
+    recommendationPersonalizationEnabled: true,
     trustworthinessScore: 80,
     rentPostingsCount: 0,
     availableRentPostingsCount: 0,
@@ -221,7 +223,7 @@ describe("Auth integration", () => {
   it("POST /auth/local/login parses client headers, verifies captcha, and returns a desktop auth session with a refresh cookie", async () => {
     const { app, authService, captchaService } = createApp();
 
-    const response = await app.request("http://rent.test/auth/local/login", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/local/login")}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -289,7 +291,7 @@ describe("Auth integration", () => {
       }),
     });
 
-    const response = await app.request("http://rent.test/auth/local/signup", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/local/signup")}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -315,7 +317,7 @@ describe("Auth integration", () => {
   it("POST /auth/local/verify returns 401 when the authorization header is missing", async () => {
     const { app } = createApp();
 
-    const response = await app.request("http://rent.test/auth/local/verify", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/local/verify")}`, {
       method: "POST",
     });
 
@@ -329,7 +331,7 @@ describe("Auth integration", () => {
   it("POST /auth/local/verify authenticates through the shared JWT helper and passes auth plus client context to the service", async () => {
     const { app, authService, tokenService } = createApp();
 
-    const response = await app.request("http://rent.test/auth/local/verify", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/local/verify")}`, {
       method: "POST",
       headers: {
         authorization: "Bearer good-token",
@@ -379,7 +381,7 @@ describe("Auth integration", () => {
   it("POST /auth/oauth/google maps the oauth request body and returns a desktop auth session", async () => {
     const { app, authService } = createApp();
 
-    const response = await app.request("http://rent.test/auth/oauth/google", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/oauth/google")}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -441,7 +443,7 @@ describe("Auth integration", () => {
   it("POST /auth/oauth/microsoft accepts id_token auth on mobile and returns the refresh token in the body", async () => {
     const { app, authService } = createApp();
 
-    const response = await app.request("http://rent.test/auth/oauth/microsoft", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/oauth/microsoft")}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -500,7 +502,7 @@ describe("Auth integration", () => {
   it("POST /auth/logout authenticates via bearer token, reads the refresh cookie, and clears it in the response", async () => {
     const { app, authService } = createApp();
 
-    const response = await app.request("http://rent.test/auth/logout", {
+    const response = await app.request(`http://rent.test${buildApiPath("/auth/logout")}`, {
       method: "POST",
       headers: {
         authorization: "Bearer good-token",

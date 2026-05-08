@@ -274,7 +274,7 @@ export const SEED_ANALYTICS_OUTBOX_EVENTS: SeedPostingAnalyticsOutboxFixture[] =
   {
     id: createFixtureId(4020, 3),
     postingId: createFixtureId(2000, 16),
-    eventType: "booking_accepted",
+    eventType: "renting_confirmed",
     payload: {
       occurredAt: "2026-04-24T11:00:00.000Z",
       estimatedTotal: 495,
@@ -288,7 +288,7 @@ export const SEED_ANALYTICS_OUTBOX_EVENTS: SeedPostingAnalyticsOutboxFixture[] =
   {
     id: createFixtureId(4020, 4),
     postingId: createFixtureId(2000, 21),
-    eventType: "booking_accepted",
+    eventType: "renting_confirmed",
     payload: {
       occurredAt: "2026-04-24T12:00:00.000Z",
       estimatedTotal: 420,
@@ -319,7 +319,7 @@ export const SEED_ANALYTICS_OUTBOX_EVENTS: SeedPostingAnalyticsOutboxFixture[] =
   {
     id: createFixtureId(4020, 6),
     postingId: createFixtureId(2000, 29),
-    eventType: "booking_accepted",
+    eventType: "renting_confirmed",
     payload: {
       occurredAt: "2026-04-24T14:00:00.000Z",
       estimatedTotal: 516,

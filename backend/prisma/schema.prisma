@@ -32,6 +32,8 @@ model User {
   payouts          Payout[]
   refundsIssued    Refund[]  @relation("RefundIssuer")
   personalAccessTokens PersonalAccessToken[]
+  recommendationProfile UserRecommendationProfile?
+  recommendationSnapshot UserRecommendationSnapshot?
 
   @@map("users")
 }
@@ -83,6 +85,7 @@ model Profile {
   avatarUrl                String?  @map("avatar_url") @db.VarChar(2048)
   avatarBlobName           String?  @map("avatar_blob_name") @db.VarChar(1024)
   isPrivate                Boolean  @default(false) @map("is_private")
+  recommendationPersonalizationEnabled Boolean @default(true) @map("recommendation_personalization_enabled")
   trustworthinessScore     Int      @default(1) @map("trustworthiness_score")
   rentPostingsCount        Int      @default(0) @map("rent_postings_count")
   availableRentPostingsCount Int    @default(0) @map("available_rent_postings_count")
@@ -145,6 +148,7 @@ model Posting {
   availabilityBlocks PostingAvailabilityBlock[]
   searchOutboxEntries PostingSearchOutbox[]
   viewEvents        PostingViewEvent[]
+  recommendationActivities RecommendationActivity[]
   hourlyAnalytics   PostingAnalyticsHourly[]
   dailyAnalytics    PostingAnalyticsDaily[]
   analyticsOutboxEntries PostingAnalyticsOutbox[]
@@ -165,6 +169,8 @@ model PostingPhoto {
   postingId  String   @map("posting_id") @db.VarChar(36)
   blobUrl    String   @map("blob_url") @db.VarChar(2048)
   blobName   String   @map("blob_name") @db.VarChar(1024)
+  thumbnailBlobUrl  String?  @map("thumbnail_blob_url") @db.VarChar(2048)
+  thumbnailBlobName String?  @map("thumbnail_blob_name") @db.VarChar(1024)
   position   Int
   createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(6)
@@ -494,11 +500,19 @@ model PostingAnalyticsHourly {
   postingId        String   @map("posting_id") @db.VarChar(36)
   ownerId          String   @map("owner_id") @db.VarChar(36)
   bucketStart      DateTime @map("bucket_start") @db.DateTime(6)
+  searchImpressions Int     @default(0) @map("search_impressions")
+  searchClicks     Int      @default(0) @map("search_clicks")
   views            Int      @default(0)
   uniqueViews      Int      @default(0) @map("unique_views")
   bookingRequests  Int      @default(0) @map("booking_requests")
+  approvedRequests Int      @default(0) @map("approved_requests")
+  declinedRequests Int      @default(0) @map("declined_requests")
+  expiredRequests  Int      @default(0) @map("expired_requests")
+  cancelledRequests Int     @default(0) @map("cancelled_requests")
+  paymentFailedRequests Int @default(0) @map("payment_failed_requests")
   confirmedBookings Int     @default(0) @map("confirmed_bookings")
-  estimatedRevenue Decimal  @default(0) @map("estimated_revenue") @db.Decimal(18, 2)
+  estimatedConfirmedRevenue Decimal @default(0) @map("estimated_confirmed_revenue") @db.Decimal(18, 2)
+  refundedRevenue  Decimal  @default(0) @map("refunded_revenue") @db.Decimal(18, 2)
   createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   posting          Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
@@ -513,11 +527,19 @@ model PostingAnalyticsDaily {
   postingId        String   @map("posting_id") @db.VarChar(36)
   ownerId          String   @map("owner_id") @db.VarChar(36)
   bucketStart      DateTime @map("bucket_start") @db.DateTime(6)
+  searchImpressions Int     @default(0) @map("search_impressions")
+  searchClicks     Int      @default(0) @map("search_clicks")
   views            Int      @default(0)
   uniqueViews      Int      @default(0) @map("unique_views")
   bookingRequests  Int      @default(0) @map("booking_requests")
+  approvedRequests Int      @default(0) @map("approved_requests")
+  declinedRequests Int      @default(0) @map("declined_requests")
+  expiredRequests  Int      @default(0) @map("expired_requests")
+  cancelledRequests Int     @default(0) @map("cancelled_requests")
+  paymentFailedRequests Int @default(0) @map("payment_failed_requests")
   confirmedBookings Int     @default(0) @map("confirmed_bookings")
-  estimatedRevenue Decimal  @default(0) @map("estimated_revenue") @db.Decimal(18, 2)
+  estimatedConfirmedRevenue Decimal @default(0) @map("estimated_confirmed_revenue") @db.Decimal(18, 2)
+  refundedRevenue  Decimal  @default(0) @map("refunded_revenue") @db.Decimal(18, 2)
   createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(6)
   posting          Posting  @relation(fields: [postingId], references: [id], onDelete: Cascade)
@@ -566,6 +588,107 @@ model PostingReview {
   @@map("posting_reviews")
 }
 
+model RecommendationActivity {
+  id                       String                          @id @db.VarChar(36)
+  aggregationKey           String                          @unique @map("aggregation_key") @db.VarChar(255)
+  eventType                RecommendationActivityEventType @map("event_type")
+  source                   RecommendationActivitySource
+  occurredAt               DateTime                        @map("occurred_at") @db.DateTime(6)
+  postingId                String                          @map("posting_id") @db.VarChar(36)
+  ownerId                  String                          @map("owner_id") @db.VarChar(36)
+  actorUserId              String?                         @map("actor_user_id") @db.VarChar(36)
+  anonymousActorHash       String?                         @map("anonymous_actor_hash") @db.VarChar(128)
+  deviceType               String                          @map("device_type") @db.VarChar(32)
+  requestId                String?                         @map("request_id") @db.VarChar(255)
+  searchSessionId          String?                         @map("search_session_id") @db.VarChar(255)
+  metadata                 Json?
+  count                    Int                             @default(1)
+  firstOccurredAt          DateTime                        @map("first_occurred_at") @db.DateTime(6)
+  lastOccurredAt           DateTime                        @map("last_occurred_at") @db.DateTime(6)
+  personalizationEligible  Boolean                         @default(false) @map("personalization_eligible")
+  createdAt                DateTime                        @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt                DateTime                        @updatedAt @map("updated_at") @db.DateTime(6)
+  posting                  Posting                         @relation(fields: [postingId], references: [id], onDelete: Cascade)
+
+  @@index([postingId, eventType, lastOccurredAt])
+  @@index([actorUserId, personalizationEligible, lastOccurredAt])
+  @@index([anonymousActorHash, eventType, lastOccurredAt])
+  @@index([ownerId, eventType, lastOccurredAt])
+  @@map("recommendation_activities")
+}
+
+model RecommendationRefreshJob {
+  id           String                          @id @db.VarChar(36)
+  jobType      RecommendationRefreshJobType    @map("job_type")
+  dedupeKey    String                          @unique @map("dedupe_key") @db.VarChar(255)
+  userId       String?                         @map("user_id") @db.VarChar(36)
+  segmentType  RecommendationPopularSegmentType? @map("segment_type")
+  segmentValue String?                         @map("segment_value") @db.VarChar(191)
+  availableAt  DateTime                        @default(now()) @map("available_at") @db.DateTime(6)
+  processingAt DateTime?                       @map("processing_at") @db.DateTime(6)
+  processedAt  DateTime?                       @map("processed_at") @db.DateTime(6)
+  attempts     Int                             @default(0)
+  lastError    String?                         @map("last_error") @db.VarChar(2048)
+  createdAt    DateTime                        @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt    DateTime                        @updatedAt @map("updated_at") @db.DateTime(6)
+
+  @@index([availableAt, processedAt, processingAt], map: "recommendation_refresh_jobs_ready_idx")
+  @@index([jobType, userId])
+  @@index([jobType, segmentType, segmentValue])
+  @@map("recommendation_refresh_jobs")
+}
+
+model UserRecommendationProfile {
+  id                    String    @id @db.VarChar(36)
+  userId                String    @unique @map("user_id") @db.VarChar(36)
+  qualified             Boolean   @default(false)
+  activityWindowStartAt DateTime  @map("activity_window_start_at") @db.DateTime(6)
+  lastSignalAt          DateTime? @map("last_signal_at") @db.DateTime(6)
+  distinctPostingCount  Int       @default(0) @map("distinct_posting_count")
+  signalCounts          Json      @map("signal_counts")
+  familyAffinities      Json      @map("family_affinities")
+  subtypeAffinities     Json      @map("subtype_affinities")
+  tagAffinities         Json      @map("tag_affinities")
+  rebuiltAt             DateTime  @map("rebuilt_at") @db.DateTime(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.DateTime(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([qualified, rebuiltAt])
+  @@map("user_recommendation_profiles")
+}
+
+model UserRecommendationSnapshot {
+  id               String    @id @db.VarChar(36)
+  userId           String    @unique @map("user_id") @db.VarChar(36)
+  generatedAt      DateTime  @map("generated_at") @db.DateTime(6)
+  sourceLastSignalAt DateTime? @map("source_last_signal_at") @db.DateTime(6)
+  candidateCount   Int       @default(0) @map("candidate_count")
+  candidates       Json
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(6)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([generatedAt])
+  @@map("user_recommendation_snapshots")
+}
+
+model PopularRecommendationSnapshot {
+  id               String                          @id @db.VarChar(36)
+  segmentType      RecommendationPopularSegmentType @map("segment_type")
+  segmentValue     String                          @map("segment_value") @db.VarChar(191)
+  generatedAt      DateTime                        @map("generated_at") @db.DateTime(6)
+  sourceLastSignalAt DateTime?                     @map("source_last_signal_at") @db.DateTime(6)
+  candidateCount   Int                             @default(0) @map("candidate_count")
+  candidates       Json
+  createdAt        DateTime                        @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt        DateTime                        @updatedAt @map("updated_at") @db.DateTime(6)
+
+  @@unique([segmentType, segmentValue])
+  @@index([generatedAt])
+  @@map("popular_recommendation_snapshots")
+}
+
 enum PostingStatus {
   draft
   published
@@ -607,9 +730,46 @@ enum SearchReindexStatus {
 
 enum PostingAnalyticsEventType {
   posting_viewed
+  search_impression
+  search_click
   booking_requested
-  booking_accepted
-  payment_captured
+  booking_approved
+  booking_declined
+  booking_expired
+  booking_cancelled
+  payment_failed
+  refund_recorded
+  renting_confirmed
+}
+
+enum RecommendationActivityEventType {
+  posting_view
+  search_click
+  booking_request_created
+  renting_confirmed
+  posting_published
+  posting_unpaused
+  posting_paused
+  posting_archived
+}
+
+enum RecommendationActivitySource {
+  posting_detail
+  search_results
+  booking_flow
+  renting_flow
+  posting_lifecycle
+}
+
+enum RecommendationRefreshJobType {
+  user_refresh
+  popular_refresh
+}
+
+enum RecommendationPopularSegmentType {
+  global
+  family
+  family_subtype
 }
 
 enum BookingRequestStatus {

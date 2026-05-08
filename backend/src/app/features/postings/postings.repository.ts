@@ -4,6 +4,7 @@ import { BaseRepository } from "@/features/base/base.repository";
 import {
   DEFAULT_MAX_BOOKING_DURATION_DAYS,
   isPostingSearchIndexable,
+  toPublicPostingRecord,
 } from "@/features/postings/postings.model";
 import type {
   BatchPublicPostingsInput,
@@ -11,6 +12,7 @@ import type {
   BatchOwnerPostingsInput,
   ListOwnerPostingsInput,
   ListOwnerPostingsResult,
+  ManagedPostingPhotoInput,
   PublicPostingRecord,
   PostingAttributeValue,
   PostingAvailabilityBlockInput,
@@ -109,7 +111,6 @@ interface LockRow {
   released?: bigint | number | boolean | null;
 }
 
-const PUBLIC_LOCATION_PRECISION = 2;
 const SEARCH_REINDEX_START_LOCK_NAME = "rentify:search-reindex:start";
 const postingInclude = {
   photos: {
@@ -179,11 +180,34 @@ export class PostingsRepository extends BaseRepository {
     return this.executeAsync(async () => {
       try {
         const posting = await this.prisma.$transaction(async (transaction) => {
+          const existing = await transaction.posting.findUnique({
+            where: {
+              id,
+            },
+            include: {
+              photos: {
+                orderBy: {
+                  position: "asc",
+                },
+              },
+            },
+          });
+
+          if (!existing) {
+            throw new Prisma.PrismaClientKnownRequestError("No Posting found", {
+              code: "P2025",
+              clientVersion: "unknown",
+            });
+          }
+
           const updated = await transaction.posting.update({
             where: {
               id,
             },
-            data: this.toUpdateData(input),
+            data: this.toUpdateData(
+              input,
+              this.mergePhotosWithExisting(existing.photos, input.photos),
+            ),
             include: postingInclude,
           });
 
@@ -572,6 +596,36 @@ export class PostingsRepository extends BaseRepository {
     );
 
     return posting ? this.mapPosting(posting) : null;
+  }
+
+  async findPublicReadMetadataById(id: string): Promise<{
+    id: string;
+    ownerId: string;
+    status: PostingStatus;
+    archivedAt?: string;
+  } | null> {
+    const posting = await this.executeAsync(() =>
+      this.prisma.posting.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          ownerId: true,
+          status: true,
+          archivedAt: true,
+        },
+      }),
+    );
+
+    return posting
+      ? {
+          id: posting.id,
+          ownerId: posting.ownerId,
+          status: posting.status as PostingStatus,
+          archivedAt: posting.archivedAt?.toISOString(),
+        }
+      : null;
   }
 
   async listByOwner(input: ListOwnerPostingsInput): Promise<ListOwnerPostingsResult> {
@@ -1072,6 +1126,53 @@ export class PostingsRepository extends BaseRepository {
     await this.executeAsync(() =>
       this.prisma.$transaction(async (transaction) => {
         await this.enqueueOutbox(transaction, postingId, operation);
+      }),
+    );
+  }
+
+  async findPrimaryPhotoForThumbnailing(postingId: string): Promise<PostingPhotoRecord | null> {
+    const photo = await this.executeAsync(() =>
+      this.prisma.postingPhoto.findFirst({
+        where: {
+          postingId,
+          position: 0,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
+    );
+
+    return photo
+      ? {
+          id: photo.id,
+          blobUrl: photo.blobUrl,
+          blobName: photo.blobName,
+          thumbnailBlobUrl: photo.thumbnailBlobUrl ?? undefined,
+          thumbnailBlobName: photo.thumbnailBlobName ?? undefined,
+          position: photo.position,
+          createdAt: photo.createdAt.toISOString(),
+          updatedAt: photo.updatedAt.toISOString(),
+        }
+      : null;
+  }
+
+  async updatePostingPhotoThumbnail(
+    photoId: string,
+    input: {
+      thumbnailBlobName: string;
+      thumbnailBlobUrl: string;
+    },
+  ): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.postingPhoto.update({
+        where: {
+          id: photoId,
+        },
+        data: {
+          thumbnailBlobName: input.thumbnailBlobName,
+          thumbnailBlobUrl: input.thumbnailBlobUrl,
+        },
       }),
     );
   }
@@ -1758,6 +1859,8 @@ export class PostingsRepository extends BaseRepository {
           id: randomUUID(),
           blobUrl: photo.blobUrl,
           blobName: photo.blobName,
+          thumbnailBlobUrl: photo.thumbnailBlobUrl ?? null,
+          thumbnailBlobName: photo.thumbnailBlobName ?? null,
           position: photo.position,
         })),
       },
@@ -1773,7 +1876,10 @@ export class PostingsRepository extends BaseRepository {
     };
   }
 
-  private toUpdateData(input: UpsertPostingInput): Prisma.PostingUpdateInput {
+  private toUpdateData(
+    input: UpsertPostingInput,
+    photos: ManagedPostingPhotoInput[] = input.photos,
+  ): Prisma.PostingUpdateInput {
     return {
       family: input.variant.family,
       subtype: input.variant.subtype,
@@ -1794,14 +1900,55 @@ export class PostingsRepository extends BaseRepository {
       postalCode: input.location.postalCode ?? null,
       photos: {
         deleteMany: {},
-        create: input.photos.map((photo) => ({
+        create: photos.map((photo) => ({
           id: randomUUID(),
           blobUrl: photo.blobUrl,
           blobName: photo.blobName,
+          thumbnailBlobUrl: photo.thumbnailBlobUrl ?? null,
+          thumbnailBlobName: photo.thumbnailBlobName ?? null,
           position: photo.position,
         })),
       },
     };
+  }
+
+  private mergePhotosWithExisting(
+    existingPhotos: Array<{
+      blobUrl: string;
+      blobName: string;
+      thumbnailBlobUrl: string | null;
+      thumbnailBlobName: string | null;
+    }>,
+    nextPhotos: ManagedPostingPhotoInput[],
+  ): ManagedPostingPhotoInput[] {
+    const existingByBlobKey = new Map(
+      existingPhotos.map((photo) => [
+        this.createPhotoBlobKey(photo.blobUrl, photo.blobName),
+        photo,
+      ]),
+    );
+
+    return nextPhotos.map((photo) => {
+      if (photo.thumbnailBlobName || photo.thumbnailBlobUrl) {
+        return photo;
+      }
+
+      const existing = existingByBlobKey.get(this.createPhotoBlobKey(photo.blobUrl, photo.blobName));
+
+      if (!existing?.thumbnailBlobName || !existing.thumbnailBlobUrl) {
+        return photo;
+      }
+
+      return {
+        ...photo,
+        thumbnailBlobName: existing.thumbnailBlobName,
+        thumbnailBlobUrl: existing.thumbnailBlobUrl,
+      };
+    });
+  }
+
+  private createPhotoBlobKey(blobUrl: string, blobName: string): string {
+    return `${blobUrl}::${blobName}`;
   }
 
   private mapAvailabilityBlock(block: {
@@ -1859,6 +2006,8 @@ export class PostingsRepository extends BaseRepository {
         id: photo.id,
         blobUrl: photo.blobUrl,
         blobName: photo.blobName,
+        thumbnailBlobUrl: photo.thumbnailBlobUrl ?? undefined,
+        thumbnailBlobName: photo.thumbnailBlobName ?? undefined,
         position: photo.position,
         createdAt: photo.createdAt.toISOString(),
         updatedAt: photo.updatedAt.toISOString(),
@@ -1888,19 +2037,7 @@ export class PostingsRepository extends BaseRepository {
   }
 
   private mapPublicPosting(posting: PostingPersistence): PublicPostingRecord {
-    const record = this.mapPosting(posting);
-
-    return {
-      ...record,
-      location: {
-        city: record.location.city,
-        region: record.location.region,
-        country: record.location.country,
-        postalCode: record.location.postalCode,
-        latitude: this.roundCoordinate(record.location.latitude),
-        longitude: this.roundCoordinate(record.location.longitude),
-      },
-    };
+    return toPublicPostingRecord(this.mapPosting(posting));
   }
 
   private mapSearchDocument(posting: PostingPersistence): PostingSearchDocument {
@@ -2063,10 +2200,6 @@ export class PostingsRepository extends BaseRepository {
       createdAt: run.createdAt.toISOString(),
       updatedAt: run.updatedAt.toISOString(),
     };
-  }
-
-  private roundCoordinate(value: number): number {
-    return Number(value.toFixed(PUBLIC_LOCATION_PRECISION));
   }
 
   private createPagination(page: number, pageSize: number, total: number) {

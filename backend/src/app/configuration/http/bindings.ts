@@ -1,5 +1,6 @@
 import type { AuthPrincipal } from "@/features/auth/auth.principal";
 import type { ServiceContainer } from "@/configuration/bootstrap/container";
+import type { Logger } from "@/configuration/logging";
 
 export type OutputFormat = "json" | "xml";
 
@@ -32,5 +33,6 @@ export interface AppBindings {
     idempotencyKey: string;
     outputFormat: OutputFormat;
     requestId: string;
+    logger: Logger;
   };
 }

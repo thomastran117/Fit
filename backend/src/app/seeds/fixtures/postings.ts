@@ -5,6 +5,8 @@ function createPhoto(index: number, slug: string): SeedPostingPhotoFixture {
     id: createFixtureId(2100, index),
     blobUrl: `https://example.com/dev-seed/postings/${slug}/main.jpg`,
     blobName: `dev-seed/postings/${slug}/main.jpg`,
+    thumbnailBlobUrl: `https://example.com/dev-seed/postings/${slug}/thumbnails/main.webp`,
+    thumbnailBlobName: `dev-seed/postings/${slug}/thumbnails/main.webp`,
     position: 0,
   };
 }
