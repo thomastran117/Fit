@@ -67,6 +67,14 @@ describe("RentingsService", () => {
     expect(
       (bookingsRepository.releaseConversionReservation as unknown as jest.Mock).mock.calls[0],
     ).toEqual(["booking-1", "owner-1", reservation]);
+    expect((postingsRepository.enqueueSearchSync as unknown as jest.Mock).mock.calls).toEqual([
+      ["posting-1"],
+      ["posting-1"],
+    ]);
+    expect((postingsPublicCacheService.invalidatePublic as unknown as jest.Mock).mock.calls).toEqual([
+      ["posting-1"],
+      ["posting-1"],
+    ]);
     expect((cacheService.acquireLock as unknown as jest.Mock).mock.calls.map(([key]) => key)).toEqual([
       "booking-request:booking-1:convert",
       "posting:posting-1:booking-window",
@@ -157,8 +165,13 @@ describe("RentingsService", () => {
     expect(
       (rentingsRepository.convertApprovedBookingRequest as unknown as jest.Mock),
     ).toHaveBeenCalledWith("booking-1", "owner-1");
-    expect(
-      (postingsPublicCacheService.invalidatePublic as unknown as jest.Mock),
-    ).toHaveBeenCalledWith("posting-1");
+    expect((postingsRepository.enqueueSearchSync as unknown as jest.Mock).mock.calls).toEqual([
+      ["posting-1"],
+      ["posting-1"],
+    ]);
+    expect((postingsPublicCacheService.invalidatePublic as unknown as jest.Mock).mock.calls).toEqual([
+      ["posting-1"],
+      ["posting-1"],
+    ]);
   });
 });

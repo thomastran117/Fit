@@ -3,11 +3,12 @@ import {
   getElasticsearchClient,
   type ElasticsearchClient,
 } from "@/configuration/resources/elasticsearch";
-import type {
-  PostingSearchSource,
-  SearchAttributeFilterInput,
-  SearchPostingsInput,
-  SearchPostingsResult,
+import {
+  MAX_SEARCH_RESULT_WINDOW,
+  type PostingSearchSource,
+  type SearchAttributeFilterInput,
+  type SearchPostingsInput,
+  type SearchPostingsResult,
 } from "@/features/postings/postings.model";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
@@ -367,7 +368,8 @@ export class PostingsPublicSearchService {
   }
 
   private createPagination(page: number, pageSize: number, total: number) {
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const navigableTotal = Math.min(total, MAX_SEARCH_RESULT_WINDOW);
+    const totalPages = Math.max(1, Math.ceil(navigableTotal / pageSize));
 
     return {
       page,

@@ -640,6 +640,48 @@ describe("PostingsPublicSearchService", () => {
     expect(batchFindPublic).toHaveBeenNthCalledWith(1, ["posting-1"]);
     expect(batchFindPublic).toHaveBeenNthCalledWith(2, ["posting-2"]);
   });
+
+  it("caps pagination metadata at the maximum supported search window", async () => {
+    const requestJson = jest.fn(async () => ({
+      hits: {
+        total: {
+          value: 25_000,
+        },
+        hits: [],
+      },
+    }));
+    const service = new PostingsPublicSearchService(
+      {
+        searchPublicFallback: jest.fn(),
+      } as unknown as PostingsRepository,
+      {
+        getPublicByIds: jest.fn(async () => ({
+          postings: [],
+          missingIds: [],
+        })),
+      } as unknown as PostingsPublicCacheService,
+      {
+        getPostingsIndexName: () => "postings-test",
+        requestJson,
+        isEnabled: () => true,
+      } as never,
+    );
+
+    const result = await service.searchPublic({
+      page: 200,
+      pageSize: 50,
+      sort: "relevance",
+    });
+
+    expect(result.pagination).toMatchObject({
+      page: 200,
+      pageSize: 50,
+      total: 25_000,
+      totalPages: 200,
+      hasNextPage: false,
+      hasPreviousPage: true,
+    });
+  });
 });
 
 describe("PostingsRepository.searchPublicFallback", () => {

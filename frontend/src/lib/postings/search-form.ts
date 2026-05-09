@@ -41,8 +41,16 @@ export function buildSearchFormQuery(entries: Iterable<[string, FormDataEntryVal
       continue;
     }
 
+    const normalizedValue = rawValue.trim();
+
+    if (!normalizedValue) {
+      continue;
+    }
+
     const value =
-      key === "startAt" || key === "endAt" ? (toUtcIsoDateTime(rawValue) ?? rawValue) : rawValue;
+      key === "startAt" || key === "endAt"
+        ? (toUtcIsoDateTime(normalizedValue) ?? normalizedValue)
+        : normalizedValue;
     searchParams.append(key, value);
   }
 

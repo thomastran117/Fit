@@ -46,6 +46,7 @@ export class RentingsService {
           input.ownerId,
           new Date(Date.now() + CONVERSION_RESERVATION_MINUTES * 60 * 1000),
         );
+        await this.syncPostingSearchState(bookingRequest.postingId);
 
         try {
           const nextRenting = await this.rentingsRepository.convertApprovedBookingRequest(
@@ -64,6 +65,7 @@ export class RentingsService {
             input.ownerId,
             reservation,
           );
+          await this.syncPostingSearchState(bookingRequest.postingId);
           throw error;
         }
       },
@@ -76,8 +78,7 @@ export class RentingsService {
       occurredAt: renting.confirmedAt,
       estimatedTotal: renting.estimatedTotal,
     });
-    await invalidatePublicPostingProjection(this.postingsPublicCacheService, renting.postingId);
-    await this.postingsRepository.enqueueSearchSync(renting.postingId);
+    await this.syncPostingSearchState(renting.postingId);
 
     return renting;
   }
@@ -110,5 +111,10 @@ export class RentingsService {
     if (posting.archivedAt || !["published", "paused"].includes(posting.status)) {
       throw new ForbiddenError("This posting can no longer be converted into a renting.");
     }
+  }
+
+  private async syncPostingSearchState(postingId: string): Promise<void> {
+    await invalidatePublicPostingProjection(this.postingsPublicCacheService, postingId);
+    await this.postingsRepository.enqueueSearchSync(postingId);
   }
 }

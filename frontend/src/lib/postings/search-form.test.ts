@@ -29,9 +29,13 @@ assert.equal(params.get("startAt"), toUtcIsoDateTime("2026-06-15T09:30"));
 assert.equal(params.get("endAt"), toUtcIsoDateTime("2026-06-17T18:45"));
 
 const emptyDateParams = buildSearchFormQuery([
+  ["q", "   "],
+  ["minDailyPrice", ""],
   ["startAt", ""],
   ["endAt", ""],
 ]);
 
-assert.equal(emptyDateParams.get("startAt"), "");
-assert.equal(emptyDateParams.get("endAt"), "");
+assert.equal(emptyDateParams.get("q"), null);
+assert.equal(emptyDateParams.get("minDailyPrice"), null);
+assert.equal(emptyDateParams.get("startAt"), null);
+assert.equal(emptyDateParams.get("endAt"), null);

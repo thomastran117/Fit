@@ -243,6 +243,52 @@ describe("PostingsController", () => {
     expect(searchPublic).not.toHaveBeenCalled();
   });
 
+  it("treats blank public search query params as omitted values", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?page=&pageSize=&q=&family=&subtype=&availabilityStatus=&minDailyPrice=&maxDailyPrice=&latitude=&longitude=&radiusKm=&startAt=&endAt=&sort=&attr.bedrooms.min=",
+    });
+
+    await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+      sort: "relevance",
+      tags: undefined,
+      attributeFilters: undefined,
+      availabilityStatus: undefined,
+      availabilityWindow: undefined,
+      family: undefined,
+      geo: undefined,
+      maxDailyPrice: undefined,
+      minDailyPrice: undefined,
+      query: undefined,
+      subtype: undefined,
+    });
+  });
+
   it("rejects create requests that omit the required variant", async () => {
     mockRequireJwtAuth.mockResolvedValue(createClaims());
     const createDraft = jest.fn();
