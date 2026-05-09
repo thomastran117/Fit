@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { mergeResponseMeta, ok, paginationMeta, pickMeta } from "@/configuration/http/responses";
 import { getOptionalJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError } from "@/configuration/validation/request";
 import type { AuthPrincipal } from "@/features/auth/auth.principal";
@@ -20,7 +21,12 @@ export class RecommendationsController {
       auth,
     );
 
-    return context.json(result);
+    return ok(context, result, {
+      meta: mergeResponseMeta(
+        paginationMeta(result),
+        pickMeta(result, ["mode", "fallback", "snapshotGeneratedAt"]),
+      ),
+    });
   };
 
   private parseRecommendationQueryInput(context: Context<AppBindings>): RecommendationQueryInput {

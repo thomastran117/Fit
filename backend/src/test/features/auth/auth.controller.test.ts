@@ -110,6 +110,12 @@ function createContext(options?: {
 
   variables.set("container", container);
   variables.set("client", options?.client ?? createClient());
+  variables.set(
+    "requestId",
+    options?.headers?.["x-request-id"] ??
+      options?.headers?.["X-Request-Id"] ??
+      "request-test",
+  );
 
   if (options?.auth) {
     variables.set("auth", options.auth);
@@ -300,18 +306,23 @@ describe("AuthController", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      accessToken: "access-token-1",
-      device: {
-        deviceId: "device-1",
-        known: true,
-        knownByIp: true,
+      data: {
+        accessToken: "access-token-1",
+        device: {
+          deviceId: "device-1",
+          known: true,
+          knownByIp: true,
+        },
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          username: "test-user",
+          role: "user",
+        },
       },
-      user: {
-        id: "user-1",
-        email: "user@example.com",
-        username: "test-user",
-        avatarUrl: undefined,
-        role: "user",
+      message: "Authenticated successfully.",
+      meta: {
+        requestId: "request-123",
       },
     });
   });
@@ -339,19 +350,24 @@ describe("AuthController", () => {
 
     expect(mockSetCookie).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
-      accessToken: "access-token-1",
-      refreshToken: "refresh-token-1",
-      device: {
-        deviceId: "device-1",
-        known: true,
-        knownByIp: true,
+      data: {
+        accessToken: "access-token-1",
+        refreshToken: "refresh-token-1",
+        device: {
+          deviceId: "device-1",
+          known: true,
+          knownByIp: true,
+        },
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          username: "test-user",
+          role: "user",
+        },
       },
-      user: {
-        id: "user-1",
-        email: "user@example.com",
-        username: "test-user",
-        avatarUrl: undefined,
-        role: "user",
+      message: "Authenticated successfully.",
+      meta: {
+        requestId: "request-test",
       },
     });
   });
@@ -389,9 +405,12 @@ describe("AuthController", () => {
     });
     const body = await response.json();
     expect(body).toMatchObject({
-      accessToken: "access-token-1",
+      data: {
+        accessToken: "access-token-1",
+      },
+      message: "Authenticated successfully.",
     });
-    expect(body).not.toHaveProperty("refreshToken");
+    expect(body.data).not.toHaveProperty("refreshToken");
   });
 
   it("localSignup rejects when captcha verification fails closed or fail-open", async () => {
@@ -600,7 +619,13 @@ describe("AuthController", () => {
       sameSite: "Lax",
     });
     await expect(response.json()).resolves.toEqual({
-      loggedOut: true,
+      data: {
+        loggedOut: true,
+      },
+      message: "Logged out successfully.",
+      meta: {
+        requestId: "request-test",
+      },
     });
   });
 
@@ -646,8 +671,14 @@ describe("AuthController", () => {
       deviceId: "device-99",
     });
     await expect(response.json()).resolves.toEqual({
-      removed: true,
-      deviceId: "device-2",
+      data: {
+        removed: true,
+        deviceId: "device-2",
+      },
+      message: "Known device removed successfully.",
+      meta: {
+        requestId: "request-test",
+      },
     });
   });
 });

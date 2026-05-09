@@ -42,8 +42,16 @@ describe("csrfMiddleware", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
-      error: "CSRF validation failed.",
-      code: "FORBIDDEN",
+      message: "CSRF validation failed.",
+      errors: [
+        {
+          code: "FORBIDDEN",
+          message: "CSRF validation failed.",
+        },
+      ],
+      meta: {
+        requestId: "unknown",
+      },
     });
   });
 

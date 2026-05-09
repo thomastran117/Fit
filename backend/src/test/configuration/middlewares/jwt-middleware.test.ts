@@ -228,7 +228,10 @@ describe("jwt middleware helpers", () => {
       authMethod: "jwt",
     });
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ id: "profile-1", userId: "profile-user" });
+    await expect(response.json()).resolves.toEqual({
+      data: { id: "profile-1", userId: "profile-user" },
+      meta: { requestId: "unknown" },
+    });
   });
 
   it("accepts PAT bearer auth on allowlisted MCP-safe routes", async () => {
@@ -481,6 +484,9 @@ describe("jwt middleware helpers", () => {
     expect(receivedViewerId).toBeUndefined();
     expect(context.get("auth")).toBeUndefined();
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ id: "posting-123", ownerId: "owner-1" });
+    await expect(response.json()).resolves.toEqual({
+      data: { id: "posting-123", ownerId: "owner-1" },
+      meta: { requestId: "unknown" },
+    });
   });
 });

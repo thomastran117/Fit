@@ -7,6 +7,7 @@ import { resolveIdempotencyKey } from "@/configuration/middlewares/idempotency.m
 import { parseRequestBody } from "@/configuration/validation/request";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import { environment } from "@/configuration/environment";
+import { accepted, ok } from "@/configuration/http/responses";
 import BadRequestError from "@/errors/http/bad-request.error";
 import { AuthService } from "@/features/auth/auth.service";
 import { CaptchaService } from "@/features/auth/captcha/captcha.service";
@@ -80,7 +81,9 @@ export class AuthController {
       this.toLocalAuthenticateInput(context, input),
     );
 
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Authenticated successfully.",
+    });
   };
 
   localSignup = async (context: Context<AppBindings>): Promise<Response> => {
@@ -88,14 +91,18 @@ export class AuthController {
     await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.localSignup(this.toLocalSignupInput(context, input));
 
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Signup verification is pending.",
+    });
   };
 
   forgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, forgotPasswordRequestSchema);
     await this.verifyCaptcha(context, input.captchaToken);
     const result = await this.authService.forgotPassword(this.toForgotPasswordInput(context, input));
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Password reset instructions have been accepted.",
+    });
   };
 
   resendForgotPassword = async (context: Context<AppBindings>): Promise<Response> => {
@@ -104,19 +111,25 @@ export class AuthController {
     const result = await this.authService.resendForgotPassword(
       this.toResendForgotPasswordInput(context, input),
     );
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Password reset instructions have been re-sent.",
+    });
   };
 
   resetPassword = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, resetPasswordRequestSchema);
     const result = await this.authService.resetPassword(this.toResetPasswordInput(context, input));
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Password reset successfully.",
+    });
   };
 
   verifyEmail = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, verifyEmailRequestSchema);
     const result = await this.authService.verifyEmail(this.toVerifyEmailInput(context, input));
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Email verified successfully.",
+    });
   };
 
   resendVerificationEmail = async (context: Context<AppBindings>): Promise<Response> => {
@@ -125,7 +138,9 @@ export class AuthController {
     const result = await this.authService.resendVerificationEmail(
       this.toResendVerificationEmailInput(context, input),
     );
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Verification email has been re-sent.",
+    });
   };
 
   changePassword = async (context: Context<AppBindings>): Promise<Response> => {
@@ -134,13 +149,17 @@ export class AuthController {
     const result = await this.authService.changePassword(
       this.toChangePasswordInput(context, input),
     );
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Password changed successfully.",
+    });
   };
 
   unlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, unlockLocalLoginRequestSchema);
     const result = await this.authService.unlockLocalLogin(this.toUnlockLocalLoginInput(input));
-    return context.json(result);
+    return ok(context, result, {
+      message: "Local login unlocked successfully.",
+    });
   };
 
   resendUnlockLocalLogin = async (context: Context<AppBindings>): Promise<Response> => {
@@ -149,7 +168,9 @@ export class AuthController {
     const result = await this.authService.resendUnlockLocalLogin(
       this.toResendUnlockLocalLoginInput(context, input),
     );
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Unlock email has been re-sent.",
+    });
   };
 
   localVerify = async (context: Context<AppBindings>): Promise<Response> => {
@@ -158,7 +179,7 @@ export class AuthController {
       auth: context.get("auth"),
       client: context.get("client"),
     });
-    return context.json(result);
+    return ok(context, result);
   };
 
   googleAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
@@ -166,7 +187,9 @@ export class AuthController {
     const result = await this.authService.googleAuthenticate(
       this.toOAuthAuthenticateInput(context, input),
     );
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Authenticated successfully.",
+    });
   };
 
   microsoftAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
@@ -174,7 +197,9 @@ export class AuthController {
     const result = await this.authService.microsoftAuthenticate(
       this.toOAuthAuthenticateInput(context, input),
     );
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Authenticated successfully.",
+    });
   };
 
   appleAuthenticate = async (context: Context<AppBindings>): Promise<Response> => {
@@ -182,7 +207,9 @@ export class AuthController {
     const result = await this.authService.appleAuthenticate(
       this.toOAuthAuthenticateInput(context, input),
     );
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Authenticated successfully.",
+    });
   };
 
   linkOAuthProvider = async (context: Context<AppBindings>): Promise<Response> => {
@@ -191,7 +218,9 @@ export class AuthController {
     const result = await this.authService.linkOAuthProvider(
       this.toLinkOAuthProviderInput(context, input),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "OAuth provider linked successfully.",
+    });
   };
 
   linkedOAuthProviders = async (context: Context<AppBindings>): Promise<Response> => {
@@ -199,7 +228,7 @@ export class AuthController {
     const result = await this.authService.linkedOAuthProviders({
       userId: context.get("auth").sub,
     });
-    return context.json(result);
+    return ok(context, result);
   };
 
   unlinkOAuthProvider = async (context: Context<AppBindings>): Promise<Response> => {
@@ -207,13 +236,17 @@ export class AuthController {
     const result = await this.authService.unlinkOAuthProvider(
       this.toUnlinkOAuthProviderInput(context),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "OAuth provider unlinked successfully.",
+    });
   };
 
   refresh = async (context: Context<AppBindings>): Promise<Response> => {
     const input = await parseRequestBody(context, refreshRequestSchema);
     const result = await this.authService.refresh(this.toRefreshInput(context, input));
-    return this.json(context, result);
+    return this.json(context, result, {
+      message: "Session refreshed successfully.",
+    });
   };
 
   logout = async (context: Context<AppBindings>): Promise<Response> => {
@@ -236,7 +269,9 @@ export class AuthController {
       sameSite: "Lax",
     });
 
-    return context.json(result);
+    return ok(context, result, {
+      message: "Logged out successfully.",
+    });
   };
 
   deviceVerify = async (context: Context<AppBindings>): Promise<Response> => {
@@ -245,7 +280,9 @@ export class AuthController {
       auth: context.get("auth"),
       client: context.get("client"),
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Device verified successfully.",
+    });
   };
 
   devices = async (context: Context<AppBindings>): Promise<Response> => {
@@ -254,7 +291,7 @@ export class AuthController {
       auth: context.get("auth"),
       client: context.get("client"),
     });
-    return context.json(result);
+    return ok(context, result);
   };
 
   removeKnownDevice = async (context: Context<AppBindings>): Promise<Response> => {
@@ -263,13 +300,17 @@ export class AuthController {
     const result = await this.authService.removeKnownDevice(
       this.toRemoveKnownDeviceInput(context, input),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Known device removed successfully.",
+    });
   };
 
   private json(
     context: Context<AppBindings>,
     body: AuthSessionResult,
-    status?: 200 | 201,
+    options?: {
+      message?: string;
+    },
   ): Response {
     const responseBody = this.toAuthResponseBody(context, body);
 
@@ -277,7 +318,7 @@ export class AuthController {
       this.setBrowserSessionCookies(context, body);
     }
 
-    return context.json(responseBody, status);
+    return ok(context, responseBody, options);
   }
 
   private toLocalAuthenticateInput(

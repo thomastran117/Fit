@@ -267,17 +267,23 @@ describe("Auth integration", () => {
     expect(response.headers.get("set-cookie")).toContain("refresh_token=refresh-token-1");
     expect(response.headers.get("set-cookie")).toContain("csrf_token=");
     await expect(response.json()).resolves.toEqual({
-      accessToken: "access-token-1",
-      device: {
-        deviceId: "device-1",
-        known: true,
-        knownByIp: true,
+      data: {
+        accessToken: "access-token-1",
+        device: {
+          deviceId: "device-1",
+          known: true,
+          knownByIp: true,
+        },
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          username: "test-user",
+          role: "user",
+        },
       },
-      user: {
-        id: "user-1",
-        email: "user@example.com",
-        username: "test-user",
-        role: "user",
+      message: "Authenticated successfully.",
+      meta: {
+        requestId: "unknown",
       },
     });
   });
@@ -305,11 +311,19 @@ describe("Auth integration", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      error: "Captcha verification failed.",
-      code: "BAD_REQUEST",
+      message: "Captcha verification failed.",
+      errors: [
+        {
+          code: "BAD_REQUEST",
+          message: "Captcha verification failed.",
+        },
+      ],
       details: {
         errors: ["invalid-input-response"],
         failOpen: false,
+      },
+      meta: {
+        requestId: "unknown",
       },
     });
   });
@@ -323,8 +337,16 @@ describe("Auth integration", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
-      error: "Authorization header is required.",
-      code: "UNAUTHORIZED",
+      message: "Authorization header is required.",
+      errors: [
+        {
+          code: "UNAUTHORIZED",
+          message: "Authorization header is required.",
+        },
+      ],
+      meta: {
+        requestId: "unknown",
+      },
     });
   });
 
@@ -359,21 +381,26 @@ describe("Auth integration", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      verified: true,
-      auth: {
-        userId: "user-1",
-        deviceId: "device-1",
-        role: "user",
-      },
-      client: {
-        ip: "198.51.100.5",
-        device: {
-          id: "header-device-2",
-          type: "mobile",
-          isMobile: true,
-          userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
-          platform: "iOS",
+      data: {
+        verified: true,
+        auth: {
+          userId: "user-1",
+          deviceId: "device-1",
+          role: "user",
         },
+        client: {
+          ip: "198.51.100.5",
+          device: {
+            id: "header-device-2",
+            type: "mobile",
+            isMobile: true,
+            userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+            platform: "iOS",
+          },
+        },
+      },
+      meta: {
+        requestId: "unknown",
       },
     });
   });
@@ -425,17 +452,23 @@ describe("Auth integration", () => {
     expect(response.headers.get("set-cookie")).toContain("refresh_token=google-refresh-token");
     expect(response.headers.get("set-cookie")).toContain("csrf_token=");
     await expect(response.json()).resolves.toEqual({
-      accessToken: "google-access-token",
-      device: {
-        deviceId: "device-1",
-        known: true,
-        knownByIp: true,
+      data: {
+        accessToken: "google-access-token",
+        device: {
+          deviceId: "device-1",
+          known: true,
+          knownByIp: true,
+        },
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          username: "test-user",
+          role: "user",
+        },
       },
-      user: {
-        id: "user-1",
-        email: "user@example.com",
-        username: "test-user",
-        role: "user",
+      message: "Authenticated successfully.",
+      meta: {
+        requestId: "unknown",
       },
     });
   });
@@ -483,18 +516,24 @@ describe("Auth integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toBeNull();
     await expect(response.json()).resolves.toEqual({
-      accessToken: "microsoft-access-token",
-      refreshToken: "microsoft-refresh-token",
-      device: {
-        deviceId: "device-1",
-        known: true,
-        knownByIp: true,
+      data: {
+        accessToken: "microsoft-access-token",
+        refreshToken: "microsoft-refresh-token",
+        device: {
+          deviceId: "device-1",
+          known: true,
+          knownByIp: true,
+        },
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          username: "test-user",
+          role: "user",
+        },
       },
-      user: {
-        id: "user-1",
-        email: "user@example.com",
-        username: "test-user",
-        role: "user",
+      message: "Authenticated successfully.",
+      meta: {
+        requestId: "unknown",
       },
     });
   });
@@ -530,19 +569,25 @@ describe("Auth integration", () => {
     expect(response.headers.get("set-cookie")).toContain("refresh_token=");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     await expect(response.json()).resolves.toEqual({
-      loggedOut: true,
-      auth: {
-        userId: "user-1",
-        deviceId: "device-1",
-      },
-      refreshToken: "refresh-cookie-value",
-      client: {
-        ip: "203.0.113.77",
-        device: {
-          type: "desktop",
-          isMobile: false,
-          userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      data: {
+        loggedOut: true,
+        auth: {
+          userId: "user-1",
+          deviceId: "device-1",
         },
+        refreshToken: "refresh-cookie-value",
+        client: {
+          ip: "203.0.113.77",
+          device: {
+            type: "desktop",
+            isMobile: false,
+            userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+          },
+        },
+      },
+      message: "Logged out successfully.",
+      meta: {
+        requestId: "unknown",
       },
     });
   });

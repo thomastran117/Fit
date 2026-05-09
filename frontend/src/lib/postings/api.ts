@@ -1,6 +1,6 @@
+import { readJson, toApiError, unwrapApiResponse } from "@/lib/api/response";
 import { getDeviceId, getDevicePlatform } from "@/lib/auth/device";
 import { readStoredSession } from "@/lib/auth/storage";
-import { ApiError, type ApiErrorResponse } from "@/lib/auth/types";
 import { publicEnv } from "@/lib/env";
 
 export interface BookingQuoteInput {
@@ -93,16 +93,6 @@ function readCsrfToken(): string | undefined {
   return token ? decodeURIComponent(token) : undefined;
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-
-  if (!contentType.includes("application/json")) {
-    return null;
-  }
-
-  return response.json();
-}
-
 async function authenticatedJson<TResponse, TBody extends object | undefined = undefined>(
   method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
@@ -129,16 +119,10 @@ async function authenticatedJson<TResponse, TBody extends object | undefined = u
   const payload = await readJson(response);
 
   if (!response.ok) {
-    const errorPayload = (payload ?? {}) as Partial<ApiErrorResponse>;
-    throw new ApiError(
-      errorPayload.error ?? "Something went wrong.",
-      errorPayload.code ?? "UNKNOWN_ERROR",
-      response.status,
-      errorPayload.details,
-    );
+    throw toApiError(response, payload);
   }
 
-  return payload as TResponse;
+  return unwrapApiResponse<TResponse>(payload);
 }
 
 export const postingsApi = {

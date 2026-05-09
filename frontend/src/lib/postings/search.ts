@@ -1,3 +1,5 @@
+import { readJson, unwrapApiResponse } from "@/lib/api/response";
+import type { ApiErrorResponse } from "@/lib/auth/types";
 import { resolveApiBaseUrl } from "@/lib/env";
 
 export type PostingSort =
@@ -67,10 +69,6 @@ export interface PublicPostingSummary {
   publishedAt?: string;
 }
 
-interface ApiErrorResponse {
-  error?: string;
-}
-
 export class PublicPostingSearchError extends Error {
   constructor(
     message: string,
@@ -126,14 +124,14 @@ export async function searchPublicPostings(
       cache: "no-store",
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | PublicPostingSearchResult
+    const payload = (await readJson(response).catch(() => null)) as
       | ApiErrorResponse
+      | { data: PublicPostingSearchResult }
       | null;
 
     if (!response.ok) {
       const error = new PublicPostingSearchError(
-        (payload && "error" in payload && payload.error) || "Unable to load postings.",
+        (payload && "message" in payload && payload.message) || "Unable to load postings.",
         {
           requestUrl,
           params,
@@ -147,7 +145,7 @@ export async function searchPublicPostings(
       throw error;
     }
 
-    return payload as PublicPostingSearchResult;
+    return unwrapApiResponse<PublicPostingSearchResult>(payload);
   } catch (error) {
     if (error instanceof PublicPostingSearchError) {
       throw error;

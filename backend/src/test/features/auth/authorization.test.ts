@@ -201,7 +201,11 @@ describe("authorization", () => {
 
     expect(repairCalled).toBe(true);
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    await expect(response.json()).resolves.toEqual({
+      data: { ok: true },
+      message: "Payment repair queued successfully.",
+      meta: { requestId: "unknown" },
+    });
   });
 
   it("restricts search reindex operations to admins", async () => {
@@ -232,6 +236,10 @@ describe("authorization", () => {
 
     expect(reindexCalled).toBe(true);
     expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({ id: "run-1", status: "pending" });
+    await expect(response.json()).resolves.toEqual({
+      data: { id: "run-1", status: "pending" },
+      message: "Search reindex has been started.",
+      meta: { requestId: "unknown" },
+    });
   });
 });

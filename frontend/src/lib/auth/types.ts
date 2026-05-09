@@ -70,9 +70,29 @@ export interface RevokePersonalAccessTokenResult {
   tokenId: string;
 }
 
+export interface ApiResponseMeta {
+  requestId: string;
+  pagination?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ApiResponse<TData> {
+  data: TData;
+  meta: ApiResponseMeta;
+  message?: string;
+  details?: unknown;
+}
+
+export interface ApiErrorItem {
+  code?: string;
+  field?: string;
+  message: string;
+}
+
 export interface ApiErrorResponse {
-  error: string;
-  code: string;
+  message: string;
+  meta: ApiResponseMeta;
+  errors?: ApiErrorItem[];
   details?: unknown;
 }
 
@@ -81,6 +101,7 @@ export class ApiError extends Error {
     message: string,
     public readonly code: string,
     public readonly status: number,
+    public readonly errors?: ApiErrorItem[],
     public readonly details?: unknown,
   ) {
     super(message);

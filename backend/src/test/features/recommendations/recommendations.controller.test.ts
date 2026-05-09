@@ -14,6 +14,13 @@ function createContext(url: string) {
     req: {
       url,
     },
+    get: (name: string) => {
+      if (name === "requestId") {
+        return "request-1";
+      }
+
+      return undefined;
+    },
     json: (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), {
         status,
@@ -80,6 +87,34 @@ describe("RecommendationsController", () => {
       }),
     );
     expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        items: [],
+        pagination: {
+          page: 2,
+          pageSize: 5,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: true,
+        },
+        mode: "popular",
+        fallback: false,
+      },
+      meta: {
+        requestId: "request-1",
+        pagination: {
+          page: 2,
+          pageSize: 5,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: true,
+        },
+        mode: "popular",
+        fallback: false,
+      },
+    });
   });
 
   it("returns wrapped items without exposing internal score fields", async () => {
@@ -114,27 +149,43 @@ describe("RecommendationsController", () => {
     const payload = await response.json();
 
     expect(payload).toEqual({
-      items: [
-        {
-          posting: {
-            id: "posting-1",
+      data: {
+        items: [
+          {
+            posting: {
+              id: "posting-1",
+            },
+            reasonCodes: ["popular"],
           },
-          reasonCodes: ["popular"],
+        ],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
         },
-      ],
-      pagination: {
-        page: 1,
-        pageSize: 20,
-        total: 1,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPreviousPage: false,
+        mode: "popular",
+        fallback: false,
+        snapshotGeneratedAt: "2026-05-08T09:00:00.000Z",
       },
-      mode: "popular",
-      fallback: false,
-      snapshotGeneratedAt: "2026-05-08T09:00:00.000Z",
+      meta: {
+        requestId: "request-1",
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+        mode: "popular",
+        fallback: false,
+        snapshotGeneratedAt: "2026-05-08T09:00:00.000Z",
+      },
     });
-    expect(payload.items[0]).not.toHaveProperty("score");
+    expect(payload.data.items[0]).not.toHaveProperty("score");
   });
 
   it("allows anonymous requests", async () => {

@@ -72,9 +72,11 @@ describe("httpLoggingMiddleware", () => {
     expect(writeSpy).toHaveBeenCalled();
 
     const output = writeSpy.mock.calls.map(([message]) => String(message)).join("\n");
-    expect(output).toContain(
-      "/oauth/callback?page=2&code=%5BREDACTED%5D&state=%5BREDACTED%5D&token=%5BREDACTED%5D",
-    );
+    expect(output).toContain("/oauth/callback?");
+    expect(output).toContain("page=2");
+    expect(output).toContain("code=%5BREDACTED%5D");
+    expect(output).toContain("state=%5BREDACTED%5D");
+    expect(output).toContain("token=%5BREDACTED%5D");
     expect(output).not.toContain("oauth-code");
     expect(output).not.toContain("csrf-state");
     expect(output).not.toContain("bearer-token");

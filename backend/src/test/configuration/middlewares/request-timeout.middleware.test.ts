@@ -40,11 +40,19 @@ describe("requestTimeoutMiddleware", () => {
 
     expect(response.status).toBe(504);
     await expect(response.json()).resolves.toEqual({
-      error: "Request timed out.",
-      code: "GATEWAY_TIMEOUT",
+      message: "Request timed out.",
+      errors: [
+        {
+          code: "GATEWAY_TIMEOUT",
+          message: "Request timed out.",
+        },
+      ],
       details: {
         requestId: expect.any(String),
         timeoutMs: 10,
+      },
+      meta: {
+        requestId: expect.any(String),
       },
     });
   });

@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { created } from "@/configuration/http/responses";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { parseRequestBody } from "@/configuration/validation/request";
 import {
@@ -17,7 +18,9 @@ export class BlobController {
     const input = await parseRequestBody(context, createBlobUploadUrlRequestSchema);
     const result = this.blobService.createUploadUrl(this.toCreateBlobUploadUrlInput(context, input));
 
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Blob upload URL created successfully.",
+    });
   };
 
   private toCreateBlobUploadUrlInput(

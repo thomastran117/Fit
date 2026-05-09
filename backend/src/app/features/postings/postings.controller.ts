@@ -1,5 +1,14 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import {
+  accepted,
+  created,
+  mergeResponseMeta,
+  noContent,
+  ok,
+  paginationMeta,
+  pickMeta,
+} from "@/configuration/http/responses";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import {
   getOptionalJwtAuth,
@@ -71,7 +80,9 @@ export class PostingsController {
     requireMinimumRole(auth, "owner");
     const body = await parseRequestBody(context, upsertPostingRequestSchema);
     const result = await this.postingsService.createDraft(this.toUpsertInput(auth.sub, body));
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Posting draft created successfully.",
+    });
   };
 
   update = async (context: Context<AppBindings>): Promise<Response> => {
@@ -82,14 +93,18 @@ export class PostingsController {
       this.requireRouteId(context),
       this.toUpsertInput(auth.sub, body),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Posting updated successfully.",
+    });
   };
 
   duplicate = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "owner");
     const result = await this.postingsService.duplicate(this.requireRouteId(context), auth.sub);
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Posting duplicated successfully.",
+    });
   };
 
   listAvailabilityBlocks = async (context: Context<AppBindings>): Promise<Response> => {
@@ -99,7 +114,7 @@ export class PostingsController {
       this.requireRouteId(context),
       auth.sub,
     );
-    return context.json(result);
+    return ok(context, result);
   };
 
   createAvailabilityBlock = async (context: Context<AppBindings>): Promise<Response> => {
@@ -111,7 +126,9 @@ export class PostingsController {
       auth.sub,
       this.toAvailabilityBlockInput(body),
     );
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Availability block created successfully.",
+    });
   };
 
   updateAvailabilityBlock = async (context: Context<AppBindings>): Promise<Response> => {
@@ -124,7 +141,9 @@ export class PostingsController {
       this.requireRouteParam(context, "blockId"),
       this.toAvailabilityBlockInput(body),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Availability block updated successfully.",
+    });
   };
 
   deleteAvailabilityBlock = async (context: Context<AppBindings>): Promise<Response> => {
@@ -135,7 +154,7 @@ export class PostingsController {
       auth.sub,
       this.requireRouteParam(context, "blockId"),
     );
-    return new Response(null, { status: 204 });
+    return noContent();
   };
 
   publish = async (context: Context<AppBindings>): Promise<Response> => {
@@ -149,7 +168,9 @@ export class PostingsController {
       requestId: this.readRequestId(context),
       actorUserId: auth.sub,
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Posting published successfully.",
+    });
   };
 
   archive = async (context: Context<AppBindings>): Promise<Response> => {
@@ -163,7 +184,9 @@ export class PostingsController {
       requestId: this.readRequestId(context),
       actorUserId: auth.sub,
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Posting archived successfully.",
+    });
   };
 
   pause = async (context: Context<AppBindings>): Promise<Response> => {
@@ -177,7 +200,9 @@ export class PostingsController {
       requestId: this.readRequestId(context),
       actorUserId: auth.sub,
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Posting paused successfully.",
+    });
   };
 
   unpause = async (context: Context<AppBindings>): Promise<Response> => {
@@ -191,7 +216,9 @@ export class PostingsController {
       requestId: this.readRequestId(context),
       actorUserId: auth.sub,
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Posting unpaused successfully.",
+    });
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
@@ -212,7 +239,7 @@ export class PostingsController {
       });
     }
 
-    return context.json(result);
+    return ok(context, result);
   };
 
   trackSearchClick = async (context: Context<AppBindings>): Promise<Response> => {
@@ -228,7 +255,15 @@ export class PostingsController {
       actorUserId: auth?.sub,
     });
 
-    return new Response(null, { status: 202 });
+    return accepted(
+      context,
+      {
+        accepted: true,
+      },
+      {
+        message: "Posting search click tracked successfully.",
+      },
+    );
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
@@ -237,7 +272,9 @@ export class PostingsController {
     const result = await this.postingsService.listByOwner(
       this.parseListOwnerPostingsInput(context, auth.sub),
     );
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   batchMine = async (context: Context<AppBindings>): Promise<Response> => {
@@ -247,12 +284,12 @@ export class PostingsController {
       auth.sub,
       this.parseBatchIds(context),
     );
-    return context.json(result);
+    return ok(context, result);
   };
 
   batchPublic = async (context: Context<AppBindings>): Promise<Response> => {
     const result = await this.postingsService.batchPublic(this.parseBatchIds(context));
-    return context.json(result);
+    return ok(context, result);
   };
 
   search = async (context: Context<AppBindings>): Promise<Response> => {
@@ -262,7 +299,12 @@ export class PostingsController {
     void this.postingsAnalyticsService.trackSearchImpressions(result.postings).catch((error) => {
       this.logger.warn("Failed to record posting search impressions.", undefined, error);
     });
-    return context.json(result);
+    return ok(context, result, {
+      meta: mergeResponseMeta(
+        paginationMeta(result),
+        pickMeta(result, ["source"]),
+      ),
+    });
   };
 
   analyticsSummary = async (context: Context<AppBindings>): Promise<Response> => {
@@ -270,7 +312,7 @@ export class PostingsController {
     requireMinimumRole(auth, "owner");
     const query = this.parseAnalyticsSummaryQuery(context);
     const result = await this.postingsAnalyticsService.getOwnerSummary(auth.sub, query.window);
-    return context.json(result);
+    return ok(context, result);
   };
 
   analyticsPostings = async (context: Context<AppBindings>): Promise<Response> => {
@@ -278,7 +320,9 @@ export class PostingsController {
     requireMinimumRole(auth, "owner");
     const input = this.parseListPostingAnalyticsInput(context, auth.sub);
     const result = await this.postingsAnalyticsService.listOwnerPostingsAnalytics(input);
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   analyticsById = async (context: Context<AppBindings>): Promise<Response> => {
@@ -290,7 +334,7 @@ export class PostingsController {
       this.requireRouteId(context),
     );
     const result = await this.postingsAnalyticsService.getPostingAnalyticsDetail(input);
-    return context.json(result);
+    return ok(context, result);
   };
 
   listReviews = async (context: Context<AppBindings>): Promise<Response> => {
@@ -300,7 +344,9 @@ export class PostingsController {
       page,
       pageSize,
     );
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   createReview = async (context: Context<AppBindings>): Promise<Response> => {
@@ -311,7 +357,9 @@ export class PostingsController {
       auth.sub,
       body,
     );
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Review created successfully.",
+    });
   };
 
   updateOwnReview = async (context: Context<AppBindings>): Promise<Response> => {
@@ -322,7 +370,9 @@ export class PostingsController {
       auth.sub,
       body,
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Review updated successfully.",
+    });
   };
 
   private toUpsertInput(

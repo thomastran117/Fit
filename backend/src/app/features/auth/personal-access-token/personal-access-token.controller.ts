@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { created, ok } from "@/configuration/http/responses";
 import { requireSessionAuth } from "@/configuration/middlewares/jwt-middleware";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
 import { parseRequestBody } from "@/configuration/validation/request";
@@ -18,7 +19,7 @@ export class PersonalAccessTokenController {
   list = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await requireSessionAuth(context);
     const result = await this.personalAccessTokenService.listForUser(auth.sub);
-    return context.json(result);
+    return ok(context, result);
   };
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
@@ -27,7 +28,9 @@ export class PersonalAccessTokenController {
     const result = await this.personalAccessTokenService.create(
       this.toCreateInput(auth.sub, input),
     );
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Personal access token created successfully.",
+    });
   };
 
   revoke = async (context: Context<AppBindings>): Promise<Response> => {
@@ -36,7 +39,9 @@ export class PersonalAccessTokenController {
       userId: auth.sub,
       tokenId: requireSafeRouteParam(context, "id"),
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Personal access token revoked successfully.",
+    });
   };
 
   private toCreateInput(

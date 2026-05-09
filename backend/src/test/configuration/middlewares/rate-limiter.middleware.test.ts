@@ -253,14 +253,22 @@ describe("rateLimiterMiddleware", () => {
     expect(response.headers.get("x-ratelimit-backend")).toBe("redis");
     expect(response.headers.get("retry-after")).toBe("9");
     await expect(response.json()).resolves.toEqual({
-      error: "Too many requests. Please try again later.",
-      code: "TOO_MANY_REQUESTS",
+      message: "Too many requests. Please try again later.",
+      errors: [
+        {
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many requests. Please try again later.",
+        },
+      ],
       details: {
         backend: "redis",
         identityType: "ip",
         policy: "auth-sensitive",
         strategy: "sliding-window",
         retryAfterSeconds: 9,
+      },
+      meta: {
+        requestId: "unknown",
       },
     });
   });
@@ -346,14 +354,22 @@ describe("rateLimiterMiddleware", () => {
     expect(limitedResponse.headers.get("x-ratelimit-backend")).toBe("memory");
     expect(limitedResponse.headers.get("x-ratelimit-degraded")).toBe("true");
     await expect(limitedResponse.json()).resolves.toEqual({
-      error: "Too many requests. Please try again later.",
-      code: "TOO_MANY_REQUESTS",
+      message: "Too many requests. Please try again later.",
+      errors: [
+        {
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many requests. Please try again later.",
+        },
+      ],
       details: {
         backend: "memory",
         identityType: "ip",
         policy: "auth-sensitive",
         strategy: "sliding-window",
         retryAfterSeconds: expect.any(Number),
+      },
+      meta: {
+        requestId: "unknown",
       },
     });
     expect(writeSpy).toHaveBeenCalled();

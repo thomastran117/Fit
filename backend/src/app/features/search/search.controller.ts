@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { accepted, ok } from "@/configuration/http/responses";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
@@ -12,21 +13,23 @@ export class SearchController {
     const auth = await this.requireAdmin(context);
     void auth;
     const result = await this.searchService.startReindex();
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Search reindex has been started.",
+    });
   };
 
   getReindexRun = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAdmin(context);
     void auth;
     const result = await this.searchService.getReindexRun(this.requireRouteId(context));
-    return context.json(result ?? { run: null });
+    return ok(context, result ?? { run: null });
   };
 
   getStatus = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAdmin(context);
     void auth;
     const result = await this.searchService.getStatus();
-    return context.json(result);
+    return ok(context, result);
   };
 
   replayDeadLettered = async (context: Context<AppBindings>): Promise<Response> => {
@@ -35,14 +38,18 @@ export class SearchController {
     const url = new URL(context.req.url);
     const limit = this.readPositiveIntQuery(url, "limit", 100);
     const result = await this.searchService.replayDeadLetteredOutbox(limit);
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Dead-lettered search outbox entries are being replayed.",
+    });
   };
 
   cleanupRetainedIndices = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAdmin(context);
     void auth;
     const result = await this.searchService.cleanupRetainedIndices();
-    return context.json(result, 202);
+    return accepted(context, result, {
+      message: "Search index cleanup has been started.",
+    });
   };
 
   private requireRouteId(context: Context<AppBindings>): string {

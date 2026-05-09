@@ -51,10 +51,18 @@ describe("requestIdMiddleware", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      error: "x-request-id header is invalid.",
-      code: "BAD_REQUEST",
+      message: "x-request-id header is invalid.",
+      errors: [
+        {
+          code: "BAD_REQUEST",
+          message: "x-request-id header is invalid.",
+        },
+      ],
       details: {
         header: "x-request-id",
+      },
+      meta: {
+        requestId: "unknown",
       },
     });
   });
