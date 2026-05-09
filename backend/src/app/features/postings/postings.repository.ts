@@ -714,15 +714,15 @@ export class PostingsRepository extends BaseRepository {
     ];
 
     if (input.query) {
-      const likeValue = `%${input.query}%`;
+      const likeValue = this.createFallbackLikePattern(input.query);
       whereClauses.push(
         Prisma.sql`(
-          name LIKE ${likeValue}
-          OR description LIKE ${likeValue}
-          OR city LIKE ${likeValue}
-          OR region LIKE ${likeValue}
-          OR country LIKE ${likeValue}
-          OR CAST(tags AS CHAR) LIKE ${likeValue}
+          name LIKE ${likeValue} ESCAPE '\\'
+          OR description LIKE ${likeValue} ESCAPE '\\'
+          OR city LIKE ${likeValue} ESCAPE '\\'
+          OR region LIKE ${likeValue} ESCAPE '\\'
+          OR country LIKE ${likeValue} ESCAPE '\\'
+          OR CAST(tags AS CHAR) LIKE ${likeValue} ESCAPE '\\'
         )`,
       );
     }
@@ -760,7 +760,7 @@ export class PostingsRepository extends BaseRepository {
 
       if (typeof filter.value === "string") {
         whereClauses.push(
-          Prisma.sql`JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath})) = ${filter.value}`,
+          Prisma.sql`LOWER(JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath}))) = ${filter.value}`,
         );
       } else if (typeof filter.value === "boolean") {
         whereClauses.push(Prisma.sql`JSON_EXTRACT(attributes, ${attributePath}) = ${filter.value}`);
@@ -771,7 +771,18 @@ export class PostingsRepository extends BaseRepository {
       } else if (Array.isArray(filter.value)) {
         for (const value of filter.value) {
           whereClauses.push(
-            Prisma.sql`JSON_SEARCH(JSON_EXTRACT(attributes, ${attributePath}), 'one', ${value}) IS NOT NULL`,
+            Prisma.sql`EXISTS (
+              SELECT 1
+              FROM JSON_TABLE(
+                CASE
+                  WHEN JSON_TYPE(JSON_EXTRACT(attributes, ${attributePath})) = 'ARRAY'
+                    THEN JSON_EXTRACT(attributes, ${attributePath})
+                  ELSE JSON_ARRAY()
+                END,
+                '$[*]' COLUMNS (value VARCHAR(255) PATH '$')
+              ) AS attribute_values
+              WHERE LOWER(attribute_values.value) = ${value}
+            )`,
           );
         }
       }
@@ -1728,20 +1739,24 @@ export class PostingsRepository extends BaseRepository {
       case "relevance":
       default:
         if (input.query) {
-          const likeValue = `%${input.query}%`;
+          const likeValue = this.createFallbackLikePattern(input.query);
 
           return Prisma.sql`(
-            CASE WHEN name LIKE ${likeValue} THEN 6 ELSE 0 END
-            + CASE WHEN CAST(tags AS CHAR) LIKE ${likeValue} THEN 3 ELSE 0 END
-            + CASE WHEN description LIKE ${likeValue} THEN 2 ELSE 0 END
-            + CASE WHEN city LIKE ${likeValue} THEN 2 ELSE 0 END
-            + CASE WHEN region LIKE ${likeValue} THEN 1 ELSE 0 END
-            + CASE WHEN country LIKE ${likeValue} THEN 1 ELSE 0 END
+            CASE WHEN name LIKE ${likeValue} ESCAPE '\\' THEN 6 ELSE 0 END
+            + CASE WHEN CAST(tags AS CHAR) LIKE ${likeValue} ESCAPE '\\' THEN 3 ELSE 0 END
+            + CASE WHEN description LIKE ${likeValue} ESCAPE '\\' THEN 2 ELSE 0 END
+            + CASE WHEN city LIKE ${likeValue} ESCAPE '\\' THEN 2 ELSE 0 END
+            + CASE WHEN region LIKE ${likeValue} ESCAPE '\\' THEN 1 ELSE 0 END
+            + CASE WHEN country LIKE ${likeValue} ESCAPE '\\' THEN 1 ELSE 0 END
           ) DESC, published_at DESC, created_at DESC, id ASC`;
         }
 
         return Prisma.sql`published_at DESC, created_at DESC, id ASC`;
     }
+  }
+
+  private createFallbackLikePattern(query: string): string {
+    return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
   }
 
   private async enqueueOutbox(

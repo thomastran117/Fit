@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PostingSearchForm } from "@/components/postings/posting-search-form";
 import {
   PublicPostingSearchError,
   searchPublicPostings,
@@ -430,7 +431,11 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
             </p>
           </div>
 
-          <form className="mt-6 flex flex-col gap-5">
+          <PostingSearchForm
+            className="mt-6 flex flex-col gap-5"
+            initialStartAt={startAt}
+            initialEndAt={endAt}
+          >
             <input type="hidden" name="page" value="1" />
 
             {/* Primary search */}
@@ -686,7 +691,7 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
                           id="startAt"
                           type="datetime-local"
                           name="startAt"
-                          defaultValue={startAt ?? ""}
+                          defaultValue=""
                           className={inputClass}
                         />
                       </Field>
@@ -696,7 +701,7 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
                           id="endAt"
                           type="datetime-local"
                           name="endAt"
-                          defaultValue={endAt ?? ""}
+                          defaultValue=""
                           className={inputClass}
                         />
                       </Field>
@@ -721,7 +726,7 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
                 </div>
               </div>
             </details>
-          </form>
+          </PostingSearchForm>
         </div>
       </section>
 

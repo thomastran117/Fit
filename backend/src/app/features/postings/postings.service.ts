@@ -944,7 +944,7 @@ export class PostingsService {
 
         return {
           key: filter.key,
-          value: filter.value.trim(),
+          value: filter.value.trim().toLowerCase(),
         };
       }
       case "stringArray": {
@@ -970,7 +970,9 @@ export class PostingsService {
 
         return {
           key: filter.key,
-          value: Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))),
+          value: Array.from(
+            new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean)),
+          ),
         };
       }
       case "boolean": {

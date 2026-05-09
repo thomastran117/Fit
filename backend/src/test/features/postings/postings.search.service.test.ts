@@ -684,7 +684,7 @@ describe("PostingsRepository.searchPublicFallback", () => {
     expect(idQuery.sql).toContain("family = ?");
     expect(idQuery.sql).toContain("subtype = ?");
     expect(idQuery.sql).toContain("availability_status = ?");
-    expect(idQuery.sql).toContain("JSON_EXTRACT(attributes, ?)"); 
+    expect(idQuery.sql).toContain("JSON_EXTRACT(attributes, ?)");
     expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) >= ?");
     expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) <= ?");
     expect(idQuery.sql).toContain("pab.start_at < ?");
@@ -714,27 +714,56 @@ describe("PostingsRepository.searchPublicFallback", () => {
     );
   });
 
+  it("uses case-insensitive exact matching for searchable string and string-array attribute filters", async () => {
+    const { queries, repository } = createFallbackRepository();
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      family: "place",
+      subtype: "entire_place",
+      attributeFilters: [
+        {
+          key: "property_type",
+          value: "condo",
+        },
+        {
+          key: "amenities",
+          value: ["wifi", "desk"],
+        },
+      ],
+      sort: "relevance",
+    });
+
+    const idQuery = queries[1]!;
+
+    expect(idQuery.sql).toContain("LOWER(JSON_UNQUOTE(JSON_EXTRACT(attributes, ?))) = ?");
+    expect(idQuery.sql).toContain("FROM JSON_TABLE(");
+    expect(idQuery.sql).toContain("LOWER(attribute_values.value) = ?");
+    expect(idQuery.values).toEqual(expect.arrayContaining(["$.property_type", "condo", "$.amenities", "wifi", "desk"]));
+  });
+
   it("uses field-priority relevance ordering for keyword fallback searches", async () => {
     const { queries, repository } = createFallbackRepository();
 
     await repository.searchPublicFallback({
       page: 1,
       pageSize: 10,
-      query: "loft",
+      query: "100%_loft",
       sort: "relevance",
     });
 
     const idQuery = queries[1]!;
 
     expect(idQuery.sql).toContain("ORDER BY (");
-    expect(idQuery.sql).toContain("CASE WHEN name LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN CAST(tags AS CHAR) LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN description LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN city LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN region LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN country LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN name LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN CAST(tags AS CHAR) LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN description LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN city LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN region LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN country LIKE ? ESCAPE '\\'");
     expect(idQuery.sql).toContain(") DESC, published_at DESC, created_at DESC, id ASC");
-    expect(idQuery.values.filter((value) => value === "%loft%")).toHaveLength(12);
+    expect(idQuery.values.filter((value) => value === "%100\\%\\_loft%")).toHaveLength(12);
   });
 
   it("supports oldest and alphabetical fallback ordering with stable tie-breakers", async () => {

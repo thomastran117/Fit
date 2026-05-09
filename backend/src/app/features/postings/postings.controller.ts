@@ -501,6 +501,34 @@ export class PostingsController {
       ]);
     }
 
+    const geoValidationIssues: Array<{ path: string; message: string }> = [];
+    const hasLatitude = query.latitude !== undefined;
+    const hasLongitude = query.longitude !== undefined;
+
+    if (hasLatitude !== hasLongitude) {
+      geoValidationIssues.push(
+        {
+          path: "latitude",
+          message: "latitude and longitude must be provided together.",
+        },
+        {
+          path: "longitude",
+          message: "latitude and longitude must be provided together.",
+        },
+      );
+    }
+
+    if (query.radiusKm !== undefined && (!hasLatitude || !hasLongitude)) {
+      geoValidationIssues.push({
+        path: "radiusKm",
+        message: "radiusKm requires both latitude and longitude.",
+      });
+    }
+
+    if (geoValidationIssues.length > 0) {
+      throw new RequestValidationError("Request query validation failed.", geoValidationIssues);
+    }
+
     return {
       page: query.page,
       pageSize: query.pageSize,

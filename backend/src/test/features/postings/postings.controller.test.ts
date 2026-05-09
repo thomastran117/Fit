@@ -167,6 +167,82 @@ describe("PostingsController", () => {
     );
   });
 
+  it("maps paired geo filters into the service input", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 5,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?latitude=43.6532&longitude=-79.3832&radiusKm=12",
+    });
+
+    await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        geo: {
+          latitude: 43.6532,
+          longitude: -79.3832,
+          radiusKm: 12,
+        },
+      }),
+    );
+  });
+
+  it("rejects partial geo filters before reaching the service", async () => {
+    const searchPublic = jest.fn();
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?latitude=43.6532&radiusKm=12",
+    });
+
+    await expect(controller.search(context)).rejects.toMatchObject<Partial<RequestValidationError>>({
+      message: "Request query validation failed.",
+      details: expect.arrayContaining([
+        {
+          path: "latitude",
+          message: "latitude and longitude must be provided together.",
+        },
+        {
+          path: "longitude",
+          message: "latitude and longitude must be provided together.",
+        },
+        {
+          path: "radiusKm",
+          message: "radiusKm requires both latitude and longitude.",
+        },
+      ]),
+    });
+    expect(searchPublic).not.toHaveBeenCalled();
+  });
+
   it("rejects create requests that omit the required variant", async () => {
     mockRequireJwtAuth.mockResolvedValue(createClaims());
     const createDraft = jest.fn();

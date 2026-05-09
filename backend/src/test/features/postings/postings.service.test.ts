@@ -233,16 +233,18 @@ function createService(
   repository: FakePostingsRepository,
   postingsReviewsRepository = new FakePostingsReviewsRepository(),
   rentingsRepository = new FakeRentingsRepository(),
+  searchService = {} as PostingsPublicSearchService,
 ): PostingsService {
-  return createServiceHarness(repository, postingsReviewsRepository, rentingsRepository).service;
+  return createServiceHarness(repository, postingsReviewsRepository, rentingsRepository, searchService)
+    .service;
 }
 
 function createServiceHarness(
   repository: FakePostingsRepository,
   postingsReviewsRepository = new FakePostingsReviewsRepository(),
   rentingsRepository = new FakeRentingsRepository(),
+  searchService = {} as PostingsPublicSearchService,
 ) {
-  const searchService = {} as PostingsPublicSearchService;
   const blobService = {
     isConfigured: () => true,
     isManagedBlobUrl: () => true,
@@ -805,6 +807,74 @@ describe("PostingsService", () => {
       amenities: ["WiFi", "Desk"],
       ownerNote: "Bring ID",
     });
+  });
+
+  it("rejects nearest sorting when search coordinates are missing", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+
+    const error = await service
+      .searchPublic({
+        page: 1,
+        pageSize: 10,
+        sort: "nearest",
+      })
+      .catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    expect((error as BadRequestError).message).toBe("Nearest sorting requires latitude and longitude.");
+  });
+
+  it("normalizes searchable string and string-array filters before search", async () => {
+    const repository = new FakePostingsRepository();
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const service = createService(repository, undefined, undefined, {
+      searchPublic,
+    } as unknown as PostingsPublicSearchService);
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      family: "place",
+      subtype: "entire_place",
+      attributeFilters: [
+        {
+          key: "property_type",
+          value: " Condo ",
+        },
+        {
+          key: "amenities",
+          value: [" WiFi ", "Desk", "wifi"],
+        },
+      ],
+      sort: "relevance",
+    });
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributeFilters: [
+          {
+            key: "property_type",
+            value: "condo",
+          },
+          {
+            key: "amenities",
+            value: ["wifi", "desk"],
+          },
+        ],
+      }),
+    );
   });
 
   it("lists owner availability blocks without a full posting payload", async () => {
