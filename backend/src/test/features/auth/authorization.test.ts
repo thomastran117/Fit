@@ -202,7 +202,9 @@ describe("authorization", () => {
     expect(repairCalled).toBe(true);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: { ok: true },
+      error: null,
       message: "Payment repair queued successfully.",
       meta: { requestId: "unknown" },
     });
@@ -237,7 +239,9 @@ describe("authorization", () => {
     expect(reindexCalled).toBe(true);
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: { id: "run-1", status: "pending" },
+      error: null,
       message: "Search reindex has been started.",
       meta: { requestId: "unknown" },
     });

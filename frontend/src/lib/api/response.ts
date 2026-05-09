@@ -13,7 +13,12 @@ export async function readJson(response: Response): Promise<unknown> {
 export function unwrapApiResponse<TData>(payload: unknown): TData {
   const response = payload as ApiResponse<TData> | null;
 
-  if (!response || typeof response !== "object" || !("data" in response)) {
+  if (
+    !response ||
+    typeof response !== "object" ||
+    response.success !== true ||
+    !("data" in response)
+  ) {
     throw new Error("API response payload did not include a data envelope.");
   }
 
@@ -23,14 +28,12 @@ export function unwrapApiResponse<TData>(payload: unknown): TData {
 export function toApiError(response: Response, payload: unknown): ApiError {
   const errorPayload = (payload ?? null) as Partial<ApiErrorResponse> | null;
   const message = errorPayload?.message ?? "Something went wrong.";
-  const code =
-    errorPayload?.errors?.find((error) => error.code)?.code ?? "UNKNOWN_ERROR";
+  const code = errorPayload?.error?.code ?? "UNKNOWN_ERROR";
 
   return new ApiError(
     message,
     code,
     response.status,
-    errorPayload?.errors,
-    errorPayload?.details,
+    errorPayload?.error?.details,
   );
 }

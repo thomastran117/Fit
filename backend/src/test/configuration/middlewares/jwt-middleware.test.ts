@@ -229,7 +229,10 @@ describe("jwt middleware helpers", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: { id: "profile-1", userId: "profile-user" },
+      error: null,
+      message: "Request completed successfully.",
       meta: { requestId: "unknown" },
     });
   });
@@ -485,7 +488,10 @@ describe("jwt middleware helpers", () => {
     expect(context.get("auth")).toBeUndefined();
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: { id: "posting-123", ownerId: "owner-1" },
+      error: null,
+      message: "Request completed successfully.",
       meta: { requestId: "unknown" },
     });
   });

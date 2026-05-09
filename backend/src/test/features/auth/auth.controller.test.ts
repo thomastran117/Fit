@@ -306,6 +306,7 @@ describe("AuthController", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         accessToken: "access-token-1",
         device: {
@@ -320,6 +321,7 @@ describe("AuthController", () => {
           role: "user",
         },
       },
+      error: null,
       message: "Authenticated successfully.",
       meta: {
         requestId: "request-123",
@@ -350,6 +352,7 @@ describe("AuthController", () => {
 
     expect(mockSetCookie).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         accessToken: "access-token-1",
         refreshToken: "refresh-token-1",
@@ -365,6 +368,7 @@ describe("AuthController", () => {
           role: "user",
         },
       },
+      error: null,
       message: "Authenticated successfully.",
       meta: {
         requestId: "request-test",
@@ -405,9 +409,11 @@ describe("AuthController", () => {
     });
     const body = await response.json();
     expect(body).toMatchObject({
+      success: true,
       data: {
         accessToken: "access-token-1",
       },
+      error: null,
       message: "Authenticated successfully.",
     });
     expect(body.data).not.toHaveProperty("refreshToken");
@@ -619,9 +625,11 @@ describe("AuthController", () => {
       sameSite: "Lax",
     });
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         loggedOut: true,
       },
+      error: null,
       message: "Logged out successfully.",
       meta: {
         requestId: "request-test",
@@ -671,10 +679,12 @@ describe("AuthController", () => {
       deviceId: "device-99",
     });
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         removed: true,
         deviceId: "device-2",
       },
+      error: null,
       message: "Known device removed successfully.",
       meta: {
         requestId: "request-test",

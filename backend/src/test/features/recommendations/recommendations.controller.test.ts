@@ -88,6 +88,7 @@ describe("RecommendationsController", () => {
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         items: [],
         pagination: {
@@ -101,6 +102,8 @@ describe("RecommendationsController", () => {
         mode: "popular",
         fallback: false,
       },
+      error: null,
+      message: "Request completed successfully.",
       meta: {
         requestId: "request-1",
         pagination: {
@@ -149,6 +152,7 @@ describe("RecommendationsController", () => {
     const payload = await response.json();
 
     expect(payload).toEqual({
+      success: true,
       data: {
         items: [
           {
@@ -170,6 +174,8 @@ describe("RecommendationsController", () => {
         fallback: false,
         snapshotGeneratedAt: "2026-05-08T09:00:00.000Z",
       },
+      error: null,
+      message: "Request completed successfully.",
       meta: {
         requestId: "request-1",
         pagination: {

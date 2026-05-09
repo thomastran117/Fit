@@ -1,11 +1,7 @@
 import AppError from "@/errors/http/app.error";
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
-import {
-  buildErrorResponse,
-  type ApiErrorItem,
-  type ApiErrorResponse,
-} from "@/configuration/http/responses";
+import { buildErrorResponse } from "@/configuration/http/responses";
 import { loggerFactory } from "@/configuration/logging";
 import { RequestValidationError } from "@/configuration/validation/request";
 import { detectOutputFormat, serializeToXml } from "./output-format.middleware";
@@ -42,18 +38,19 @@ export function handleApplicationError(error: unknown, context: Context<AppBindi
 
 export function toErrorResponse(error: unknown): {
   status: number;
-  body: Omit<ApiErrorResponse, "meta">;
+  body: {
+    message: string;
+    code: string;
+    details?: unknown;
+  };
 } {
   if (error instanceof RequestValidationError) {
     return {
       status: error.status,
       body: {
         message: error.message,
-        errors: error.details.map((issue) => ({
-          code: "VALIDATION_ERROR",
-          field: issue.path,
-          message: issue.message,
-        })),
+        code: "VALIDATION_ERROR",
+        details: toValidationErrorDetails(error),
       },
     };
   }
@@ -63,7 +60,7 @@ export function toErrorResponse(error: unknown): {
       status: error.status,
       body: {
         message: error.message,
-        errors: toAppErrorItems(error),
+        code: error.code,
         ...(error.details !== undefined ? { details: error.details } : {}),
       },
     };
@@ -73,25 +70,25 @@ export function toErrorResponse(error: unknown): {
     status: 500,
     body: {
       message: "Internal server error.",
-      errors: [
-        {
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Internal server error.",
-        },
-      ],
+      code: "INTERNAL_SERVER_ERROR",
     },
   };
 }
 
-function toAppErrorItems(error: AppError): ApiErrorItem[] | undefined {
-  if (error.code === "BAD_REQUEST" && Array.isArray(error.details)) {
-    return undefined;
+function toValidationErrorDetails(
+  error: RequestValidationError,
+): Record<string, string[]> {
+  const details: Record<string, string[]> = {};
+
+  for (const issue of error.details) {
+    const key = issue.path || "root";
+
+    if (!details[key]) {
+      details[key] = [];
+    }
+
+    details[key].push(issue.message);
   }
 
-  return [
-    {
-      code: error.code,
-      message: error.message,
-    },
-  ];
+  return details;
 }

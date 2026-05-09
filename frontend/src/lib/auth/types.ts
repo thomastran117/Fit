@@ -76,24 +76,25 @@ export interface ApiResponseMeta {
   [key: string]: unknown;
 }
 
+export interface ApiErrorPayload<TDetails = unknown> {
+  code: string;
+  details?: TDetails;
+}
+
 export interface ApiResponse<TData> {
+  success: true;
+  message: string;
   data: TData;
+  error: null;
   meta: ApiResponseMeta;
-  message?: string;
-  details?: unknown;
 }
 
-export interface ApiErrorItem {
-  code?: string;
-  field?: string;
+export interface ApiErrorResponse<TDetails = unknown> {
+  success: false;
   message: string;
-}
-
-export interface ApiErrorResponse {
-  message: string;
+  data: null;
+  error: ApiErrorPayload<TDetails>;
   meta: ApiResponseMeta;
-  errors?: ApiErrorItem[];
-  details?: unknown;
 }
 
 export class ApiError extends Error {
@@ -101,7 +102,6 @@ export class ApiError extends Error {
     message: string,
     public readonly code: string,
     public readonly status: number,
-    public readonly errors?: ApiErrorItem[],
     public readonly details?: unknown,
   ) {
     super(message);

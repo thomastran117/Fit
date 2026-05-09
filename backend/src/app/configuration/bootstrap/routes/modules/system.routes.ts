@@ -36,6 +36,7 @@ export const systemRouteModule: RouteModule = {
         return context.json(
           buildErrorResponse(context, {
             message: "Health check failed.",
+            code: "SERVICE_UNAVAILABLE",
             details: {
               uptime,
               checks: {

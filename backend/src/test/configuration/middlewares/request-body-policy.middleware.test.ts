@@ -40,13 +40,12 @@ describe("requestBodyPolicyMiddleware", () => {
 
     expect(response.status).toBe(415);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Request body must use application/json.",
-      errors: [
-        {
-          code: "UNSUPPORTED_MEDIA_TYPE",
-          message: "Request body must use application/json.",
-        },
-      ],
+      data: null,
+      error: {
+        code: "UNSUPPORTED_MEDIA_TYPE",
+      },
       meta: {
         requestId: "unknown",
       },
@@ -68,16 +67,15 @@ describe("requestBodyPolicyMiddleware", () => {
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Request body is too large.",
-      errors: [
-        {
-          code: "PAYLOAD_TOO_LARGE",
-          message: "Request body is too large.",
+      data: null,
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        details: {
+          limitBytes: 12,
+          receivedBytes: expect.any(Number),
         },
-      ],
-      details: {
-        limitBytes: 12,
-        receivedBytes: expect.any(Number),
       },
       meta: {
         requestId: "unknown",

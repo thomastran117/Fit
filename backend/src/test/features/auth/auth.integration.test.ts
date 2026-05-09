@@ -267,6 +267,7 @@ describe("Auth integration", () => {
     expect(response.headers.get("set-cookie")).toContain("refresh_token=refresh-token-1");
     expect(response.headers.get("set-cookie")).toContain("csrf_token=");
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         accessToken: "access-token-1",
         device: {
@@ -281,6 +282,7 @@ describe("Auth integration", () => {
           role: "user",
         },
       },
+      error: null,
       message: "Authenticated successfully.",
       meta: {
         requestId: "unknown",
@@ -311,16 +313,15 @@ describe("Auth integration", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Captcha verification failed.",
-      errors: [
-        {
-          code: "BAD_REQUEST",
-          message: "Captcha verification failed.",
+      data: null,
+      error: {
+        code: "BAD_REQUEST",
+        details: {
+          errors: ["invalid-input-response"],
+          failOpen: false,
         },
-      ],
-      details: {
-        errors: ["invalid-input-response"],
-        failOpen: false,
       },
       meta: {
         requestId: "unknown",
@@ -337,13 +338,12 @@ describe("Auth integration", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Authorization header is required.",
-      errors: [
-        {
-          code: "UNAUTHORIZED",
-          message: "Authorization header is required.",
-        },
-      ],
+      data: null,
+      error: {
+        code: "UNAUTHORIZED",
+      },
       meta: {
         requestId: "unknown",
       },
@@ -381,6 +381,7 @@ describe("Auth integration", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         verified: true,
         auth: {
@@ -399,6 +400,8 @@ describe("Auth integration", () => {
           },
         },
       },
+      error: null,
+      message: "Request completed successfully.",
       meta: {
         requestId: "unknown",
       },
@@ -452,6 +455,7 @@ describe("Auth integration", () => {
     expect(response.headers.get("set-cookie")).toContain("refresh_token=google-refresh-token");
     expect(response.headers.get("set-cookie")).toContain("csrf_token=");
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         accessToken: "google-access-token",
         device: {
@@ -466,6 +470,7 @@ describe("Auth integration", () => {
           role: "user",
         },
       },
+      error: null,
       message: "Authenticated successfully.",
       meta: {
         requestId: "unknown",
@@ -516,6 +521,7 @@ describe("Auth integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toBeNull();
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         accessToken: "microsoft-access-token",
         refreshToken: "microsoft-refresh-token",
@@ -531,6 +537,7 @@ describe("Auth integration", () => {
           role: "user",
         },
       },
+      error: null,
       message: "Authenticated successfully.",
       meta: {
         requestId: "unknown",
@@ -569,6 +576,7 @@ describe("Auth integration", () => {
     expect(response.headers.get("set-cookie")).toContain("refresh_token=");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     await expect(response.json()).resolves.toEqual({
+      success: true,
       data: {
         loggedOut: true,
         auth: {
@@ -585,6 +593,7 @@ describe("Auth integration", () => {
           },
         },
       },
+      error: null,
       message: "Logged out successfully.",
       meta: {
         requestId: "unknown",

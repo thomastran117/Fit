@@ -7,29 +7,21 @@ export interface ApiResponseMeta {
   [key: string]: unknown;
 }
 
-export interface ApiSuccessResponse<TData> {
-  data: TData;
-  meta: ApiResponseMeta;
-  message?: string;
-  details?: unknown;
+export interface ApiErrorPayload<TDetails = unknown> {
+  code: string;
+  details?: TDetails;
 }
 
-export interface ApiErrorItem {
-  code?: string;
-  field?: string;
+export interface ApiEnvelope<TData = unknown, TErrorDetails = unknown> {
+  success: boolean;
   message: string;
-}
-
-export interface ApiErrorResponse {
-  message: string;
+  data: TData | null;
+  error: ApiErrorPayload<TErrorDetails> | null;
   meta: ApiResponseMeta;
-  errors?: ApiErrorItem[];
-  details?: unknown;
 }
 
 interface ResponseOptions {
   message?: string;
-  details?: unknown;
   meta?: Record<string, unknown>;
 }
 
@@ -40,6 +32,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function resolveRequestId(context: Context<AppBindings>): string {
   const requestId = context.get("requestId");
   return typeof requestId === "string" && requestId.length > 0 ? requestId : "unknown";
+}
+
+function defaultSuccessMessage(status: 200 | 201 | 202): string {
+  switch (status) {
+    case 201:
+      return "Resource created successfully.";
+    case 202:
+      return "Request accepted successfully.";
+    case 200:
+    default:
+      return "Request completed successfully.";
+  }
 }
 
 export function mergeResponseMeta(
@@ -91,30 +95,36 @@ export function buildResponseMeta(
 export function buildSuccessResponse<TData>(
   context: Context<AppBindings>,
   data: TData,
+  status: 200 | 201 | 202,
   options: ResponseOptions = {},
-): ApiSuccessResponse<TData> {
+): ApiEnvelope<TData> {
   return {
-    ...(options.message !== undefined ? { message: options.message } : {}),
-    ...(options.details !== undefined ? { details: options.details } : {}),
+    success: true,
+    message: options.message ?? defaultSuccessMessage(status),
     data,
+    error: null,
     meta: buildResponseMeta(context, options.meta),
   };
 }
 
-export function buildErrorResponse(
+export function buildErrorResponse<TDetails>(
   context: Context<AppBindings>,
   input: {
     message: string;
-    errors?: ApiErrorItem[];
-    details?: unknown;
+    code: string;
+    details?: TDetails;
     meta?: Record<string, unknown>;
   },
-): ApiErrorResponse {
+): ApiEnvelope<null, TDetails> {
   return {
+    success: false,
     message: input.message,
+    data: null,
+    error: {
+      code: input.code,
+      ...(input.details !== undefined ? { details: input.details } : {}),
+    },
     meta: buildResponseMeta(context, input.meta),
-    ...(input.errors && input.errors.length > 0 ? { errors: input.errors } : {}),
-    ...(input.details !== undefined ? { details: input.details } : {}),
   };
 }
 
@@ -124,7 +134,7 @@ function jsonResponse<TData>(
   data: TData,
   options?: ResponseOptions,
 ): Response {
-  return context.json(buildSuccessResponse(context, data, options), status);
+  return context.json(buildSuccessResponse(context, data, status, options), status);
 }
 
 export function ok<TData>(

@@ -66,14 +66,15 @@ describe("requestSanitizationMiddleware", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Request query validation failed.",
-      errors: [
-        {
-          code: "VALIDATION_ERROR",
-          field: "query.q",
-          message: "Contains disallowed content.",
+      data: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          "query.q": ["Contains disallowed content."],
         },
-      ],
+      },
       meta: {
         requestId: "unknown",
       },
@@ -86,14 +87,15 @@ describe("requestSanitizationMiddleware", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Route parameter validation failed.",
-      errors: [
-        {
-          code: "VALIDATION_ERROR",
-          field: "id",
-          message: "Contains disallowed content.",
+      data: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          id: ["Contains disallowed content."],
         },
-      ],
+      },
       meta: {
         requestId: "unknown",
       },
@@ -115,14 +117,15 @@ describe("requestSanitizationMiddleware", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
+      success: false,
       message: "Request body validation failed.",
-      errors: [
-        {
-          code: "VALIDATION_ERROR",
-          field: "bio",
-          message: "Contains disallowed content.",
+      data: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          bio: ["Contains disallowed content."],
         },
-      ],
+      },
       meta: {
         requestId: "unknown",
       },
