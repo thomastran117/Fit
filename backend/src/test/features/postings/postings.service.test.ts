@@ -2,6 +2,7 @@ import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
+import { RequestValidationError } from "@/configuration/validation/request";
 import type {
   PostingAvailabilityBlockInput,
   PostingAvailabilityBlockRecord,
@@ -875,6 +876,59 @@ describe("PostingsService", () => {
         ],
       }),
     );
+  });
+
+  it("accepts public search requests at the maximum supported result window boundary", async () => {
+    const repository = new FakePostingsRepository();
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 200,
+        pageSize: 50,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: true,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const service = createService(repository, undefined, undefined, {
+      searchPublic,
+    } as unknown as PostingsPublicSearchService);
+
+    await service.searchPublic({
+      page: 200,
+      pageSize: 50,
+      sort: "relevance",
+    });
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 200,
+        pageSize: 50,
+      }),
+    );
+  });
+
+  it("rejects public search requests beyond the maximum supported result window", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+
+    const error = await service
+      .searchPublic({
+        page: 201,
+        pageSize: 50,
+        sort: "relevance",
+      })
+      .catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(RequestValidationError);
+    expect((error as RequestValidationError).details).toEqual([
+      {
+        path: "page",
+        message: "Requested page exceeds the maximum search window of 10000 results.",
+      },
+    ]);
   });
 
   it("lists owner availability blocks without a full posting payload", async () => {

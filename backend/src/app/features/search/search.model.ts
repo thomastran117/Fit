@@ -121,6 +121,7 @@ export interface SearchStatusResult {
       SearchTelemetrySnapshot["circuitBreaker"];
   };
   currentReindexRun?: SearchReindexRunRecord;
+  latestReindexRun?: SearchReindexRunRecord;
   pendingOutboxCount: number;
   pendingOutboxOldestAgeMs?: number;
   lag: SearchOutboxLagMetrics;

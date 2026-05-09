@@ -40,6 +40,13 @@ const TRANSIENT_REINDEX_ERROR_CODES = new Set([
   "ETIMEDOUT",
 ]);
 
+class SearchReindexCatchUpError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SearchReindexCatchUpError";
+  }
+}
+
 type BatchedIndexEntry = {
   job: PostingSearchOutboxRecord;
   payload: SearchIndexJobPayload;
@@ -93,12 +100,13 @@ export class SearchService {
   }
 
   async getStatus(): Promise<SearchStatusResult> {
-    const [aliasHealth, currentReindexRun, lagMetrics, queueInspection] =
+    const [aliasHealth, currentReindexRun, latestReindexRun, lagMetrics, queueInspection] =
       await Promise.all([
         this.postingsSearchIndexService.isElasticsearchEnabled()
           ? this.postingsSearchIndexService.getAliasStatus()
           : Promise.resolve(this.createDisabledAliasHealth()),
         this.postingsRepository.findActiveSearchReindexRun(),
+        this.postingsRepository.findLatestSearchReindexRun(),
         this.postingsRepository.getSearchOutboxLagMetrics(),
         this.postingsSearchIndexService.isElasticsearchEnabled()
           ? this.searchQueueService
@@ -150,6 +158,7 @@ export class SearchService {
         },
       },
       currentReindexRun: currentReindexRun ?? undefined,
+      latestReindexRun: latestReindexRun ?? undefined,
       pendingOutboxCount: lagMetrics.unpublishedCount,
       pendingOutboxOldestAgeMs: lagMetrics.unpublishedOldestAgeMs,
       lag: lagMetrics,
@@ -417,11 +426,15 @@ export class SearchService {
       }
 
       if (run.status === "waiting_for_catchup") {
-        const caughtUp = await this.postingsRepository.isSearchReindexRunCaughtUp(run.id);
+        const catchUpState = await this.postingsRepository.getSearchReindexCatchUpState(run.id);
 
-        if (!caughtUp) {
+        if (catchUpState.state === "waiting") {
           await this.postingsRepository.clearSearchReindexRunProcessing(run.id);
           return 1;
+        }
+
+        if (catchUpState.state === "failed") {
+          throw new SearchReindexCatchUpError(catchUpState.errorMessage);
         }
 
         const { previousReadTargets, previousWriteTargets } =
@@ -712,6 +725,10 @@ export class SearchService {
   private isTransientReindexError(error: unknown): boolean {
     if (error instanceof ElasticsearchUnavailableError) {
       return true;
+    }
+
+    if (error instanceof SearchReindexCatchUpError) {
+      return false;
     }
 
     if (!(error instanceof Error)) {

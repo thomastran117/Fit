@@ -58,6 +58,20 @@ describe("SearchService", () => {
   it("reports queue inspection failures explicitly in status", async () => {
     const postingsRepository = {
       findActiveSearchReindexRun: jest.fn(async () => null),
+      findLatestSearchReindexRun: jest.fn(async () => ({
+        id: "run-9",
+        status: "failed" as const,
+        targetIndexName: "postings_v9",
+        sourceSnapshotAt: "2026-04-27T00:00:00.000Z",
+        barrierOutboxId: "barrier-9",
+        totalPostings: 25,
+        indexedPostings: 25,
+        failedPostings: 0,
+        failedAt: "2026-04-27T00:10:00.000Z",
+        lastError: "Search reindex barrier could not complete: broker publish retries exhausted.",
+        createdAt: "2026-04-27T00:00:00.000Z",
+        updatedAt: "2026-04-27T00:10:00.000Z",
+      })),
       getSearchOutboxLagMetrics: jest.fn(async () => ({
         unpublishedCount: 3,
         unpublishedOldestAgeMs: 1_500,
@@ -102,6 +116,11 @@ describe("SearchService", () => {
       error: "broker unavailable",
     });
     expect(status.queueCounts).toBeUndefined();
+    expect(status.latestReindexRun).toMatchObject({
+      id: "run-9",
+      status: "failed",
+      lastError: "Search reindex barrier could not complete: broker publish retries exhausted.",
+    });
     expect(status.pendingOutboxCount).toBe(3);
     expect(status.pendingOutboxOldestAgeMs).toBe(1_500);
     expect(status.lag).toEqual({
@@ -264,7 +283,9 @@ describe("SearchService", () => {
       updateSearchReindexRunProgress: jest.fn(async () => undefined),
       enqueueSearchReindexBarrier: jest.fn(async () => undefined),
       touchSearchReindexRunProcessing,
-      isSearchReindexRunCaughtUp: jest.fn(async () => false),
+      getSearchReindexCatchUpState: jest.fn(async () => ({
+        state: "waiting" as const,
+      })),
       clearSearchReindexRunProcessing,
     } as never;
     const postingsSearchService = {
@@ -281,6 +302,48 @@ describe("SearchService", () => {
 
     expect(touchSearchReindexRunProcessing).toHaveBeenCalled();
     expect(clearSearchReindexRunProcessing).toHaveBeenCalledWith("run-1");
+  });
+
+  it("fails waiting reindex runs when the barrier dead-letters", async () => {
+    const markSearchReindexRunFailed = jest.fn(async () => undefined);
+    const clearSearchReindexRunProcessing = jest.fn(async () => undefined);
+    const postingsRepository = {
+      claimNextSearchReindexRun: jest.fn(async () => ({
+        id: "run-1",
+        status: "waiting_for_catchup",
+        targetIndexName: "postings_v2",
+        sourceSnapshotAt: "2026-04-27T00:00:00.000Z",
+        barrierOutboxId: "barrier-1",
+        totalPostings: 2,
+        indexedPostings: 2,
+        failedPostings: 0,
+        startedAt: "2026-04-27T00:00:00.000Z",
+        createdAt: "2026-04-27T00:00:00.000Z",
+        updatedAt: "2026-04-27T00:00:00.000Z",
+      })),
+      getSearchReindexCatchUpState: jest.fn(async () => ({
+        state: "failed" as const,
+        errorMessage: "Search reindex barrier could not complete: broker publish retries exhausted.",
+      })),
+      markSearchReindexRunFailed,
+      clearSearchReindexRunProcessing,
+    } as never;
+    const postingsSearchService = {
+      ensureLiveIndex: jest.fn(async () => undefined),
+    } as never;
+    const searchQueueService = {
+      ensureTopology: jest.fn(async () => undefined),
+    } as never;
+    const service = new SearchService(postingsRepository, postingsSearchService, searchQueueService);
+
+    const processed = await service.processReindexRuns(100);
+
+    expect(processed).toBe(1);
+    expect(markSearchReindexRunFailed).toHaveBeenCalledWith(
+      "run-1",
+      "Search reindex barrier could not complete: broker publish retries exhausted.",
+    );
+    expect(clearSearchReindexRunProcessing).not.toHaveBeenCalled();
   });
 
   it("retries transient reindex failures without failing the run", async () => {

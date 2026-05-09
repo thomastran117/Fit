@@ -36,6 +36,18 @@ import type {
 } from "@/features/search/search.model";
 import { getPostingSearchableAttributeDefinitions } from "@/features/postings/postings.variants";
 
+type SearchReindexCatchUpState =
+  | {
+      state: "waiting";
+    }
+  | {
+      state: "caught_up";
+    }
+  | {
+      state: "failed";
+      errorMessage: string;
+    };
+
 type PostingPersistence = Prisma.PostingGetPayload<{
   include: {
     photos: {
@@ -1234,6 +1246,20 @@ export class PostingsRepository extends BaseRepository {
     return run ? this.mapSearchReindexRun(run) : null;
   }
 
+  async findLatestSearchReindexRun(): Promise<SearchReindexRunRecord | null> {
+    const run = await this.executeAsync(() =>
+      this.prisma.searchReindexRun.findFirst({
+        orderBy: [
+          {
+            createdAt: "desc",
+          },
+        ],
+      }),
+    );
+
+    return run ? this.mapSearchReindexRun(run) : null;
+  }
+
   async claimNextSearchReindexRun(): Promise<SearchReindexRunRecord | null> {
     return this.executeAsync(async () => {
       const now = new Date();
@@ -1372,7 +1398,7 @@ export class PostingsRepository extends BaseRepository {
     );
   }
 
-  async isSearchReindexRunCaughtUp(id: string): Promise<boolean> {
+  async getSearchReindexCatchUpState(id: string): Promise<SearchReindexCatchUpState> {
     return this.executeAsync(async () => {
       const run = await this.prisma.searchReindexRun.findUnique({
         where: {
@@ -1384,7 +1410,10 @@ export class PostingsRepository extends BaseRepository {
       });
 
       if (!run?.barrierOutboxId) {
-        return false;
+        return {
+          state: "failed",
+          errorMessage: "Search reindex run is missing its barrier outbox reference.",
+        };
       }
 
       const barrier = await this.prisma.postingSearchOutbox.findUnique({
@@ -1395,11 +1424,30 @@ export class PostingsRepository extends BaseRepository {
           createdAt: true,
           indexedAt: true,
           deadLetteredAt: true,
+          lastError: true,
         },
       });
 
-      if (!barrier || barrier.deadLetteredAt || !barrier.indexedAt) {
-        return false;
+      if (!barrier) {
+        return {
+          state: "failed",
+          errorMessage: "Search reindex barrier outbox entry could not be found.",
+        };
+      }
+
+      if (barrier.deadLetteredAt) {
+        return {
+          state: "failed",
+          errorMessage: barrier.lastError
+            ? `Search reindex barrier could not complete: ${barrier.lastError}`
+            : "Search reindex barrier could not complete because the barrier outbox entry was dead-lettered.",
+        };
+      }
+
+      if (!barrier.indexedAt) {
+        return {
+          state: "waiting",
+        };
       }
 
       const remaining = await this.prisma.postingSearchOutbox.count({
@@ -1413,7 +1461,13 @@ export class PostingsRepository extends BaseRepository {
         },
       });
 
-      return remaining === 0;
+      return remaining === 0
+        ? {
+            state: "caught_up",
+          }
+        : {
+            state: "waiting",
+          };
     });
   }
 

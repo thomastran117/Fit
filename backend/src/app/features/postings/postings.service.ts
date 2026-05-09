@@ -10,6 +10,7 @@ import {
   MAX_BATCH_IDS,
   MAX_BOOKING_DURATION_DAYS_LIMIT,
   MAX_POSTING_PHOTOS,
+  MAX_SEARCH_RESULT_WINDOW,
   type BatchPostingsResult,
   type ListOwnerPostingsInput,
   type ListOwnerPostingsResult,
@@ -838,6 +839,17 @@ export class PostingsService {
 
     if (input.sort === "nearest" && !input.geo) {
       throw new BadRequestError("Nearest sorting requires latitude and longitude.");
+    }
+
+    const resultWindowEnd = (input.page - 1) * input.pageSize + input.pageSize;
+
+    if (resultWindowEnd > MAX_SEARCH_RESULT_WINDOW) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path: "page",
+          message: `Requested page exceeds the maximum search window of ${MAX_SEARCH_RESULT_WINDOW} results.`,
+        },
+      ]);
     }
 
     if (input.availabilityWindow) {

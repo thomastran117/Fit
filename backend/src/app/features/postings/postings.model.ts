@@ -9,6 +9,7 @@ export const MAX_POSTING_PHOTOS = 10;
 export const MAX_BATCH_IDS = 50;
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 50;
+export const MAX_SEARCH_RESULT_WINDOW = 10_000;
 export const DEFAULT_MAX_BOOKING_DURATION_DAYS = 30;
 export const MAX_BOOKING_DURATION_DAYS_LIMIT = 365;
 
