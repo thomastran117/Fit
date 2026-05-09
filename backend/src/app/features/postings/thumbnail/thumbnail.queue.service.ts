@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Channel, ConsumeMessage } from "amqplib";
 import { loggerFactory } from "@/configuration/logging";
 import { createRabbitMqChannel } from "@/configuration/resources/rabbitmq";
-import type { PostingThumbnailJobPayload } from "@/features/postings/postings.thumbnail.model";
+import type { PostingThumbnailJobPayload } from "@/features/postings/thumbnail/thumbnail.model";
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const;
 const POSTING_THUMBNAIL_QUEUE_PREFIX = "postings.thumbnail";
@@ -121,3 +121,4 @@ export class PostingThumbnailQueueService {
     await channel.bindQueue(this.deadLetterQueueName, this.exchangeName, "dead-letter");
   }
 }
+

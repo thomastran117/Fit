@@ -8,8 +8,8 @@ import type {
   OwnerPostingsAnalyticsSummary,
   PostingAnalyticsDetail,
   PostingAnalyticsDetailInput,
-} from "@/features/postings/postings.analytics.model";
-import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+} from "@/features/postings/analytics/analytics.model";
+import type { PostingsAnalyticsRepository } from "@/features/postings/analytics/analytics.repository";
 import {
   isPostingPubliclyVisible,
   type PublicPostingRecord,
@@ -151,4 +151,5 @@ export class PostingsAnalyticsService {
     return createHash("sha256").update(value).digest("hex");
   }
 }
+
 

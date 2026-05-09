@@ -39,7 +39,7 @@ import type {
   ProcessRentingConfirmedEventInput,
   ProcessSearchClickEventInput,
   ProcessSearchImpressionEventInput,
-} from "@/features/postings/postings.analytics.model";
+} from "@/features/postings/analytics/analytics.model";
 
 interface AnalyticsAggregateRow {
   searchImpressions: bigint | number | null;
@@ -1259,3 +1259,4 @@ interface CounterIncrements {
   estimatedConfirmedRevenue: Prisma.Decimal;
   refundedRevenue: Prisma.Decimal;
 }
+

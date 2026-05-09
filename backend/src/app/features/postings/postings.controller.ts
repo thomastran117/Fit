@@ -20,15 +20,15 @@ import {
   type PostingAnalyticsDetailInput,
   type PostingAnalyticsDetailQuery,
   type PostingAnalyticsSummaryQuery,
-} from "@/features/postings/postings.analytics.model";
-import { PostingsAnalyticsService } from "@/features/postings/postings.analytics.service";
+} from "@/features/postings/analytics/analytics.model";
+import { PostingsAnalyticsService } from "@/features/postings/analytics/analytics.service";
 import {
   createPostingReviewRequestSchema,
   listPostingReviewsQuerySchema,
   type CreatePostingReviewRequestBody,
   type ListPostingReviewsQuery,
-} from "@/features/postings/postings.reviews.model";
-import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
+} from "@/features/postings/reviews/reviews.model";
+import { PostingsReviewsService } from "@/features/postings/reviews/reviews.service";
 import {
   listOwnerPostingsQuerySchema,
   ownerAvailabilityBlockRequestSchema,
@@ -690,4 +690,3 @@ export class PostingsController {
     throw error;
   }
 }
-

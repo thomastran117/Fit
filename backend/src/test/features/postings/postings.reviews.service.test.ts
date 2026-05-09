@@ -1,9 +1,9 @@
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import ConflictError from "@/errors/http/conflict.error";
-import { PostingsReviewsService } from "@/features/postings/postings.reviews.service";
-import type { CreatePostingReviewRequestBody, PostingReviewRecord } from "@/features/postings/postings.reviews.model";
-import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import { PostingsReviewsService } from "@/features/postings/reviews/reviews.service";
+import type { CreatePostingReviewRequestBody, PostingReviewRecord } from "@/features/postings/reviews/reviews.model";
+import type { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 

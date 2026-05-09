@@ -65,6 +65,7 @@ export type RawEnvironmentValues = {
   POSTINGS_PUBLIC_CACHE_FOLLOWER_WAIT_TIMEOUT_MS?: string;
   POSTINGS_PUBLIC_CACHE_FOLLOWER_POLL_INTERVAL_MS?: string;
   POSTINGS_PUBLIC_CACHE_NEGATIVE_TTL_SECONDS?: string;
+  POSTINGS_PUBLIC_CACHE_TTL_JITTER_RATIO?: string;
   POSTINGS_SEARCH_OUTBOX_BATCH_SIZE?: string;
   POSTINGS_SEARCH_OUTBOX_POLL_INTERVAL_MS?: string;
   POSTINGS_SEARCH_INDEXER_PREFETCH?: string;
@@ -255,6 +256,7 @@ export interface AppEnvironment {
     followerWaitTimeoutMs: number;
     followerPollIntervalMs: number;
     negativeTtlSeconds: number;
+    ttlJitterRatio: number;
   };
   blobStorage: {
     connectionString?: string;

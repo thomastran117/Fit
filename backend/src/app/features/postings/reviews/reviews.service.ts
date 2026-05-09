@@ -6,9 +6,9 @@ import type {
   ListPostingReviewsResult,
   PostingReviewRecord,
   UpsertPostingReviewInput,
-} from "@/features/postings/postings.reviews.model";
+} from "@/features/postings/reviews/reviews.model";
 import { isPostingPubliclyVisible } from "@/features/postings/postings.model";
-import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import type { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 
@@ -104,4 +104,5 @@ export class PostingsReviewsService {
     };
   }
 }
+
 

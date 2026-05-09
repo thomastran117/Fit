@@ -25,7 +25,7 @@ import {
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLocks } from "@/features/cache/cache-locks";
-import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsAnalyticsRepository } from "@/features/postings/analytics/analytics.repository";
 import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingRecord } from "@/features/postings/postings.model";

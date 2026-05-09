@@ -5,7 +5,7 @@ import type {
   PostingSearchOutboxRecord,
 } from "@/features/postings/postings.model";
 import { isPostingSearchIndexable } from "@/features/postings/postings.model";
-import { PostingsSearchService } from "@/features/postings/postings.search.service";
+import { PostingsSearchService } from "@/features/postings/search/search.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type {
   SearchIndexJobPayload,
