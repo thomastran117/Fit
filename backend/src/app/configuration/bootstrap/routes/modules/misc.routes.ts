@@ -47,5 +47,13 @@ export const searchAdminRouteModule: RouteModule = {
       "/admin/search/status",
       resolveHandler<SearchController>(containerTokens.searchController, "getStatus"),
     );
+    app.post(
+      "/admin/search/outbox/replay-dead-lettered",
+      resolveHandler<SearchController>(containerTokens.searchController, "replayDeadLettered"),
+    );
+    app.post(
+      "/admin/search/cleanup-retained-indices",
+      resolveHandler<SearchController>(containerTokens.searchController, "cleanupRetainedIndices"),
+    );
   },
 };

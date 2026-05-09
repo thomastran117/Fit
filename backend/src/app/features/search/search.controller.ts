@@ -29,8 +29,35 @@ export class SearchController {
     return context.json(result);
   };
 
+  replayDeadLettered = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAdmin(context);
+    void auth;
+    const url = new URL(context.req.url);
+    const limit = this.readPositiveIntQuery(url, "limit", 100);
+    const result = await this.searchService.replayDeadLetteredOutbox(limit);
+    return context.json(result, 202);
+  };
+
+  cleanupRetainedIndices = async (context: Context<AppBindings>): Promise<Response> => {
+    const auth = await this.requireAdmin(context);
+    void auth;
+    const result = await this.searchService.cleanupRetainedIndices();
+    return context.json(result, 202);
+  };
+
   private requireRouteId(context: Context<AppBindings>): string {
     return requireSafeRouteParam(context, "id");
+  }
+
+  private readPositiveIntQuery(url: URL, key: string, fallback: number): number {
+    const rawValue = url.searchParams.get(key)?.trim();
+
+    if (!rawValue) {
+      return fallback;
+    }
+
+    const parsed = Number(rawValue);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   private async requireAdmin(context: Context<AppBindings>) {

@@ -135,3 +135,11 @@ export interface SearchStatusResult {
   };
   telemetry: Omit<SearchTelemetrySnapshot, "elasticsearchRequests" | "circuitBreaker">;
 }
+
+export interface ReplayDeadLetteredSearchOutboxResult {
+  revived: number;
+}
+
+export interface CleanupRetainedSearchIndicesResult {
+  deleted: number;
+}

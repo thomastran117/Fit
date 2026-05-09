@@ -93,6 +93,18 @@ export class PostingsSearchIndexService {
     return indexName;
   }
 
+  async deleteConcreteIndex(indexName: string): Promise<void> {
+    await this.elasticsearch.requestJson(
+      `/${encodeURIComponent(indexName)}`,
+      {
+        method: "DELETE",
+      },
+      {
+        allowNotFound: true,
+      },
+    );
+  }
+
   async upsertDocument(document: PostingSearchDocument, targetIndexName?: string): Promise<void> {
     const indexName = await this.resolveWriteTarget(targetIndexName);
 
