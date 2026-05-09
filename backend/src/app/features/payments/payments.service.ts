@@ -3,7 +3,7 @@ import ConflictError from "@/errors/http/conflict.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
 import type { CacheService } from "@/features/cache/cache.service";
 import { flowLockKeys, withFlowLock } from "@/features/cache/cache-locks";
-import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsAnalyticsRepository } from "@/features/postings/analytics/analytics.repository";
 import { invalidatePublicPostingProjection } from "@/features/postings/postings.public-cache-invalidation";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";

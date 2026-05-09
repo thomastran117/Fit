@@ -13,7 +13,7 @@ import type {
   ProcessRefundRecordedEventInput,
   ProcessSearchClickEventInput,
   ProcessSearchImpressionEventInput,
-} from "@/features/postings/postings.analytics.model";
+} from "@/features/postings/analytics/analytics.model";
 import { databaseWorkerResource, disconnectResources } from "@/workers/shared/resources";
 import { bootstrapPollingWorker, startWorker } from "@/workers/shared/worker-runtime";
 

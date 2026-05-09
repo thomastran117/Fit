@@ -4,7 +4,7 @@ import type { BookingRequestRecord } from "@/features/bookings/bookings.model";
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import { BookingsService } from "@/features/bookings/bookings.service";
 import type { CacheService } from "@/features/cache/cache.service";
-import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsAnalyticsRepository } from "@/features/postings/analytics/analytics.repository";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingRecord } from "@/features/postings/postings.model";
 import type { PostingsRepository } from "@/features/postings/postings.repository";

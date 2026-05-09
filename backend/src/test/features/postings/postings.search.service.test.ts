@@ -1,4 +1,4 @@
-import { PostingsSearchService } from "@/features/postings/postings.search.service";
+import { PostingsSearchService } from "@/features/postings/search/search.service";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";

@@ -6,7 +6,7 @@ import type {
   PostingReviewRecord,
   PostingReviewSummary,
   UpsertPostingReviewInput,
-} from "@/features/postings/postings.reviews.model";
+} from "@/features/postings/reviews/reviews.model";
 
 type PostingReviewPersistence = Prisma.PostingReviewGetPayload<{
   include: {
@@ -218,4 +218,5 @@ export class PostingsReviewsRepository extends BaseRepository {
     };
   }
 }
+
 

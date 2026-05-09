@@ -36,9 +36,9 @@ import {
   type SearchablePostingAttributeDefinition,
 } from "@/features/postings/postings.variants";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
-import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
-import type { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
-import type { PostingsSearchService } from "@/features/postings/postings.search.service";
+import type { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
+import type { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
+import type { PostingsSearchService } from "@/features/postings/search/search.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import { loggerFactory, type Logger } from "@/configuration/logging";
@@ -1257,4 +1257,3 @@ export class PostingsService {
     }
   }
 }
-

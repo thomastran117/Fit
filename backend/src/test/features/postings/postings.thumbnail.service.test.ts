@@ -1,4 +1,4 @@
-import { PostingThumbnailService } from "@/features/postings/postings.thumbnail.service";
+import { PostingThumbnailService } from "@/features/postings/thumbnail/thumbnail.service";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { BlobService } from "@/features/blob/blob.service";

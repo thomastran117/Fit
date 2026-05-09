@@ -13,11 +13,11 @@ import {
   isPostingPubliclyVisible,
   toPublicPostingRecord,
 } from "@/features/postings/postings.model";
-import type { PostingsReviewsRepository } from "@/features/postings/postings.reviews.repository";
+import type { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
-import type { PostingThumbnailQueueService } from "@/features/postings/postings.thumbnail.queue.service";
-import type { PostingsSearchService } from "@/features/postings/postings.search.service";
+import type { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
+import type { PostingsSearchService } from "@/features/postings/search/search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
 import type { CacheService } from "@/features/cache/cache.service";

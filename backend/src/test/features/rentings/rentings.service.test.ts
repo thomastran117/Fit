@@ -1,6 +1,6 @@
 import type { BookingsRepository } from "@/features/bookings/bookings.repository";
 import type { CacheService } from "@/features/cache/cache.service";
-import type { PostingsAnalyticsRepository } from "@/features/postings/postings.analytics.repository";
+import type { PostingsAnalyticsRepository } from "@/features/postings/analytics/analytics.repository";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import { RentingsService } from "@/features/rentings/rentings.service";
