@@ -5,7 +5,7 @@ import type {
   PostingSearchOutboxRecord,
 } from "@/features/postings/postings.model";
 import { isPostingSearchIndexable } from "@/features/postings/postings.model";
-import { PostingsSearchService } from "@/features/postings/search/search.service";
+import { PostingsSearchIndexService } from "@/features/postings/search/index.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type {
   SearchIndexJobPayload,
@@ -60,7 +60,7 @@ export class SearchService {
 
   constructor(
     private readonly postingsRepository: PostingsRepository,
-    private readonly postingsSearchService: PostingsSearchService,
+    private readonly postingsSearchIndexService: PostingsSearchIndexService,
     private readonly searchQueueService: SearchQueueService,
   ) {
     this.logger = loggerFactory.forClass(SearchService, "service");
@@ -75,8 +75,8 @@ export class SearchService {
           throw new ConflictError("A search reindex run is already active.");
         }
 
-        await this.postingsSearchService.ensureLiveIndex();
-        const targetIndexName = await this.postingsSearchService.createVersionedIndex();
+        await this.postingsSearchIndexService.ensureLiveIndex();
+        const targetIndexName = await this.postingsSearchIndexService.createVersionedIndex();
         return createSearchReindexRun(targetIndexName);
       },
     );
@@ -95,12 +95,12 @@ export class SearchService {
   async getStatus(): Promise<SearchStatusResult> {
     const [aliasHealth, currentReindexRun, lagMetrics, queueInspection] =
       await Promise.all([
-        this.postingsSearchService.isElasticsearchEnabled()
-          ? this.postingsSearchService.getAliasStatus()
+        this.postingsSearchIndexService.isElasticsearchEnabled()
+          ? this.postingsSearchIndexService.getAliasStatus()
           : Promise.resolve(this.createDisabledAliasHealth()),
         this.postingsRepository.findActiveSearchReindexRun(),
         this.postingsRepository.getSearchOutboxLagMetrics(),
-        this.postingsSearchService.isElasticsearchEnabled()
+        this.postingsSearchIndexService.isElasticsearchEnabled()
           ? this.searchQueueService
               .getQueueCounts()
               .then((counts) => ({
@@ -135,15 +135,15 @@ export class SearchService {
 
     return {
       aliases: {
-        read: this.postingsSearchService.getReadAliasName(),
-        write: this.postingsSearchService.getWriteAliasName(),
+        read: this.postingsSearchIndexService.getReadAliasName(),
+        write: this.postingsSearchIndexService.getWriteAliasName(),
         readTargets: aliasHealth.readTargets,
         writeTargets: aliasHealth.writeTargets,
         health: aliasHealth,
       },
       elasticsearch: {
-        enabled: this.postingsSearchService.isElasticsearchEnabled(),
-        circuitBreaker: this.postingsSearchService.getCircuitBreakerState(),
+        enabled: this.postingsSearchIndexService.isElasticsearchEnabled(),
+        circuitBreaker: this.postingsSearchIndexService.getCircuitBreakerState(),
         telemetry: {
           ...telemetry.elasticsearchRequests,
           ...telemetry.circuitBreaker,
@@ -165,7 +165,7 @@ export class SearchService {
   }
 
   async processOutboxRelayBatch(limit: number, maxPublishAttempts: number): Promise<number> {
-    await this.postingsSearchService.ensureLiveIndex();
+    await this.postingsSearchIndexService.ensureLiveIndex();
     await this.searchQueueService.ensureTopology();
 
     const jobs = await this.postingsRepository.claimSearchOutboxBatch(limit);
@@ -239,15 +239,15 @@ export class SearchService {
       }
 
       if (job.operation === "delete") {
-        await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
+        await this.postingsSearchIndexService.deleteDocument(job.postingId, job.targetIndexName);
       } else {
         const documents = await this.postingsRepository.findByIdsForIndexing([job.postingId]);
         const document = documents[0];
 
         if (!document || !isPostingSearchIndexable(document.status)) {
-          await this.postingsSearchService.deleteDocument(job.postingId, job.targetIndexName);
+          await this.postingsSearchIndexService.deleteDocument(job.postingId, job.targetIndexName);
         } else {
-          await this.postingsSearchService.upsertDocument(document, job.targetIndexName);
+          await this.postingsSearchIndexService.upsertDocument(document, job.targetIndexName);
         }
       }
 
@@ -361,7 +361,7 @@ export class SearchService {
     await Promise.all(
       Array.from(upsertGroups.entries(), async ([targetIndexName, group]) => {
         try {
-          await this.postingsSearchService.bulkUpsertDocuments(group.documents, targetIndexName);
+          await this.postingsSearchIndexService.bulkUpsertDocuments(group.documents, targetIndexName);
           await this.postingsRepository.markSearchOutboxesIndexed(
             group.entries.map(({ job }) => job.id),
           );
@@ -378,7 +378,7 @@ export class SearchService {
     await Promise.all(
       Array.from(deleteGroups.entries(), async ([targetIndexName, group]) => {
         try {
-          await this.postingsSearchService.bulkDeleteDocuments(
+          await this.postingsSearchIndexService.bulkDeleteDocuments(
             Array.from(new Set(group.ids)),
             targetIndexName,
           );
@@ -401,7 +401,7 @@ export class SearchService {
   }
 
   async processReindexRuns(batchSize: number): Promise<number> {
-    await this.postingsSearchService.ensureLiveIndex();
+    await this.postingsSearchIndexService.ensureLiveIndex();
     await this.searchQueueService.ensureTopology();
 
     const run = await this.postingsRepository.claimNextSearchReindexRun();
@@ -425,7 +425,7 @@ export class SearchService {
         }
 
         const { previousReadTargets, previousWriteTargets } =
-          await this.postingsSearchService.swapAliases(run.targetIndexName);
+          await this.postingsSearchIndexService.swapAliases(run.targetIndexName);
         const retainedIndexName =
           [...previousReadTargets, ...previousWriteTargets].find((index) => index !== run.targetIndexName);
 
@@ -479,7 +479,7 @@ export class SearchService {
 
       for (const chunk of this.chunkDocuments(documents, REINDEX_HEARTBEAT_BULK_CHUNK_SIZE)) {
         await this.postingsRepository.touchSearchReindexRunProcessing(run.id);
-        await this.postingsSearchService.bulkUpsertDocuments(chunk, run.targetIndexName);
+        await this.postingsSearchIndexService.bulkUpsertDocuments(chunk, run.targetIndexName);
         await this.postingsRepository.touchSearchReindexRunProcessing(run.id);
       }
       indexedPostings += documents.length;
@@ -494,18 +494,18 @@ export class SearchService {
   }
 
   async processReconciliationBatch(limit: number): Promise<number> {
-    if (!this.postingsSearchService.isElasticsearchEnabled()) {
+    if (!this.postingsSearchIndexService.isElasticsearchEnabled()) {
       return 0;
     }
 
-    await this.postingsSearchService.ensureLiveIndex();
+    await this.postingsSearchIndexService.ensureLiveIndex();
     const documents = await this.postingsRepository.listRecentForIndexReconciliation(limit);
 
     if (documents.length === 0) {
       return 0;
     }
 
-    const targetIndexName = this.postingsSearchService.getWriteAliasName();
+    const targetIndexName = this.postingsSearchIndexService.getWriteAliasName();
     const upserts = documents.filter((document) => isPostingSearchIndexable(document.status));
     const deletes = documents
       .filter((document) => !isPostingSearchIndexable(document.status))
@@ -513,28 +513,28 @@ export class SearchService {
 
     if (upserts.length > 0) {
       try {
-        await this.postingsSearchService.bulkUpsertDocuments(upserts, targetIndexName);
+        await this.postingsSearchIndexService.bulkUpsertDocuments(upserts, targetIndexName);
       } catch (error) {
         this.logger.warn("Search reconciliation bulk upsert failed; falling back to per-document sync.", {
           targetIndexName,
           documentIds: upserts.map((document) => document.id),
         }, error);
         for (const document of upserts) {
-          await this.postingsSearchService.upsertDocument(document);
+          await this.postingsSearchIndexService.upsertDocument(document);
         }
       }
     }
 
     if (deletes.length > 0) {
       try {
-        await this.postingsSearchService.bulkDeleteDocuments(deletes, targetIndexName);
+        await this.postingsSearchIndexService.bulkDeleteDocuments(deletes, targetIndexName);
       } catch (error) {
         this.logger.warn("Search reconciliation bulk delete failed; falling back to per-document sync.", {
           targetIndexName,
           documentIds: deletes,
         }, error);
         for (const id of deletes) {
-          await this.postingsSearchService.deleteDocument(id);
+          await this.postingsSearchIndexService.deleteDocument(id);
         }
       }
     }
@@ -561,8 +561,8 @@ export class SearchService {
   private createDisabledAliasHealth(): SearchStatusResult["aliases"]["health"] {
     return {
       state: "disabled",
-      readAlias: this.postingsSearchService.getReadAliasName(),
-      writeAlias: this.postingsSearchService.getWriteAliasName(),
+      readAlias: this.postingsSearchIndexService.getReadAliasName(),
+      writeAlias: this.postingsSearchIndexService.getWriteAliasName(),
       readTargets: [],
       writeTargets: [],
     };
@@ -670,7 +670,7 @@ export class SearchService {
   }
 
   private resolveIndexTargetName(job: PostingSearchOutboxRecord): string {
-    return job.targetIndexName ?? this.postingsSearchService.getWriteAliasName();
+    return job.targetIndexName ?? this.postingsSearchIndexService.getWriteAliasName();
   }
 
   private getOrCreateUpsertGroup(

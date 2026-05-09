@@ -1,4 +1,5 @@
-import { PostingsSearchService } from "@/features/postings/search/search.service";
+import { PostingsSearchIndexService } from "@/features/postings/search/index.service";
+import { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";
@@ -57,7 +58,7 @@ function createDocument(
   };
 }
 
-function createElasticsearchSearchService() {
+function createElasticsearchPublicSearchService() {
   const getPublicByIds = jest.fn(async () => ({
     postings: [],
     missingIds: [],
@@ -76,7 +77,7 @@ function createElasticsearchSearchService() {
   const postingsPublicCacheService = {
     getPublicByIds,
   } as unknown as PostingsPublicCacheService;
-  const service = new PostingsSearchService(repository, postingsPublicCacheService, {
+  const service = new PostingsPublicSearchService(repository, postingsPublicCacheService, {
     getPostingsIndexName: () => "postings-test",
     requestJson,
     isEnabled: () => true,
@@ -122,20 +123,14 @@ function createFallbackRepository() {
   };
 }
 
-describe("PostingsSearchService", () => {
+describe("PostingsSearchIndexService", () => {
   beforeEach(() => {
     resetSearchTelemetry();
   });
 
   it("indexes family, subtype, and searchable attributes into Elasticsearch documents", async () => {
-    const repository = {} as PostingsRepository;
     const requestJson = jest.fn(async () => undefined);
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: jest.fn(async () => ({
-        postings: [],
-        missingIds: [],
-      })),
-    } as unknown as PostingsPublicCacheService, {
+    const service = new PostingsSearchIndexService({
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,
@@ -162,8 +157,67 @@ describe("PostingsSearchService", () => {
     expect(body).not.toHaveProperty("attributes");
   });
 
+  it("repairs a missing read alias from the write alias target", async () => {
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        postings_test_v1: {},
+      })
+      .mockResolvedValueOnce({});
+    const service = new PostingsSearchIndexService({
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await service.ensureLiveIndex();
+
+    expect(requestJson).toHaveBeenNthCalledWith(
+      3,
+      "/_aliases",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(JSON.parse(requestJson.mock.calls[2]?.[1]?.body as string)).toEqual({
+      actions: [
+        {
+          add: {
+            index: "postings_test_v1",
+            alias: "postings-test-read",
+          },
+        },
+      ],
+    });
+  });
+
+  it("fails closed when read and write aliases target different indices", async () => {
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        postings_test_read: {},
+      })
+      .mockResolvedValueOnce({
+        postings_test_write: {},
+      });
+    const service = new PostingsSearchIndexService({
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await expect(service.ensureLiveIndex()).rejects.toBeInstanceOf(ElasticsearchUnavailableError);
+  });
+});
+
+describe("PostingsPublicSearchService", () => {
+  beforeEach(() => {
+    resetSearchTelemetry();
+  });
+
   it("adds family and subtype filters to Elasticsearch search requests", async () => {
-    const { getPublicByIds, requestJson, service } = createElasticsearchSearchService();
+    const { getPublicByIds, requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -194,7 +248,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("requires every requested tag in Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -228,7 +282,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds price, geo radius, and nearest sort clauses to Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -296,7 +350,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds oldest and alphabetical sort clauses to Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -392,7 +446,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("excludes overlapping blocked ranges when availability search is provided", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -438,7 +492,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds structured attribute filters to Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -506,7 +560,7 @@ describe("PostingsSearchService", () => {
     const requestJson = jest.fn(async () => {
       throw new ElasticsearchUnavailableError("Elasticsearch is unavailable.");
     });
-    const service = new PostingsSearchService(repository, {
+    const service = new PostingsPublicSearchService(repository, {
       getPublicByIds: batchFindPublic,
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
@@ -561,7 +615,7 @@ describe("PostingsSearchService", () => {
         ],
       },
     }));
-    const service = new PostingsSearchService(repository, {
+    const service = new PostingsPublicSearchService(repository, {
       getPublicByIds: batchFindPublic,
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
@@ -585,71 +639,6 @@ describe("PostingsSearchService", () => {
     });
     expect(batchFindPublic).toHaveBeenNthCalledWith(1, ["posting-1"]);
     expect(batchFindPublic).toHaveBeenNthCalledWith(2, ["posting-2"]);
-  });
-
-  it("repairs a missing read alias from the write alias target", async () => {
-    const repository = {} as PostingsRepository;
-    const requestJson = jest
-      .fn()
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({
-        postings_test_v1: {},
-      })
-      .mockResolvedValueOnce({});
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: jest.fn(async () => ({
-        postings: [],
-        missingIds: [],
-      })),
-    } as unknown as PostingsPublicCacheService, {
-      getPostingsIndexName: () => "postings-test",
-      requestJson,
-      isEnabled: () => true,
-    } as never);
-
-    await service.ensureLiveIndex();
-
-    expect(requestJson).toHaveBeenNthCalledWith(
-      3,
-      "/_aliases",
-      expect.objectContaining({
-        method: "POST",
-      }),
-    );
-    expect(JSON.parse(requestJson.mock.calls[2]?.[1]?.body as string)).toEqual({
-      actions: [
-        {
-          add: {
-            index: "postings_test_v1",
-            alias: "postings-test-read",
-          },
-        },
-      ],
-    });
-  });
-
-  it("fails closed when read and write aliases target different indices", async () => {
-    const repository = {} as PostingsRepository;
-    const requestJson = jest
-      .fn()
-      .mockResolvedValueOnce({
-        postings_test_read: {},
-      })
-      .mockResolvedValueOnce({
-        postings_test_write: {},
-      });
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: jest.fn(async () => ({
-        postings: [],
-        missingIds: [],
-      })),
-    } as unknown as PostingsPublicCacheService, {
-      getPostingsIndexName: () => "postings-test",
-      requestJson,
-      isEnabled: () => true,
-    } as never);
-
-    await expect(service.ensureLiveIndex()).rejects.toBeInstanceOf(ElasticsearchUnavailableError);
   });
 });
 

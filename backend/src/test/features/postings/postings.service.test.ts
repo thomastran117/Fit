@@ -17,7 +17,7 @@ import type { PostingsReviewsRepository } from "@/features/postings/reviews/revi
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
-import type { PostingsSearchService } from "@/features/postings/search/search.service";
+import type { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
 import type { CacheService } from "@/features/cache/cache.service";
@@ -242,7 +242,7 @@ function createServiceHarness(
   postingsReviewsRepository = new FakePostingsReviewsRepository(),
   rentingsRepository = new FakeRentingsRepository(),
 ) {
-  const searchService = {} as PostingsSearchService;
+  const searchService = {} as PostingsPublicSearchService;
   const blobService = {
     isConfigured: () => true,
     isManagedBlobUrl: () => true,
@@ -918,7 +918,7 @@ describe("PostingsService", () => {
 
   it("returns a conflict when the posting availability lock is busy", async () => {
     const repository = new FakePostingsRepository();
-    const searchService = {} as PostingsSearchService;
+    const searchService = {} as PostingsPublicSearchService;
     const blobService = {
       isConfigured: () => true,
       isManagedBlobUrl: () => true,

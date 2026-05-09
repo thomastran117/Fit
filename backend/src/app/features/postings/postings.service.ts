@@ -38,7 +38,7 @@ import {
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
 import type { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
-import type { PostingsSearchService } from "@/features/postings/search/search.service";
+import type { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import { loggerFactory, type Logger } from "@/configuration/logging";
@@ -48,7 +48,7 @@ export class PostingsService {
 
   constructor(
     private readonly postingsRepository: PostingsRepository,
-    private readonly postingsSearchService: PostingsSearchService,
+    private readonly postingsPublicSearchService: PostingsPublicSearchService,
     private readonly postingsReviewsRepository: PostingsReviewsRepository,
     private readonly rentingsRepository: RentingsRepository,
     private readonly blobService: BlobService,
@@ -350,7 +350,7 @@ export class PostingsService {
 
   async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
     this.assertValidSearchInput(input);
-    return this.postingsSearchService.searchPublic({
+    return this.postingsPublicSearchService.searchPublic({
       ...input,
       query: input.query?.trim() || undefined,
       tags: input.tags?.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
