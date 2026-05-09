@@ -289,6 +289,39 @@ describe("PostingsController", () => {
     });
   });
 
+  it("returns search results even when impression tracking fails", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => {
+          throw new Error("analytics unavailable");
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext();
+
+    const response = await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(200);
+  });
+
   it("rejects create requests that omit the required variant", async () => {
     mockRequireJwtAuth.mockResolvedValue(createClaims());
     const createDraft = jest.fn();
@@ -340,6 +373,65 @@ describe("PostingsController", () => {
           path: "variant",
         },
       ],
+    });
+    expect(createDraft).not.toHaveBeenCalled();
+  });
+
+  it("rejects create requests whose tags contain commas", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const createDraft = jest.fn();
+    const controller = new PostingsController(
+      {
+        createDraft,
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      body: {
+        variant: {
+          family: "place",
+          subtype: "entire_place",
+        },
+        name: "Test posting",
+        description: "Nice place",
+        pricing: {
+          currency: "cad",
+          daily: {
+            amount: 100,
+          },
+        },
+        photos: [
+          {
+            blobUrl: "https://example.blob.core.windows.net/postings/photo-1.jpg",
+            blobName: "postings/photo-1.jpg",
+            position: 0,
+          },
+        ],
+        tags: ["camera, lens"],
+        attributes: {},
+        availabilityStatus: "available",
+        availabilityBlocks: [],
+        location: {
+          latitude: 43.7,
+          longitude: -79.4,
+          city: "Toronto",
+          region: "Ontario",
+          country: "Canada",
+        },
+      },
+    });
+
+    await expect(controller.create(context)).rejects.toMatchObject<
+      Partial<RequestValidationError>
+    >({
+      message: "Request body validation failed.",
+      details: expect.arrayContaining([
+        expect.objectContaining({
+          path: "tags.0",
+        }),
+      ]),
     });
     expect(createDraft).not.toHaveBeenCalled();
   });

@@ -83,6 +83,15 @@ function readSingleParam(value?: string | string[]): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function readArrayParam(value?: string | string[]): string[] {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+
+  return values
+    .flatMap((entry) => entry.split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function readPositiveNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;
@@ -113,7 +122,11 @@ function buildSearchHref(
   searchParams.set("pageSize", String(input.pageSize));
   if (input.family) searchParams.set("family", input.family);
   if (input.subtype) searchParams.set("subtype", input.subtype);
-  if (input.tags && input.tags.length > 0) searchParams.set("tags", input.tags.join(","));
+  if (input.tags && input.tags.length > 0) {
+    for (const tag of input.tags) {
+      searchParams.append("tags", tag);
+    }
+  }
   if (input.availabilityStatus) searchParams.set("availabilityStatus", input.availabilityStatus);
   if (input.minDailyPrice !== undefined) searchParams.set("minDailyPrice", String(input.minDailyPrice));
   if (input.maxDailyPrice !== undefined) searchParams.set("maxDailyPrice", String(input.maxDailyPrice));
@@ -344,13 +357,10 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
     ? (subtypeRaw as (typeof subtypeOptions)[number])
     : undefined;
 
-  const tagsRaw = readSingleParam(resolvedSearchParams?.tags);
-  const tags = tagsRaw
-    ? tagsRaw
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : undefined;
+  const tags = (() => {
+    const values = readArrayParam(resolvedSearchParams?.tags);
+    return values.length > 0 ? values : undefined;
+  })();
 
   const availabilityStatusRaw = readSingleParam(resolvedSearchParams?.availabilityStatus);
   const availabilityStatus = availabilityStatusOptions.includes(

@@ -10,6 +10,7 @@ import {
   parseRequestBody,
 } from "@/configuration/validation/request";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import {
   listPostingAnalyticsQuerySchema,
@@ -54,12 +55,16 @@ import type { RecommendationActivityPublisher } from "@/features/recommendations
 import type { AuthPrincipal } from "@/features/auth/auth.principal";
 
 export class PostingsController {
+  private readonly logger: Logger;
+
   constructor(
     private readonly postingsService: PostingsService,
     private readonly postingsAnalyticsService: PostingsAnalyticsService,
     private readonly postingsReviewsService: PostingsReviewsService,
     private readonly recommendationActivityPublisher: RecommendationActivityPublisher,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(PostingsController, "controller");
+  }
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
@@ -254,7 +259,9 @@ export class PostingsController {
     const result = await this.postingsService.searchPublic(
       this.parseSearchPostingsInput(context),
     );
-    await this.postingsAnalyticsService.trackSearchImpressions(result.postings);
+    void this.postingsAnalyticsService.trackSearchImpressions(result.postings).catch((error) => {
+      this.logger.warn("Failed to record posting search impressions.", undefined, error);
+    });
     return context.json(result);
   };
 

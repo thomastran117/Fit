@@ -4,8 +4,10 @@ import {
   type ElasticsearchClient,
 } from "@/configuration/resources/elasticsearch";
 import {
+  type BatchPostingsResult,
   MAX_SEARCH_RESULT_WINDOW,
   type PostingSearchSource,
+  type PublicPostingRecord,
   type SearchAttributeFilterInput,
   type SearchPostingsInput,
   type SearchPostingsResult,
@@ -47,14 +49,21 @@ export class PostingsPublicSearchService {
 
   async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
     let searchIds = await this.searchIdsWithFallback(input);
-    let batch = await this.postingsPublicCacheService.getPublicByIds(searchIds.ids);
+    let batch = await this.hydratePublicPostings(searchIds.ids);
 
     if (searchIds.source === "elasticsearch" && batch.missingIds.length > 0) {
       this.logger.warn("Postings search falling back to database because Elasticsearch returned stale ids.", {
         missingIds: batch.missingIds,
       });
       searchIds = await this.searchIdsFromDatabase(input, "index-drift");
-      batch = await this.postingsPublicCacheService.getPublicByIds(searchIds.ids);
+      batch = await this.hydratePublicPostings(searchIds.ids);
+    }
+
+    if (batch.missingIds.length > 0) {
+      this.logger.warn("Postings search returned unresolved public posting ids after hydration.", {
+        source: searchIds.source,
+        missingIds: batch.missingIds,
+      });
     }
 
     return {
@@ -392,6 +401,48 @@ export class PostingsPublicSearchService {
       ...fallback,
       source: "database",
       fallbackReason: reason,
+    };
+  }
+
+  private async hydratePublicPostings(
+    ids: string[],
+  ): Promise<BatchPostingsResult<PublicPostingRecord>> {
+    const cachedBatch = await this.postingsPublicCacheService.getPublicByIds(ids);
+
+    if (cachedBatch.missingIds.length === 0) {
+      return cachedBatch;
+    }
+
+    const repositoryBatch = await this.postingsRepository.batchFindPublic({
+      ids: cachedBatch.missingIds,
+    });
+    const byId = new Map<string, PublicPostingRecord>();
+
+    for (const posting of cachedBatch.postings) {
+      byId.set(posting.id, posting);
+    }
+
+    for (const posting of repositoryBatch.postings) {
+      byId.set(posting.id, posting);
+    }
+
+    const postings: PublicPostingRecord[] = [];
+    const missingIds: string[] = [];
+
+    for (const id of ids) {
+      const posting = byId.get(id);
+
+      if (!posting) {
+        missingIds.push(id);
+        continue;
+      }
+
+      postings.push(posting);
+    }
+
+    return {
+      postings,
+      missingIds,
     };
   }
 

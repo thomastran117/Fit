@@ -65,6 +65,10 @@ function createElasticsearchPublicSearchService() {
   }));
   const repository = {
     searchPublicFallback: jest.fn(),
+    batchFindPublic: jest.fn(async ({ ids }: { ids: string[] }) => ({
+      postings: [],
+      missingIds: ids,
+    })),
   } as unknown as PostingsRepository;
   const requestJson = jest.fn(async () => ({
     hits: {
@@ -100,6 +104,44 @@ function readSearchRequest(requestJson: jest.Mock): {
   sort: unknown[];
 } {
   return JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string);
+}
+
+function createPublicPosting(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "posting-1",
+    ownerId: "owner-1",
+    status: "published",
+    variant: {
+      family: "place",
+      subtype: "entire_place",
+    },
+    name: "Sunny loft",
+    description: "Bright loft with workspace",
+    pricing: {
+      currency: "CAD",
+      daily: {
+        amount: 150,
+      },
+    },
+    pricingCurrency: "CAD",
+    photos: [],
+    tags: ["loft", "workspace"],
+    attributes: {},
+    availabilityStatus: "available",
+    effectiveMaxBookingDurationDays: 30,
+    availabilityBlocks: [],
+    location: {
+      latitude: 43.65,
+      longitude: -79.38,
+      city: "Toronto",
+      region: "Ontario",
+      country: "Canada",
+    },
+    createdAt: "2026-04-20T00:00:00.000Z",
+    updatedAt: "2026-04-20T00:00:00.000Z",
+    publishedAt: "2026-04-20T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
 function createFallbackRepository() {
@@ -546,9 +588,13 @@ describe("PostingsPublicSearchService", () => {
   });
 
   it("falls back to database search when Elasticsearch is unavailable", async () => {
-    const batchFindPublic = jest.fn(async () => ({
+    const getPublicByIds = jest.fn(async () => ({
       postings: [],
       missingIds: ["posting-1"],
+    }));
+    const batchFindPublic = jest.fn(async ({ ids }: { ids: string[] }) => ({
+      postings: [],
+      missingIds: ids,
     }));
     const searchPublicFallback = jest.fn(async () => ({
       ids: ["posting-1"],
@@ -556,12 +602,13 @@ describe("PostingsPublicSearchService", () => {
     }));
     const repository = {
       searchPublicFallback,
+      batchFindPublic,
     } as unknown as PostingsRepository;
     const requestJson = jest.fn(async () => {
       throw new ElasticsearchUnavailableError("Elasticsearch is unavailable.");
     });
     const service = new PostingsPublicSearchService(repository, {
-      getPublicByIds: batchFindPublic,
+      getPublicByIds,
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
@@ -582,11 +629,14 @@ describe("PostingsPublicSearchService", () => {
       query: "loft",
       sort: "relevance",
     });
-    expect(batchFindPublic).toHaveBeenCalledWith(["posting-1"]);
+    expect(getPublicByIds).toHaveBeenCalledWith(["posting-1"]);
+    expect(batchFindPublic).toHaveBeenCalledWith({
+      ids: ["posting-1"],
+    });
   });
 
   it("falls back to database search when Elasticsearch returns stale ids", async () => {
-    const batchFindPublic = jest
+    const getPublicByIds = jest
       .fn()
       .mockResolvedValueOnce({
         postings: [],
@@ -596,12 +646,23 @@ describe("PostingsPublicSearchService", () => {
         postings: [],
         missingIds: [],
       });
+    const batchFindPublic = jest
+      .fn()
+      .mockResolvedValueOnce({
+        postings: [],
+        missingIds: ["posting-1"],
+      })
+      .mockResolvedValueOnce({
+        postings: [],
+        missingIds: ["posting-2"],
+      });
     const searchPublicFallback = jest.fn(async () => ({
       ids: ["posting-2"],
       total: 1,
     }));
     const repository = {
       searchPublicFallback,
+      batchFindPublic,
     } as unknown as PostingsRepository;
     const requestJson = jest.fn(async () => ({
       hits: {
@@ -616,7 +677,7 @@ describe("PostingsPublicSearchService", () => {
       },
     }));
     const service = new PostingsPublicSearchService(repository, {
-      getPublicByIds: batchFindPublic,
+      getPublicByIds,
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
@@ -637,8 +698,55 @@ describe("PostingsPublicSearchService", () => {
       query: "loft",
       sort: "relevance",
     });
-    expect(batchFindPublic).toHaveBeenNthCalledWith(1, ["posting-1"]);
-    expect(batchFindPublic).toHaveBeenNthCalledWith(2, ["posting-2"]);
+    expect(getPublicByIds).toHaveBeenNthCalledWith(1, ["posting-1"]);
+    expect(getPublicByIds).toHaveBeenNthCalledWith(2, ["posting-2"]);
+    expect(batchFindPublic).toHaveBeenNthCalledWith(1, {
+      ids: ["posting-1"],
+    });
+    expect(batchFindPublic).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs cache misses from the repository without returning a short page", async () => {
+    const repository = {
+      searchPublicFallback: jest.fn(),
+      batchFindPublic: jest.fn(async () => ({
+        postings: [createPublicPosting()],
+        missingIds: [],
+      })),
+    } as unknown as PostingsRepository;
+    const service = new PostingsPublicSearchService(repository, {
+      getPublicByIds: jest.fn(async () => ({
+        postings: [],
+        missingIds: ["posting-1"],
+      })),
+    } as unknown as PostingsPublicCacheService, {
+      getPostingsIndexName: () => "postings-test",
+      requestJson: jest.fn(async () => ({
+        hits: {
+          total: {
+            value: 1,
+          },
+          hits: [
+            {
+              _id: "posting-1",
+            },
+          ],
+        },
+      })),
+      isEnabled: () => true,
+    } as never);
+
+    const result = await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      sort: "relevance",
+    });
+
+    expect(result.postings).toHaveLength(1);
+    expect(result.postings[0]?.id).toBe("posting-1");
+    expect(repository.batchFindPublic).toHaveBeenCalledWith({
+      ids: ["posting-1"],
+    });
   });
 
   it("caps pagination metadata at the maximum supported search window", async () => {
