@@ -10,6 +10,7 @@ import {
   MAX_BATCH_IDS,
   MAX_BOOKING_DURATION_DAYS_LIMIT,
   MAX_POSTING_PHOTOS,
+  MAX_SEARCH_RESULT_WINDOW,
   type BatchPostingsResult,
   type ListOwnerPostingsInput,
   type ListOwnerPostingsResult,
@@ -38,7 +39,7 @@ import {
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
 import type { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
-import type { PostingsSearchService } from "@/features/postings/search/search.service";
+import type { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import type { RentingsRepository } from "@/features/rentings/rentings.repository";
 import { ContentSanitizationService } from "@/features/security/content-sanitization.service";
 import { loggerFactory, type Logger } from "@/configuration/logging";
@@ -48,7 +49,7 @@ export class PostingsService {
 
   constructor(
     private readonly postingsRepository: PostingsRepository,
-    private readonly postingsSearchService: PostingsSearchService,
+    private readonly postingsPublicSearchService: PostingsPublicSearchService,
     private readonly postingsReviewsRepository: PostingsReviewsRepository,
     private readonly rentingsRepository: RentingsRepository,
     private readonly blobService: BlobService,
@@ -350,7 +351,7 @@ export class PostingsService {
 
   async searchPublic(input: SearchPostingsInput): Promise<SearchPostingsResult> {
     this.assertValidSearchInput(input);
-    return this.postingsSearchService.searchPublic({
+    return this.postingsPublicSearchService.searchPublic({
       ...input,
       query: input.query?.trim() || undefined,
       tags: input.tags?.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
@@ -840,6 +841,17 @@ export class PostingsService {
       throw new BadRequestError("Nearest sorting requires latitude and longitude.");
     }
 
+    const resultWindowEnd = (input.page - 1) * input.pageSize + input.pageSize;
+
+    if (resultWindowEnd > MAX_SEARCH_RESULT_WINDOW) {
+      throw new RequestValidationError("Request query validation failed.", [
+        {
+          path: "page",
+          message: `Requested page exceeds the maximum search window of ${MAX_SEARCH_RESULT_WINDOW} results.`,
+        },
+      ]);
+    }
+
     if (input.availabilityWindow) {
       const startAt = new Date(input.availabilityWindow.startAt);
       const endAt = new Date(input.availabilityWindow.endAt);
@@ -944,7 +956,7 @@ export class PostingsService {
 
         return {
           key: filter.key,
-          value: filter.value.trim(),
+          value: filter.value.trim().toLowerCase(),
         };
       }
       case "stringArray": {
@@ -970,7 +982,9 @@ export class PostingsService {
 
         return {
           key: filter.key,
-          value: Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))),
+          value: Array.from(
+            new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean)),
+          ),
         };
       }
       case "boolean": {

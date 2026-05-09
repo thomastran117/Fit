@@ -2,6 +2,7 @@ import BadRequestError from "@/errors/http/bad-request.error";
 import ConflictError from "@/errors/http/conflict.error";
 import ForbiddenError from "@/errors/http/forbidden.error";
 import ResourceNotFoundError from "@/errors/http/resource-not-found.error";
+import { RequestValidationError } from "@/configuration/validation/request";
 import type {
   PostingAvailabilityBlockInput,
   PostingAvailabilityBlockRecord,
@@ -17,7 +18,7 @@ import type { PostingsReviewsRepository } from "@/features/postings/reviews/revi
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import type { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
-import type { PostingsSearchService } from "@/features/postings/search/search.service";
+import type { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import type { BlobService } from "@/features/blob/blob.service";
 import type { CacheService } from "@/features/cache/cache.service";
@@ -233,16 +234,18 @@ function createService(
   repository: FakePostingsRepository,
   postingsReviewsRepository = new FakePostingsReviewsRepository(),
   rentingsRepository = new FakeRentingsRepository(),
+  searchService = {} as PostingsPublicSearchService,
 ): PostingsService {
-  return createServiceHarness(repository, postingsReviewsRepository, rentingsRepository).service;
+  return createServiceHarness(repository, postingsReviewsRepository, rentingsRepository, searchService)
+    .service;
 }
 
 function createServiceHarness(
   repository: FakePostingsRepository,
   postingsReviewsRepository = new FakePostingsReviewsRepository(),
   rentingsRepository = new FakeRentingsRepository(),
+  searchService = {} as PostingsPublicSearchService,
 ) {
-  const searchService = {} as PostingsSearchService;
   const blobService = {
     isConfigured: () => true,
     isManagedBlobUrl: () => true,
@@ -807,6 +810,127 @@ describe("PostingsService", () => {
     });
   });
 
+  it("rejects nearest sorting when search coordinates are missing", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+
+    const error = await service
+      .searchPublic({
+        page: 1,
+        pageSize: 10,
+        sort: "nearest",
+      })
+      .catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    expect((error as BadRequestError).message).toBe("Nearest sorting requires latitude and longitude.");
+  });
+
+  it("normalizes searchable string and string-array filters before search", async () => {
+    const repository = new FakePostingsRepository();
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const service = createService(repository, undefined, undefined, {
+      searchPublic,
+    } as unknown as PostingsPublicSearchService);
+
+    await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      family: "place",
+      subtype: "entire_place",
+      attributeFilters: [
+        {
+          key: "property_type",
+          value: " Condo ",
+        },
+        {
+          key: "amenities",
+          value: [" WiFi ", "Desk", "wifi"],
+        },
+      ],
+      sort: "relevance",
+    });
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributeFilters: [
+          {
+            key: "property_type",
+            value: "condo",
+          },
+          {
+            key: "amenities",
+            value: ["wifi", "desk"],
+          },
+        ],
+      }),
+    );
+  });
+
+  it("accepts public search requests at the maximum supported result window boundary", async () => {
+    const repository = new FakePostingsRepository();
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 200,
+        pageSize: 50,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: true,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const service = createService(repository, undefined, undefined, {
+      searchPublic,
+    } as unknown as PostingsPublicSearchService);
+
+    await service.searchPublic({
+      page: 200,
+      pageSize: 50,
+      sort: "relevance",
+    });
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 200,
+        pageSize: 50,
+      }),
+    );
+  });
+
+  it("rejects public search requests beyond the maximum supported result window", async () => {
+    const repository = new FakePostingsRepository();
+    const service = createService(repository);
+
+    const error = await service
+      .searchPublic({
+        page: 201,
+        pageSize: 50,
+        sort: "relevance",
+      })
+      .catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(RequestValidationError);
+    expect((error as RequestValidationError).details).toEqual([
+      {
+        path: "page",
+        message: "Requested page exceeds the maximum search window of 10000 results.",
+      },
+    ]);
+  });
+
   it("lists owner availability blocks without a full posting payload", async () => {
     const repository = new FakePostingsRepository();
     const service = createService(repository);
@@ -918,7 +1042,7 @@ describe("PostingsService", () => {
 
   it("returns a conflict when the posting availability lock is busy", async () => {
     const repository = new FakePostingsRepository();
-    const searchService = {} as PostingsSearchService;
+    const searchService = {} as PostingsPublicSearchService;
     const blobService = {
       isConfigured: () => true,
       isManagedBlobUrl: () => true,

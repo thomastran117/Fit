@@ -126,8 +126,6 @@ export async function searchPublicPostings(
       cache: "no-store",
     });
 
-    console.log(response);
-
     const payload = (await response.json().catch(() => null)) as
       | PublicPostingSearchResult
       | ApiErrorResponse

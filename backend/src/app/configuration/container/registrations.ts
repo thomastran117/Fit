@@ -45,8 +45,9 @@ import { PostingsPublicCacheService } from "@/features/postings/postings.public-
 import { PostingsReviewsRepository } from "@/features/postings/reviews/reviews.repository";
 import { PostingsReviewsService } from "@/features/postings/reviews/reviews.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
+import { PostingsSearchIndexService } from "@/features/postings/search/index.service";
+import { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import { PostingThumbnailQueueService } from "@/features/postings/thumbnail/thumbnail.queue.service";
-import { PostingsSearchService } from "@/features/postings/search/search.service";
 import { PostingsService } from "@/features/postings/postings.service";
 import { PostingThumbnailService } from "@/features/postings/thumbnail/thumbnail.service";
 import { RentingsController } from "@/features/rentings/rentings.controller";
@@ -516,14 +517,20 @@ export function registerApplicationServices(container: RootServiceContainer): vo
       ),
   });
   container.register({
-    token: containerTokens.postingsSearchService,
+    token: containerTokens.postingsPublicSearchService,
     lifetime: "scoped",
     dependencies: [containerTokens.postingsRepository, containerTokens.postingsPublicCacheService],
     resolve: ({ resolve }) =>
-      new PostingsSearchService(
+      new PostingsPublicSearchService(
         resolve(containerTokens.postingsRepository),
         resolve(containerTokens.postingsPublicCacheService),
       ),
+  });
+  container.register({
+    token: containerTokens.postingsSearchIndexService,
+    lifetime: "scoped",
+    dependencies: [],
+    resolve: () => new PostingsSearchIndexService(),
   });
   container.register({
     token: containerTokens.postingThumbnailService,
@@ -557,13 +564,13 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     lifetime: "scoped",
     dependencies: [
       containerTokens.postingsRepository,
-      containerTokens.postingsSearchService,
+      containerTokens.postingsSearchIndexService,
       containerTokens.searchQueueService,
     ],
     resolve: ({ resolve }) =>
       new SearchService(
         resolve(containerTokens.postingsRepository),
-        resolve(containerTokens.postingsSearchService),
+        resolve(containerTokens.postingsSearchIndexService),
         resolve(containerTokens.searchQueueService),
       ),
   });
@@ -584,7 +591,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     lifetime: "scoped",
     dependencies: [
       containerTokens.postingsRepository,
-      containerTokens.postingsSearchService,
+      containerTokens.postingsPublicSearchService,
       containerTokens.postingsReviewsRepository,
       containerTokens.rentingsRepository,
       containerTokens.blobService,
@@ -596,7 +603,7 @@ export function registerApplicationServices(container: RootServiceContainer): vo
     resolve: ({ resolve }) =>
       new PostingsService(
         resolve(containerTokens.postingsRepository),
-        resolve(containerTokens.postingsSearchService),
+        resolve(containerTokens.postingsPublicSearchService),
         resolve(containerTokens.postingsReviewsRepository),
         resolve(containerTokens.rentingsRepository),
         resolve(containerTokens.blobService),

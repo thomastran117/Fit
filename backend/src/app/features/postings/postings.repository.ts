@@ -36,6 +36,18 @@ import type {
 } from "@/features/search/search.model";
 import { getPostingSearchableAttributeDefinitions } from "@/features/postings/postings.variants";
 
+type SearchReindexCatchUpState =
+  | {
+      state: "waiting";
+    }
+  | {
+      state: "caught_up";
+    }
+  | {
+      state: "failed";
+      errorMessage: string;
+    };
+
 type PostingPersistence = Prisma.PostingGetPayload<{
   include: {
     photos: {
@@ -714,15 +726,15 @@ export class PostingsRepository extends BaseRepository {
     ];
 
     if (input.query) {
-      const likeValue = `%${input.query}%`;
+      const likeValue = this.createFallbackLikePattern(input.query);
       whereClauses.push(
         Prisma.sql`(
-          name LIKE ${likeValue}
-          OR description LIKE ${likeValue}
-          OR city LIKE ${likeValue}
-          OR region LIKE ${likeValue}
-          OR country LIKE ${likeValue}
-          OR CAST(tags AS CHAR) LIKE ${likeValue}
+          name LIKE ${likeValue} ESCAPE '\\'
+          OR description LIKE ${likeValue} ESCAPE '\\'
+          OR city LIKE ${likeValue} ESCAPE '\\'
+          OR region LIKE ${likeValue} ESCAPE '\\'
+          OR country LIKE ${likeValue} ESCAPE '\\'
+          OR CAST(tags AS CHAR) LIKE ${likeValue} ESCAPE '\\'
         )`,
       );
     }
@@ -760,7 +772,7 @@ export class PostingsRepository extends BaseRepository {
 
       if (typeof filter.value === "string") {
         whereClauses.push(
-          Prisma.sql`JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath})) = ${filter.value}`,
+          Prisma.sql`LOWER(JSON_UNQUOTE(JSON_EXTRACT(attributes, ${attributePath}))) = ${filter.value}`,
         );
       } else if (typeof filter.value === "boolean") {
         whereClauses.push(Prisma.sql`JSON_EXTRACT(attributes, ${attributePath}) = ${filter.value}`);
@@ -771,7 +783,18 @@ export class PostingsRepository extends BaseRepository {
       } else if (Array.isArray(filter.value)) {
         for (const value of filter.value) {
           whereClauses.push(
-            Prisma.sql`JSON_SEARCH(JSON_EXTRACT(attributes, ${attributePath}), 'one', ${value}) IS NOT NULL`,
+            Prisma.sql`EXISTS (
+              SELECT 1
+              FROM JSON_TABLE(
+                CASE
+                  WHEN JSON_TYPE(JSON_EXTRACT(attributes, ${attributePath})) = 'ARRAY'
+                    THEN JSON_EXTRACT(attributes, ${attributePath})
+                  ELSE JSON_ARRAY()
+                END,
+                '$[*]' COLUMNS (value VARCHAR(255) PATH '$')
+              ) AS attribute_values
+              WHERE LOWER(attribute_values.value) = ${value}
+            )`,
           );
         }
       }
@@ -1223,6 +1246,63 @@ export class PostingsRepository extends BaseRepository {
     return run ? this.mapSearchReindexRun(run) : null;
   }
 
+  async findLatestSearchReindexRun(): Promise<SearchReindexRunRecord | null> {
+    const run = await this.executeAsync(() =>
+      this.prisma.searchReindexRun.findFirst({
+        orderBy: [
+          {
+            createdAt: "desc",
+          },
+        ],
+      }),
+    );
+
+    return run ? this.mapSearchReindexRun(run) : null;
+  }
+
+  async findLatestCompletedSearchReindexRun(): Promise<SearchReindexRunRecord | null> {
+    const run = await this.executeAsync(() =>
+      this.prisma.searchReindexRun.findFirst({
+        where: {
+          status: "completed",
+        },
+        orderBy: [
+          {
+            completedAt: "desc",
+          },
+          {
+            createdAt: "desc",
+          },
+        ],
+      }),
+    );
+
+    return run ? this.mapSearchReindexRun(run) : null;
+  }
+
+  async listCompletedSearchReindexRunsWithRetainedIndices(): Promise<SearchReindexRunRecord[]> {
+    const runs = await this.executeAsync(() =>
+      this.prisma.searchReindexRun.findMany({
+        where: {
+          status: "completed",
+          retainedIndexName: {
+            not: null,
+          },
+        },
+        orderBy: [
+          {
+            completedAt: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
+      }),
+    );
+
+    return runs.map((run) => this.mapSearchReindexRun(run));
+  }
+
   async claimNextSearchReindexRun(): Promise<SearchReindexRunRecord | null> {
     return this.executeAsync(async () => {
       const now = new Date();
@@ -1361,7 +1441,7 @@ export class PostingsRepository extends BaseRepository {
     );
   }
 
-  async isSearchReindexRunCaughtUp(id: string): Promise<boolean> {
+  async getSearchReindexCatchUpState(id: string): Promise<SearchReindexCatchUpState> {
     return this.executeAsync(async () => {
       const run = await this.prisma.searchReindexRun.findUnique({
         where: {
@@ -1373,7 +1453,10 @@ export class PostingsRepository extends BaseRepository {
       });
 
       if (!run?.barrierOutboxId) {
-        return false;
+        return {
+          state: "failed",
+          errorMessage: "Search reindex run is missing its barrier outbox reference.",
+        };
       }
 
       const barrier = await this.prisma.postingSearchOutbox.findUnique({
@@ -1384,11 +1467,30 @@ export class PostingsRepository extends BaseRepository {
           createdAt: true,
           indexedAt: true,
           deadLetteredAt: true,
+          lastError: true,
         },
       });
 
-      if (!barrier || barrier.deadLetteredAt || !barrier.indexedAt) {
-        return false;
+      if (!barrier) {
+        return {
+          state: "failed",
+          errorMessage: "Search reindex barrier outbox entry could not be found.",
+        };
+      }
+
+      if (barrier.deadLetteredAt) {
+        return {
+          state: "failed",
+          errorMessage: barrier.lastError
+            ? `Search reindex barrier could not complete: ${barrier.lastError}`
+            : "Search reindex barrier could not complete because the barrier outbox entry was dead-lettered.",
+        };
+      }
+
+      if (!barrier.indexedAt) {
+        return {
+          state: "waiting",
+        };
       }
 
       const remaining = await this.prisma.postingSearchOutbox.count({
@@ -1402,7 +1504,13 @@ export class PostingsRepository extends BaseRepository {
         },
       });
 
-      return remaining === 0;
+      return remaining === 0
+        ? {
+            state: "caught_up",
+          }
+        : {
+            state: "waiting",
+          };
     });
   }
 
@@ -1446,12 +1554,21 @@ export class PostingsRepository extends BaseRepository {
     return this.mapSearchReindexRun(run);
   }
 
-  async countPublishedPostingsForIndexing(): Promise<number> {
+  async countPublishedPostingsForIndexing(sourceSnapshotAt?: string): Promise<number> {
+    const snapshotAt = sourceSnapshotAt ? new Date(sourceSnapshotAt) : undefined;
+
     return this.executeAsync(() =>
       this.prisma.posting.count({
         where: {
           status: "published",
           archivedAt: null,
+          ...(snapshotAt
+            ? {
+                updatedAt: {
+                  lte: snapshotAt,
+                },
+              }
+            : {}),
         },
       }),
     );
@@ -1460,12 +1577,22 @@ export class PostingsRepository extends BaseRepository {
   async listPublishedForIndexingBatch(
     limit: number,
     cursorId?: string,
+    sourceSnapshotAt?: string,
   ): Promise<PostingSearchDocument[]> {
+    const snapshotAt = sourceSnapshotAt ? new Date(sourceSnapshotAt) : undefined;
+
     const postings = await this.executeAsync(() =>
       this.prisma.posting.findMany({
         where: {
           status: "published",
           archivedAt: null,
+          ...(snapshotAt
+            ? {
+                updatedAt: {
+                  lte: snapshotAt,
+                },
+              }
+            : {}),
         },
         orderBy: {
           id: "asc",
@@ -1543,6 +1670,60 @@ export class PostingsRepository extends BaseRepository {
     );
   }
 
+  async clearSearchReindexRunRetainedIndexName(id: string): Promise<void> {
+    await this.executeAsync(() =>
+      this.prisma.searchReindexRun.update({
+        where: {
+          id,
+        },
+        data: {
+          retainedIndexName: null,
+        },
+      }),
+    );
+  }
+
+  async markSearchOutboxRelayed(
+    id: string,
+    supersededIds: string[],
+    brokerMessageId?: string,
+  ): Promise<void> {
+    const now = new Date();
+
+    await this.executeAsync(() =>
+      this.prisma.$transaction(async (transaction) => {
+        await transaction.postingSearchOutbox.update({
+          where: {
+            id,
+          },
+          data: {
+            processedAt: now,
+            processingAt: null,
+            brokerMessageId: brokerMessageId ?? null,
+            lastError: null,
+          },
+        });
+
+        if (supersededIds.length > 0) {
+          await transaction.postingSearchOutbox.updateMany({
+            where: {
+              id: {
+                in: supersededIds,
+              },
+            },
+            data: {
+              processedAt: now,
+              indexedAt: now,
+              processingAt: null,
+              brokerMessageId: brokerMessageId ?? null,
+              lastError: null,
+            },
+          });
+        }
+      }),
+    );
+  }
+
   async markSearchOutboxSuperseded(ids: string[], brokerMessageId?: string): Promise<void> {
     if (ids.length === 0) {
       return;
@@ -1567,7 +1748,7 @@ export class PostingsRepository extends BaseRepository {
     );
   }
 
-  async releaseSearchOutboxClaims(ids: string[]): Promise<void> {
+  async releaseSearchOutboxClaims(ids: string[], errorMessage?: string): Promise<void> {
     if (ids.length === 0) {
       return;
     }
@@ -1583,7 +1764,71 @@ export class PostingsRepository extends BaseRepository {
         },
         data: {
           processingAt: null,
+          ...(errorMessage !== undefined
+            ? {
+                lastError: errorMessage.slice(0, 2048),
+              }
+            : {}),
         },
+      }),
+    );
+  }
+
+  async reviveDeadLetteredSearchOutbox(limit: number): Promise<number> {
+    if (limit <= 0) {
+      return 0;
+    }
+
+    return this.executeAsync(async () =>
+      this.prisma.$transaction(async (transaction) => {
+        const rows = await transaction.postingSearchOutbox.findMany({
+          where: {
+            deadLetteredAt: {
+              not: null,
+            },
+            operation: {
+              in: ["upsert", "delete"],
+            },
+          },
+          orderBy: [
+            {
+              deadLetteredAt: "asc",
+            },
+            {
+              createdAt: "asc",
+            },
+          ],
+          take: limit,
+          select: {
+            id: true,
+          },
+        });
+        const ids = rows.map((row) => row.id);
+
+        if (ids.length === 0) {
+          return 0;
+        }
+
+        await transaction.postingSearchOutbox.updateMany({
+          where: {
+            id: {
+              in: ids,
+            },
+          },
+          data: {
+            deadLetteredAt: null,
+            processedAt: null,
+            indexedAt: null,
+            processingAt: null,
+            brokerMessageId: null,
+            lastError: null,
+            attempts: 0,
+            publishAttempts: 0,
+            availableAt: new Date(),
+          },
+        });
+
+        return ids.length;
       }),
     );
   }
@@ -1728,20 +1973,24 @@ export class PostingsRepository extends BaseRepository {
       case "relevance":
       default:
         if (input.query) {
-          const likeValue = `%${input.query}%`;
+          const likeValue = this.createFallbackLikePattern(input.query);
 
           return Prisma.sql`(
-            CASE WHEN name LIKE ${likeValue} THEN 6 ELSE 0 END
-            + CASE WHEN CAST(tags AS CHAR) LIKE ${likeValue} THEN 3 ELSE 0 END
-            + CASE WHEN description LIKE ${likeValue} THEN 2 ELSE 0 END
-            + CASE WHEN city LIKE ${likeValue} THEN 2 ELSE 0 END
-            + CASE WHEN region LIKE ${likeValue} THEN 1 ELSE 0 END
-            + CASE WHEN country LIKE ${likeValue} THEN 1 ELSE 0 END
+            CASE WHEN name LIKE ${likeValue} ESCAPE '\\' THEN 6 ELSE 0 END
+            + CASE WHEN CAST(tags AS CHAR) LIKE ${likeValue} ESCAPE '\\' THEN 3 ELSE 0 END
+            + CASE WHEN description LIKE ${likeValue} ESCAPE '\\' THEN 2 ELSE 0 END
+            + CASE WHEN city LIKE ${likeValue} ESCAPE '\\' THEN 2 ELSE 0 END
+            + CASE WHEN region LIKE ${likeValue} ESCAPE '\\' THEN 1 ELSE 0 END
+            + CASE WHEN country LIKE ${likeValue} ESCAPE '\\' THEN 1 ELSE 0 END
           ) DESC, published_at DESC, created_at DESC, id ASC`;
         }
 
         return Prisma.sql`published_at DESC, created_at DESC, id ASC`;
     }
+  }
+
+  private createFallbackLikePattern(query: string): string {
+    return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
   }
 
   private async enqueueOutbox(

@@ -9,6 +9,7 @@ export const MAX_POSTING_PHOTOS = 10;
 export const MAX_BATCH_IDS = 50;
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 50;
+export const MAX_SEARCH_RESULT_WINDOW = 10_000;
 export const DEFAULT_MAX_BOOKING_DURATION_DAYS = 30;
 export const MAX_BOOKING_DURATION_DAYS_LIMIT = 365;
 
@@ -32,6 +33,11 @@ export const postingSortSchema = z.enum([
 ]);
 
 const trimmedStringSchema = z.string().trim().min(1);
+const postingTagSchema = trimmedStringSchema
+  .max(50)
+  .refine((value) => !value.includes(","), {
+    message: "Tags cannot contain commas.",
+  });
 const nullableTrimmedStringSchema = z
   .string()
   .trim()
@@ -109,7 +115,7 @@ const upsertPostingRequestShape = {
   description: trimmedStringSchema.max(5000),
   pricing: postingPricingSchema,
   photos: z.array(postingPhotoSchema).min(1).max(MAX_POSTING_PHOTOS),
-  tags: z.array(trimmedStringSchema.max(50)).max(30).default([]),
+  tags: z.array(postingTagSchema).max(30).default([]),
   attributes: postingAttributesSchema,
   availabilityStatus: postingAvailabilityStatusSchema,
   availabilityNotes: nullableTrimmedStringSchema.pipe(

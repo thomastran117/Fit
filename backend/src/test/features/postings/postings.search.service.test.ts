@@ -1,4 +1,5 @@
-import { PostingsSearchService } from "@/features/postings/search/search.service";
+import { PostingsSearchIndexService } from "@/features/postings/search/index.service";
+import { PostingsPublicSearchService } from "@/features/postings/search/public-search.service";
 import type { PostingsPublicCacheService } from "@/features/postings/postings.public-cache.service";
 import { PostingsRepository } from "@/features/postings/postings.repository";
 import type { PostingSearchDocument } from "@/features/postings/postings.model";
@@ -57,13 +58,17 @@ function createDocument(
   };
 }
 
-function createElasticsearchSearchService() {
+function createElasticsearchPublicSearchService() {
   const getPublicByIds = jest.fn(async () => ({
     postings: [],
     missingIds: [],
   }));
   const repository = {
     searchPublicFallback: jest.fn(),
+    batchFindPublic: jest.fn(async ({ ids }: { ids: string[] }) => ({
+      postings: [],
+      missingIds: ids,
+    })),
   } as unknown as PostingsRepository;
   const requestJson = jest.fn(async () => ({
     hits: {
@@ -76,7 +81,7 @@ function createElasticsearchSearchService() {
   const postingsPublicCacheService = {
     getPublicByIds,
   } as unknown as PostingsPublicCacheService;
-  const service = new PostingsSearchService(repository, postingsPublicCacheService, {
+  const service = new PostingsPublicSearchService(repository, postingsPublicCacheService, {
     getPostingsIndexName: () => "postings-test",
     requestJson,
     isEnabled: () => true,
@@ -101,6 +106,44 @@ function readSearchRequest(requestJson: jest.Mock): {
   return JSON.parse(requestJson.mock.calls[0]?.[1]?.body as string);
 }
 
+function createPublicPosting(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "posting-1",
+    ownerId: "owner-1",
+    status: "published",
+    variant: {
+      family: "place",
+      subtype: "entire_place",
+    },
+    name: "Sunny loft",
+    description: "Bright loft with workspace",
+    pricing: {
+      currency: "CAD",
+      daily: {
+        amount: 150,
+      },
+    },
+    pricingCurrency: "CAD",
+    photos: [],
+    tags: ["loft", "workspace"],
+    attributes: {},
+    availabilityStatus: "available",
+    effectiveMaxBookingDurationDays: 30,
+    availabilityBlocks: [],
+    location: {
+      latitude: 43.65,
+      longitude: -79.38,
+      city: "Toronto",
+      region: "Ontario",
+      country: "Canada",
+    },
+    createdAt: "2026-04-20T00:00:00.000Z",
+    updatedAt: "2026-04-20T00:00:00.000Z",
+    publishedAt: "2026-04-20T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function createFallbackRepository() {
   const queries: CapturedSql[] = [];
   let callCount = 0;
@@ -122,20 +165,14 @@ function createFallbackRepository() {
   };
 }
 
-describe("PostingsSearchService", () => {
+describe("PostingsSearchIndexService", () => {
   beforeEach(() => {
     resetSearchTelemetry();
   });
 
   it("indexes family, subtype, and searchable attributes into Elasticsearch documents", async () => {
-    const repository = {} as PostingsRepository;
     const requestJson = jest.fn(async () => undefined);
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: jest.fn(async () => ({
-        postings: [],
-        missingIds: [],
-      })),
-    } as unknown as PostingsPublicCacheService, {
+    const service = new PostingsSearchIndexService({
       getPostingsIndexName: () => "postings-test",
       requestJson,
       isEnabled: () => true,
@@ -162,8 +199,67 @@ describe("PostingsSearchService", () => {
     expect(body).not.toHaveProperty("attributes");
   });
 
+  it("repairs a missing read alias from the write alias target", async () => {
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        postings_test_v1: {},
+      })
+      .mockResolvedValueOnce({});
+    const service = new PostingsSearchIndexService({
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await service.ensureLiveIndex();
+
+    expect(requestJson).toHaveBeenNthCalledWith(
+      3,
+      "/_aliases",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(JSON.parse(requestJson.mock.calls[2]?.[1]?.body as string)).toEqual({
+      actions: [
+        {
+          add: {
+            index: "postings_test_v1",
+            alias: "postings-test-read",
+          },
+        },
+      ],
+    });
+  });
+
+  it("fails closed when read and write aliases target different indices", async () => {
+    const requestJson = jest
+      .fn()
+      .mockResolvedValueOnce({
+        postings_test_read: {},
+      })
+      .mockResolvedValueOnce({
+        postings_test_write: {},
+      });
+    const service = new PostingsSearchIndexService({
+      getPostingsIndexName: () => "postings-test",
+      requestJson,
+      isEnabled: () => true,
+    } as never);
+
+    await expect(service.ensureLiveIndex()).rejects.toBeInstanceOf(ElasticsearchUnavailableError);
+  });
+});
+
+describe("PostingsPublicSearchService", () => {
+  beforeEach(() => {
+    resetSearchTelemetry();
+  });
+
   it("adds family and subtype filters to Elasticsearch search requests", async () => {
-    const { getPublicByIds, requestJson, service } = createElasticsearchSearchService();
+    const { getPublicByIds, requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -194,7 +290,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("requires every requested tag in Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -228,7 +324,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds price, geo radius, and nearest sort clauses to Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -296,7 +392,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds oldest and alphabetical sort clauses to Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -392,7 +488,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("excludes overlapping blocked ranges when availability search is provided", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -438,7 +534,7 @@ describe("PostingsSearchService", () => {
   });
 
   it("adds structured attribute filters to Elasticsearch search requests", async () => {
-    const { requestJson, service } = createElasticsearchSearchService();
+    const { requestJson, service } = createElasticsearchPublicSearchService();
 
     await service.searchPublic({
       page: 1,
@@ -492,9 +588,13 @@ describe("PostingsSearchService", () => {
   });
 
   it("falls back to database search when Elasticsearch is unavailable", async () => {
-    const batchFindPublic = jest.fn(async () => ({
+    const getPublicByIds = jest.fn(async () => ({
       postings: [],
       missingIds: ["posting-1"],
+    }));
+    const batchFindPublic = jest.fn(async ({ ids }: { ids: string[] }) => ({
+      postings: [],
+      missingIds: ids,
     }));
     const searchPublicFallback = jest.fn(async () => ({
       ids: ["posting-1"],
@@ -502,12 +602,13 @@ describe("PostingsSearchService", () => {
     }));
     const repository = {
       searchPublicFallback,
+      batchFindPublic,
     } as unknown as PostingsRepository;
     const requestJson = jest.fn(async () => {
       throw new ElasticsearchUnavailableError("Elasticsearch is unavailable.");
     });
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: batchFindPublic,
+    const service = new PostingsPublicSearchService(repository, {
+      getPublicByIds,
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
@@ -528,11 +629,14 @@ describe("PostingsSearchService", () => {
       query: "loft",
       sort: "relevance",
     });
-    expect(batchFindPublic).toHaveBeenCalledWith(["posting-1"]);
+    expect(getPublicByIds).toHaveBeenCalledWith(["posting-1"]);
+    expect(batchFindPublic).toHaveBeenCalledWith({
+      ids: ["posting-1"],
+    });
   });
 
   it("falls back to database search when Elasticsearch returns stale ids", async () => {
-    const batchFindPublic = jest
+    const getPublicByIds = jest
       .fn()
       .mockResolvedValueOnce({
         postings: [],
@@ -542,12 +646,23 @@ describe("PostingsSearchService", () => {
         postings: [],
         missingIds: [],
       });
+    const batchFindPublic = jest
+      .fn()
+      .mockResolvedValueOnce({
+        postings: [],
+        missingIds: ["posting-1"],
+      })
+      .mockResolvedValueOnce({
+        postings: [],
+        missingIds: ["posting-2"],
+      });
     const searchPublicFallback = jest.fn(async () => ({
       ids: ["posting-2"],
       total: 1,
     }));
     const repository = {
       searchPublicFallback,
+      batchFindPublic,
     } as unknown as PostingsRepository;
     const requestJson = jest.fn(async () => ({
       hits: {
@@ -561,8 +676,8 @@ describe("PostingsSearchService", () => {
         ],
       },
     }));
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: batchFindPublic,
+    const service = new PostingsPublicSearchService(repository, {
+      getPublicByIds,
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
       requestJson,
@@ -583,73 +698,97 @@ describe("PostingsSearchService", () => {
       query: "loft",
       sort: "relevance",
     });
-    expect(batchFindPublic).toHaveBeenNthCalledWith(1, ["posting-1"]);
-    expect(batchFindPublic).toHaveBeenNthCalledWith(2, ["posting-2"]);
+    expect(getPublicByIds).toHaveBeenNthCalledWith(1, ["posting-1"]);
+    expect(getPublicByIds).toHaveBeenNthCalledWith(2, ["posting-2"]);
+    expect(batchFindPublic).toHaveBeenNthCalledWith(1, {
+      ids: ["posting-1"],
+    });
+    expect(batchFindPublic).toHaveBeenCalledTimes(1);
   });
 
-  it("repairs a missing read alias from the write alias target", async () => {
-    const repository = {} as PostingsRepository;
-    const requestJson = jest
-      .fn()
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({
-        postings_test_v1: {},
-      })
-      .mockResolvedValueOnce({});
-    const service = new PostingsSearchService(repository, {
+  it("repairs cache misses from the repository without returning a short page", async () => {
+    const repository = {
+      searchPublicFallback: jest.fn(),
+      batchFindPublic: jest.fn(async () => ({
+        postings: [createPublicPosting()],
+        missingIds: [],
+      })),
+    } as unknown as PostingsRepository;
+    const service = new PostingsPublicSearchService(repository, {
       getPublicByIds: jest.fn(async () => ({
         postings: [],
-        missingIds: [],
+        missingIds: ["posting-1"],
       })),
     } as unknown as PostingsPublicCacheService, {
       getPostingsIndexName: () => "postings-test",
-      requestJson,
+      requestJson: jest.fn(async () => ({
+        hits: {
+          total: {
+            value: 1,
+          },
+          hits: [
+            {
+              _id: "posting-1",
+            },
+          ],
+        },
+      })),
       isEnabled: () => true,
     } as never);
 
-    await service.ensureLiveIndex();
+    const result = await service.searchPublic({
+      page: 1,
+      pageSize: 10,
+      sort: "relevance",
+    });
 
-    expect(requestJson).toHaveBeenNthCalledWith(
-      3,
-      "/_aliases",
-      expect.objectContaining({
-        method: "POST",
-      }),
-    );
-    expect(JSON.parse(requestJson.mock.calls[2]?.[1]?.body as string)).toEqual({
-      actions: [
-        {
-          add: {
-            index: "postings_test_v1",
-            alias: "postings-test-read",
-          },
-        },
-      ],
+    expect(result.postings).toHaveLength(1);
+    expect(result.postings[0]?.id).toBe("posting-1");
+    expect(repository.batchFindPublic).toHaveBeenCalledWith({
+      ids: ["posting-1"],
     });
   });
 
-  it("fails closed when read and write aliases target different indices", async () => {
-    const repository = {} as PostingsRepository;
-    const requestJson = jest
-      .fn()
-      .mockResolvedValueOnce({
-        postings_test_read: {},
-      })
-      .mockResolvedValueOnce({
-        postings_test_write: {},
-      });
-    const service = new PostingsSearchService(repository, {
-      getPublicByIds: jest.fn(async () => ({
-        postings: [],
-        missingIds: [],
-      })),
-    } as unknown as PostingsPublicCacheService, {
-      getPostingsIndexName: () => "postings-test",
-      requestJson,
-      isEnabled: () => true,
-    } as never);
+  it("caps pagination metadata at the maximum supported search window", async () => {
+    const requestJson = jest.fn(async () => ({
+      hits: {
+        total: {
+          value: 25_000,
+        },
+        hits: [],
+      },
+    }));
+    const service = new PostingsPublicSearchService(
+      {
+        searchPublicFallback: jest.fn(),
+      } as unknown as PostingsRepository,
+      {
+        getPublicByIds: jest.fn(async () => ({
+          postings: [],
+          missingIds: [],
+        })),
+      } as unknown as PostingsPublicCacheService,
+      {
+        getPostingsIndexName: () => "postings-test",
+        requestJson,
+        isEnabled: () => true,
+      } as never,
+    );
 
-    await expect(service.ensureLiveIndex()).rejects.toBeInstanceOf(ElasticsearchUnavailableError);
+    const result = await service.searchPublic({
+      page: 200,
+      pageSize: 50,
+      sort: "relevance",
+    });
+
+    expect(result.pagination).toMatchObject({
+      page: 200,
+      pageSize: 50,
+      total: 25_000,
+      totalPages: 200,
+      hasNextPage: false,
+      hasPreviousPage: true,
+    });
   });
 });
 
@@ -695,7 +834,7 @@ describe("PostingsRepository.searchPublicFallback", () => {
     expect(idQuery.sql).toContain("family = ?");
     expect(idQuery.sql).toContain("subtype = ?");
     expect(idQuery.sql).toContain("availability_status = ?");
-    expect(idQuery.sql).toContain("JSON_EXTRACT(attributes, ?)"); 
+    expect(idQuery.sql).toContain("JSON_EXTRACT(attributes, ?)");
     expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) >= ?");
     expect(idQuery.sql).toContain("JSON_EXTRACT(pricing, '$.daily.amount')) AS DECIMAL(18, 2)) <= ?");
     expect(idQuery.sql).toContain("pab.start_at < ?");
@@ -725,27 +864,56 @@ describe("PostingsRepository.searchPublicFallback", () => {
     );
   });
 
+  it("uses case-insensitive exact matching for searchable string and string-array attribute filters", async () => {
+    const { queries, repository } = createFallbackRepository();
+
+    await repository.searchPublicFallback({
+      page: 1,
+      pageSize: 10,
+      family: "place",
+      subtype: "entire_place",
+      attributeFilters: [
+        {
+          key: "property_type",
+          value: "condo",
+        },
+        {
+          key: "amenities",
+          value: ["wifi", "desk"],
+        },
+      ],
+      sort: "relevance",
+    });
+
+    const idQuery = queries[1]!;
+
+    expect(idQuery.sql).toContain("LOWER(JSON_UNQUOTE(JSON_EXTRACT(attributes, ?))) = ?");
+    expect(idQuery.sql).toContain("FROM JSON_TABLE(");
+    expect(idQuery.sql).toContain("LOWER(attribute_values.value) = ?");
+    expect(idQuery.values).toEqual(expect.arrayContaining(["$.property_type", "condo", "$.amenities", "wifi", "desk"]));
+  });
+
   it("uses field-priority relevance ordering for keyword fallback searches", async () => {
     const { queries, repository } = createFallbackRepository();
 
     await repository.searchPublicFallback({
       page: 1,
       pageSize: 10,
-      query: "loft",
+      query: "100%_loft",
       sort: "relevance",
     });
 
     const idQuery = queries[1]!;
 
     expect(idQuery.sql).toContain("ORDER BY (");
-    expect(idQuery.sql).toContain("CASE WHEN name LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN CAST(tags AS CHAR) LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN description LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN city LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN region LIKE ?");
-    expect(idQuery.sql).toContain("CASE WHEN country LIKE ?");
+    expect(idQuery.sql).toContain("CASE WHEN name LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN CAST(tags AS CHAR) LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN description LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN city LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN region LIKE ? ESCAPE '\\'");
+    expect(idQuery.sql).toContain("CASE WHEN country LIKE ? ESCAPE '\\'");
     expect(idQuery.sql).toContain(") DESC, published_at DESC, created_at DESC, id ASC");
-    expect(idQuery.values.filter((value) => value === "%loft%")).toHaveLength(12);
+    expect(idQuery.values.filter((value) => value === "%100\\%\\_loft%")).toHaveLength(12);
   });
 
   it("supports oldest and alphabetical fallback ordering with stable tie-breakers", async () => {

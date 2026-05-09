@@ -10,6 +10,7 @@ import {
   parseRequestBody,
 } from "@/configuration/validation/request";
 import { requireSafeRouteParam } from "@/configuration/validation/input-sanitization";
+import { loggerFactory, type Logger } from "@/configuration/logging";
 import UnauthorizedError from "@/errors/http/unauthorized.error";
 import {
   listPostingAnalyticsQuerySchema,
@@ -54,12 +55,16 @@ import type { RecommendationActivityPublisher } from "@/features/recommendations
 import type { AuthPrincipal } from "@/features/auth/auth.principal";
 
 export class PostingsController {
+  private readonly logger: Logger;
+
   constructor(
     private readonly postingsService: PostingsService,
     private readonly postingsAnalyticsService: PostingsAnalyticsService,
     private readonly postingsReviewsService: PostingsReviewsService,
     private readonly recommendationActivityPublisher: RecommendationActivityPublisher,
-  ) {}
+  ) {
+    this.logger = loggerFactory.forClass(PostingsController, "controller");
+  }
 
   create = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
@@ -254,7 +259,9 @@ export class PostingsController {
     const result = await this.postingsService.searchPublic(
       this.parseSearchPostingsInput(context),
     );
-    await this.postingsAnalyticsService.trackSearchImpressions(result.postings);
+    void this.postingsAnalyticsService.trackSearchImpressions(result.postings).catch((error) => {
+      this.logger.warn("Failed to record posting search impressions.", undefined, error);
+    });
     return context.json(result);
   };
 
@@ -387,21 +394,21 @@ export class PostingsController {
 
     try {
       const query = publicSearchPostingsQuerySchema.parse({
-        page: url.searchParams.get("page") ?? undefined,
-        pageSize: url.searchParams.get("pageSize") ?? undefined,
-        q: url.searchParams.get("q") ?? undefined,
-        family: url.searchParams.get("family") ?? undefined,
-        subtype: url.searchParams.get("subtype") ?? undefined,
+        page: this.readOptionalQueryParam(url.searchParams, "page"),
+        pageSize: this.readOptionalQueryParam(url.searchParams, "pageSize"),
+        q: this.readOptionalQueryParam(url.searchParams, "q"),
+        family: this.readOptionalQueryParam(url.searchParams, "family"),
+        subtype: this.readOptionalQueryParam(url.searchParams, "subtype"),
         tags: this.readArrayQuery(url.searchParams, "tags"),
-        availabilityStatus: url.searchParams.get("availabilityStatus") ?? undefined,
-        minDailyPrice: url.searchParams.get("minDailyPrice") ?? undefined,
-        maxDailyPrice: url.searchParams.get("maxDailyPrice") ?? undefined,
-        latitude: url.searchParams.get("latitude") ?? undefined,
-        longitude: url.searchParams.get("longitude") ?? undefined,
-        radiusKm: url.searchParams.get("radiusKm") ?? undefined,
-        startAt: url.searchParams.get("startAt") ?? undefined,
-        endAt: url.searchParams.get("endAt") ?? undefined,
-        sort: url.searchParams.get("sort") ?? undefined,
+        availabilityStatus: this.readOptionalQueryParam(url.searchParams, "availabilityStatus"),
+        minDailyPrice: this.readOptionalQueryParam(url.searchParams, "minDailyPrice"),
+        maxDailyPrice: this.readOptionalQueryParam(url.searchParams, "maxDailyPrice"),
+        latitude: this.readOptionalQueryParam(url.searchParams, "latitude"),
+        longitude: this.readOptionalQueryParam(url.searchParams, "longitude"),
+        radiusKm: this.readOptionalQueryParam(url.searchParams, "radiusKm"),
+        startAt: this.readOptionalQueryParam(url.searchParams, "startAt"),
+        endAt: this.readOptionalQueryParam(url.searchParams, "endAt"),
+        sort: this.readOptionalQueryParam(url.searchParams, "sort"),
       });
       const attributeFilters = this.readAttributeFilters(url.searchParams);
 
@@ -501,13 +508,41 @@ export class PostingsController {
       ]);
     }
 
+    const geoValidationIssues: Array<{ path: string; message: string }> = [];
+    const hasLatitude = query.latitude !== undefined;
+    const hasLongitude = query.longitude !== undefined;
+
+    if (hasLatitude !== hasLongitude) {
+      geoValidationIssues.push(
+        {
+          path: "latitude",
+          message: "latitude and longitude must be provided together.",
+        },
+        {
+          path: "longitude",
+          message: "latitude and longitude must be provided together.",
+        },
+      );
+    }
+
+    if (query.radiusKm !== undefined && (!hasLatitude || !hasLongitude)) {
+      geoValidationIssues.push({
+        path: "radiusKm",
+        message: "radiusKm requires both latitude and longitude.",
+      });
+    }
+
+    if (geoValidationIssues.length > 0) {
+      throw new RequestValidationError("Request query validation failed.", geoValidationIssues);
+    }
+
     return {
       page: query.page,
       pageSize: query.pageSize,
       query: query.q,
       family: query.family,
       subtype: query.subtype,
-      tags: query.tags,
+      tags: query.tags && query.tags.length > 0 ? query.tags : undefined,
       availabilityStatus: query.availabilityStatus,
       minDailyPrice: query.minDailyPrice,
       maxDailyPrice: query.maxDailyPrice,
@@ -568,9 +603,14 @@ export class PostingsController {
       }
 
       const filter = filters.get(targetKey) ?? { values: [] };
+      const value = rawValue.trim();
+
+      if (!value) {
+        continue;
+      }
 
       if (bound) {
-        const parsed = Number(rawValue);
+        const parsed = Number(value);
 
         if (!Number.isFinite(parsed)) {
           throw new RequestValidationError("Request query validation failed.", [
@@ -583,7 +623,7 @@ export class PostingsController {
 
         filter[bound] = parsed;
       } else {
-        filter.values.push(rawValue);
+        filter.values.push(value);
       }
 
       filters.set(targetKey, filter);
@@ -652,6 +692,18 @@ export class PostingsController {
       .flatMap((value) => value.split(","))
       .map((value) => value.trim())
       .filter(Boolean);
+  }
+
+  private readOptionalQueryParam(searchParams: URLSearchParams, key: string): string | undefined {
+    const value = searchParams.get(key);
+
+    if (value === null) {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   private requireRouteId(context: Context<AppBindings>): string {

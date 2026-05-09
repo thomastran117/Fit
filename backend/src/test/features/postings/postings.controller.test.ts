@@ -167,6 +167,161 @@ describe("PostingsController", () => {
     );
   });
 
+  it("maps paired geo filters into the service input", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 5,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?latitude=43.6532&longitude=-79.3832&radiusKm=12",
+    });
+
+    await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        geo: {
+          latitude: 43.6532,
+          longitude: -79.3832,
+          radiusKm: 12,
+        },
+      }),
+    );
+  });
+
+  it("rejects partial geo filters before reaching the service", async () => {
+    const searchPublic = jest.fn();
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?latitude=43.6532&radiusKm=12",
+    });
+
+    await expect(controller.search(context)).rejects.toMatchObject<Partial<RequestValidationError>>({
+      message: "Request query validation failed.",
+      details: expect.arrayContaining([
+        {
+          path: "latitude",
+          message: "latitude and longitude must be provided together.",
+        },
+        {
+          path: "longitude",
+          message: "latitude and longitude must be provided together.",
+        },
+        {
+          path: "radiusKm",
+          message: "radiusKm requires both latitude and longitude.",
+        },
+      ]),
+    });
+    expect(searchPublic).not.toHaveBeenCalled();
+  });
+
+  it("treats blank public search query params as omitted values", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      url: "https://example.test/postings?page=&pageSize=&q=&family=&subtype=&availabilityStatus=&minDailyPrice=&maxDailyPrice=&latitude=&longitude=&radiusKm=&startAt=&endAt=&sort=&attr.bedrooms.min=",
+    });
+
+    await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+      sort: "relevance",
+      tags: undefined,
+      attributeFilters: undefined,
+      availabilityStatus: undefined,
+      availabilityWindow: undefined,
+      family: undefined,
+      geo: undefined,
+      maxDailyPrice: undefined,
+      minDailyPrice: undefined,
+      query: undefined,
+      subtype: undefined,
+    });
+  });
+
+  it("returns search results even when impression tracking fails", async () => {
+    const searchPublic = jest.fn(async () => ({
+      postings: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+      source: "elasticsearch" as const,
+    }));
+    const controller = new PostingsController(
+      {
+        searchPublic,
+      } as never,
+      {
+        trackSearchImpressions: jest.fn(async () => {
+          throw new Error("analytics unavailable");
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext();
+
+    const response = await controller.search(context);
+
+    expect(searchPublic).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(200);
+  });
+
   it("rejects create requests that omit the required variant", async () => {
     mockRequireJwtAuth.mockResolvedValue(createClaims());
     const createDraft = jest.fn();
@@ -218,6 +373,65 @@ describe("PostingsController", () => {
           path: "variant",
         },
       ],
+    });
+    expect(createDraft).not.toHaveBeenCalled();
+  });
+
+  it("rejects create requests whose tags contain commas", async () => {
+    mockRequireJwtAuth.mockResolvedValue(createClaims());
+    const createDraft = jest.fn();
+    const controller = new PostingsController(
+      {
+        createDraft,
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const context = createContext({
+      body: {
+        variant: {
+          family: "place",
+          subtype: "entire_place",
+        },
+        name: "Test posting",
+        description: "Nice place",
+        pricing: {
+          currency: "cad",
+          daily: {
+            amount: 100,
+          },
+        },
+        photos: [
+          {
+            blobUrl: "https://example.blob.core.windows.net/postings/photo-1.jpg",
+            blobName: "postings/photo-1.jpg",
+            position: 0,
+          },
+        ],
+        tags: ["camera, lens"],
+        attributes: {},
+        availabilityStatus: "available",
+        availabilityBlocks: [],
+        location: {
+          latitude: 43.7,
+          longitude: -79.4,
+          city: "Toronto",
+          region: "Ontario",
+          country: "Canada",
+        },
+      },
+    });
+
+    await expect(controller.create(context)).rejects.toMatchObject<
+      Partial<RequestValidationError>
+    >({
+      message: "Request body validation failed.",
+      details: expect.arrayContaining([
+        expect.objectContaining({
+          path: "tags.0",
+        }),
+      ]),
     });
     expect(createDraft).not.toHaveBeenCalled();
   });

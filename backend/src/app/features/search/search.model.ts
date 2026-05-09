@@ -121,6 +121,7 @@ export interface SearchStatusResult {
       SearchTelemetrySnapshot["circuitBreaker"];
   };
   currentReindexRun?: SearchReindexRunRecord;
+  latestReindexRun?: SearchReindexRunRecord;
   pendingOutboxCount: number;
   pendingOutboxOldestAgeMs?: number;
   lag: SearchOutboxLagMetrics;
@@ -133,4 +134,12 @@ export interface SearchStatusResult {
     deadLetter: SearchQueueCounts;
   };
   telemetry: Omit<SearchTelemetrySnapshot, "elasticsearchRequests" | "circuitBreaker">;
+}
+
+export interface ReplayDeadLetteredSearchOutboxResult {
+  revived: number;
+}
+
+export interface CleanupRetainedSearchIndicesResult {
+  deleted: number;
 }
