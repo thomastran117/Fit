@@ -6,3 +6,7 @@ tool_timeout_sec = 120
 
 [mcp_servers.rentify.env]
 RENTIFY_PAT = "${RENTIFY_PAT}"
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["@playwright/mcp@latest"]

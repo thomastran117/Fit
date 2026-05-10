@@ -12,6 +12,7 @@ if (existsSync(sharedEnvPath)) {
 
 const nextConfig: NextConfig = {
   /* config options here */
+  allowedDevOrigins: ["127.0.0.1"],
   reactCompiler: true,
 };
 

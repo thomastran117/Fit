@@ -39,6 +39,22 @@ bun dev
 
 Open the frontend origin in your browser to see the auth flow.
 
+## Playwright
+
+Browser E2E tests live in `frontend/tests/e2e`.
+
+Useful commands:
+
+```bash
+npm run test:e2e
+npm run test:e2e:headed
+npm run test:e2e:ui
+```
+
+The Playwright config starts the frontend dev server automatically on `http://127.0.0.1:3040` when needed. The initial smoke test also mocks the auth refresh request so it does not require the backend to be running.
+
+The repo-level Codex MCP config in `.codex/config.toml` also includes a `playwright` MCP server entry using the official `@playwright/mcp` package.
+
 Current auth routes:
 
 - `/login`
