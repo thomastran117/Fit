@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { FormEvent, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-context";
 import { authApi } from "@/lib/auth/api";
 import { ApiError } from "@/lib/auth/types";
+import { theme } from "@/styles/theme";
 
 const navigationLinks = [
   { href: "/", label: "Home" },
@@ -22,13 +23,30 @@ function getAccountLinks(role?: "user" | "owner" | "admin") {
           {
             href: "/dashboard",
             label: "Dashboard",
-            description: "Live posting analytics and conversion trends",
+            description: "Manage listings, bookings, and performance",
+          },
+          {
+            href: "/postings/create",
+            label: "Create posting",
+            description: "List a rental for others to discover",
           },
         ]
       : []),
-    { href: "/account", label: "Manage account", description: "Email, security, and login methods" },
-    { href: "/profile", label: "Profile", description: "Personal details and public-facing info" },
-    { href: "/settings", label: "Settings", description: "Preferences and application settings" },
+    {
+      href: "/account",
+      label: "Manage account",
+      description: "Email, security, and login methods",
+    },
+    {
+      href: "/profile",
+      label: "Profile",
+      description: "Personal details and public-facing info",
+    },
+    {
+      href: "/settings",
+      label: "Settings",
+      description: "Preferences and application settings",
+    },
   ];
 }
 
@@ -54,19 +72,36 @@ function isRouteActive(pathname: string, href: string) {
 function HeaderLogo() {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold tracking-[0.18em] text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)]">
-        R
-      </div>
+      <div className={theme.header.logoMark}>R</div>
 
       <div className="min-w-0">
-        <p className="text-xl font-semibold tracking-[-0.04em] text-slate-950">
+        <p className="text-lg font-semibold tracking-[-0.04em] text-slate-950">
           Rentify
         </p>
-        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-          Modern rentals
+        <p className="hidden text-xs font-medium text-slate-500 sm:block">
+          Find rentals faster
         </p>
       </div>
     </div>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -111,13 +146,13 @@ function UserAvatar({ name, imageUrl }: AvatarProps) {
       <img
         src={imageUrl}
         alt={`${name} avatar`}
-        className="h-10 w-10 rounded-full object-cover ring-1 ring-black/5"
+        className="h-9 w-9 rounded-full object-cover ring-1 ring-slate-200"
       />
     );
   }
 
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white ring-1 ring-black/5">
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white ring-1 ring-slate-200">
       {getInitials(name)}
     </div>
   );
@@ -127,14 +162,38 @@ export function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { status, session, clearSession } = useAuth();
-  const accountLinks = useMemo(() => getAccountLinks(session?.user.role), [session?.user.role]);
+
+  const accountLinks = useMemo(
+    () => getAccountLinks(session?.user.role),
+    [session?.user.role],
+  );
 
   const [logoutPending, setLogoutPending] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const displayName = useMemo(() => {
     if (!session) return "Account";
     return getDisplayLabel(session.user.email, session.user.username);
   }, [session]);
+
+  const userCanCreatePosting =
+    session?.user.role === "owner" || session?.user.role === "admin";
+
+  const mobileCtaHref = userCanCreatePosting ? "/postings/create" : "/signup";
+  const mobileCtaLabel = userCanCreatePosting ? "Create posting" : "List a rental";
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const query = searchQuery.trim();
+
+    if (!query) {
+      router.push("/postings");
+      return;
+    }
+
+    router.push(`/postings?query=${encodeURIComponent(query)}`);
+  }
 
   async function handleLogout() {
     setLogoutPending(true);
@@ -158,42 +217,86 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 px-4 pt-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="rounded-[1.9rem] border border-white/70 bg-white/78 px-4 py-3 shadow-[0_22px_55px_rgba(79,70,229,0.08)] backdrop-blur-xl sm:px-5">
-          <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="shrink-0">
-              <HeaderLogo />
-            </Link>
+    <header className={theme.header.shell}>
+      <div className={theme.header.container}>
+        <Link href="/" className="shrink-0">
+          <HeaderLogo />
+        </Link>
 
-            <nav className="hidden items-center gap-1 rounded-full border border-slate-200/70 bg-white/90 p-1 lg:flex">
-              {navigationLinks.map((link) => {
-                const active = isRouteActive(pathname, link.href);
+        <nav className="hidden items-center gap-1 md:flex">
+          {navigationLinks.map((link) => {
+            const active = isRouteActive(pathname, link.href);
 
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                      active
-                        ? "bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                );
-              })}
-            </nav>
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={active ? theme.header.navLinkActive : theme.header.navLink}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </nav>
 
-            <div className="flex shrink-0 items-center gap-3">
-              <details className="group relative lg:hidden">
-                <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.06)] transition hover:bg-slate-50">
-                  <MenuIcon />
-                </summary>
+        <form
+          onSubmit={handleSearch}
+          className="hidden min-w-0 flex-1 justify-center xl:flex"
+        >
+          <div className={theme.header.searchWrapper}>
+            <div className={theme.header.searchIcon}>
+              <SearchIcon />
+            </div>
 
-                <div className="absolute right-0 top-[calc(100%+0.75rem)] w-80 rounded-[1.75rem] border border-slate-200 bg-white p-3 shadow-[0_28px_80px_rgba(15,23,42,0.12)]">
-                  <div className="grid gap-2">
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search rentals, equipment, spaces..."
+              className={theme.header.searchInput}
+            />
+
+            <button type="submit" className={theme.header.searchButton}>
+              Search
+            </button>
+          </div>
+        </form>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <details className="group relative md:hidden">
+            <summary className={theme.header.menuButton}>
+              <MenuIcon />
+            </summary>
+
+            <div className="fixed left-0 right-0 top-16 z-50 border-b border-slate-200 bg-white shadow-xl shadow-slate-950/10">
+              <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+                <form onSubmit={handleSearch} className="pb-4">
+                  <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 transition focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10">
+                    <div className="text-slate-400">
+                      <SearchIcon />
+                    </div>
+
+                    <input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search rentals, equipment, spaces..."
+                      className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    />
+
+                    <button
+                      type="submit"
+                      className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
+                    >
+                      Search
+                    </button>
+                  </div>
+                </form>
+
+                <div className="border-t border-slate-200 py-3">
+                  <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Explore
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-1 sm:grid-cols-5">
                     {navigationLinks.map((link) => {
                       const active = isRouteActive(pathname, link.href);
 
@@ -201,94 +304,37 @@ export function SiteHeader() {
                         <Link
                           key={link.href}
                           href={link.href}
-                          className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                          className={
                             active
-                              ? "bg-slate-950 text-white"
-                              : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                          }`}
+                              ? "rounded-xl bg-violet-50 px-3 py-2.5 text-sm font-semibold text-violet-700 transition"
+                              : "rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                          }
                         >
                           {link.label}
                         </Link>
                       );
                     })}
-
-                    <div className="my-1 h-px bg-slate-200" />
-
-                    {status === "authenticated" && session ? (
-                      <>
-                        {accountLinks.map((link) => (
-                          <Link
-                            key={link.href}
-                            href={link.href}
-                            className="rounded-2xl px-4 py-3 transition hover:bg-slate-100"
-                          >
-                            <p className="text-sm font-medium text-slate-950">
-                              {link.label}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {link.description}
-                            </p>
-                          </Link>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={() => void handleLogout()}
-                          disabled={logoutPending}
-                          className="cursor-pointer rounded-2xl px-4 py-3 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {logoutPending ? "Logging out..." : "Log out"}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <Link
-                          href="/login"
-                          className="rounded-2xl px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-                        >
-                          Log in
-                        </Link>
-                        <Link
-                          href="/signup"
-                          className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                        >
-                          Sign up
-                        </Link>
-                      </>
-                    )}
                   </div>
                 </div>
-              </details>
 
-              {status === "loading" ? (
-                <div className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 sm:block">
-                  Loading...
+                <div className="border-t border-slate-200 py-3">
+                  <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Rentals
+                  </p>
+
+                  <Link
+                    href={mobileCtaHref}
+                    className="flex items-center justify-between rounded-xl bg-violet-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
+                  >
+                    <span>{mobileCtaLabel}</span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
                 </div>
-              ) : status === "authenticated" && session ? (
-                <details className="group relative">
-                  <summary className="flex cursor-pointer list-none items-center gap-3 rounded-full border border-slate-200 bg-white px-2.5 py-2 shadow-[0_12px_28px_rgba(15,23,42,0.06)] transition hover:bg-slate-50">
-                    <UserAvatar
-                      name={session.user.username || session.user.email}
-                      imageUrl={session.user.avatarUrl ?? null}
-                    />
 
-                    <div className="hidden min-w-0 text-left sm:block">
-                      <p className="max-w-40 truncate text-sm font-semibold text-slate-950">
-                        {displayName}
-                      </p>
-                      <p className="max-w-48 truncate text-xs text-slate-500">
-                        {session.user.email}
-                      </p>
-                    </div>
-
-                    <div className="hidden text-slate-500 sm:block transition group-open:rotate-180">
-                      <ChevronDownIcon />
-                    </div>
-                  </summary>
-
-                  <div className="absolute right-0 top-[calc(100%+0.75rem)] w-[22rem] rounded-[1.75rem] border border-slate-200 bg-white p-3 shadow-[0_28px_80px_rgba(15,23,42,0.12)]">
-                    <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="flex items-center gap-3">
+                <div className="border-t border-slate-200 pt-3">
+                  {status === "authenticated" && session ? (
+                    <>
+                      <div className="mb-3 flex items-center gap-3 rounded-2xl border border-violet-100 bg-violet-50 p-3">
                         <UserAvatar
                           name={session.user.username || session.user.email}
                           imageUrl={session.user.avatarUrl ?? null}
@@ -298,65 +344,159 @@ export function SiteHeader() {
                           <p className="truncate text-sm font-semibold text-slate-950">
                             {displayName}
                           </p>
-                          <p className="truncate text-sm text-slate-500">
+                          <p className="truncate text-xs text-slate-500">
                             {session.user.email}
                           </p>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="mt-3 grid gap-2">
-                      {accountLinks.map((link) => (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          className="rounded-2xl px-4 py-3 transition hover:bg-slate-100"
+                      <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Account
+                      </p>
+
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        {accountLinks.map((link) => (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className={theme.header.dropdownItem}
+                          >
+                            <p className="text-sm font-medium text-slate-950">
+                              {link.label}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {link.description}
+                            </p>
+                          </Link>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => void handleLogout()}
+                          disabled={logoutPending}
+                          className={theme.header.logoutButton}
                         >
-                          <p className="text-sm font-medium text-slate-950">
-                            {link.label}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">
-                            {link.description}
-                          </p>
+                          {logoutPending ? "Logging out..." : "Log out"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Account
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Link
+                          href="/login"
+                          className="rounded-xl border border-slate-200 px-3 py-2.5 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Log in
                         </Link>
-                      ))}
 
-                      <div className="my-1 h-px bg-slate-200" />
+                        <Link
+                          href="/signup"
+                          className="rounded-xl bg-slate-950 px-3 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-slate-800"
+                        >
+                          Sign up
+                        </Link>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </details>
 
-                      <button
-                        type="button"
-                        onClick={() => void handleLogout()}
-                        disabled={logoutPending}
-                        className="cursor-pointer rounded-2xl px-4 py-3 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {logoutPending ? "Logging out..." : "Log out"}
-                      </button>
+          {status === "loading" ? (
+            <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 sm:block">
+              Loading...
+            </div>
+          ) : status === "authenticated" && session ? (
+              <details className="group relative hidden md:block">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2 shadow-sm transition hover:bg-slate-50">
+                  <UserAvatar
+                    name={session.user.username || session.user.email}
+                    imageUrl={session.user.avatarUrl ?? null}
+                  />
+
+                <div className="hidden min-w-0 text-left sm:block">
+                  <p className="max-w-32 truncate text-sm font-medium text-slate-950">
+                    {displayName}
+                  </p>
+                </div>
+
+                <div className="hidden text-slate-500 transition group-open:rotate-180 sm:block">
+                  <ChevronDownIcon />
+                </div>
+              </summary>
+
+              <div className={theme.header.dropdown}>
+                <div className={theme.header.dropdownHighlight}>
+                  <div className="flex items-center gap-3">
+                    <UserAvatar
+                      name={session.user.username || session.user.email}
+                      imageUrl={session.user.avatarUrl ?? null}
+                    />
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-950">
+                        {displayName}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {session.user.email}
+                      </p>
                     </div>
                   </div>
-                </details>
-              ) : (
-                <div className="hidden items-center gap-2 sm:flex">
-                  <Link
-                    href="/login"
-                    className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
-                      pathname === "/login"
-                        ? "bg-slate-100 text-slate-950"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                    }`}
-                  >
-                    Log in
-                  </Link>
-
-                  <Link
-                    href="/signup"
-                    className="rounded-2xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] transition hover:bg-slate-800"
-                  >
-                    Sign up
-                  </Link>
                 </div>
-              )}
+
+                <div className="mt-2 grid gap-1">
+                  {accountLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className={theme.header.dropdownItem}
+                    >
+                      <p className="text-sm font-medium text-slate-950">
+                        {link.label}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                        {link.description}
+                      </p>
+                    </Link>
+                  ))}
+
+                  <div className="my-2 h-px bg-slate-200" />
+
+                  <button
+                    type="button"
+                    onClick={() => void handleLogout()}
+                    disabled={logoutPending}
+                    className={theme.header.logoutButton}
+                  >
+                    {logoutPending ? "Logging out..." : "Log out"}
+                  </button>
+                </div>
+              </div>
+            </details>
+          ) : (
+            <div className="hidden items-center gap-2 md:flex">
+              <Link
+                href="/login"
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  pathname === "/login"
+                    ? "bg-slate-100 text-slate-950"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                }`}
+              >
+                Log in
+              </Link>
+
+              <Link href="/signup" className={theme.header.secondaryAction}>
+                Sign up
+              </Link>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </header>
