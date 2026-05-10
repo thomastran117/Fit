@@ -109,6 +109,10 @@ function readCsrfToken(): string | undefined {
   return token ? decodeURIComponent(token) : undefined;
 }
 
+function hasRefreshCookieHint(): boolean {
+  return Boolean(readCsrfToken());
+}
+
 async function postJson<TResponse, TBody extends object = object>(
   path: string,
   body: TBody,
@@ -237,6 +241,9 @@ async function refreshStoredSession(): Promise<AuthResponseBody | null> {
 }
 
 export const authApi = {
+  hasRefreshCookieHint(): boolean {
+    return hasRefreshCookieHint();
+  },
   login(input: LoginInput): Promise<AuthResponseBody> {
     return postJson<AuthResponseBody>("/auth/local/login", {
       ...input,

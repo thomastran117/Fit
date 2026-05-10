@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start -p 3040",
     "lint": "eslint",
-    "test:search-form": "node --experimental-strip-types src/lib/postings/search-form.test.ts"
+    "test:search-form": "node --experimental-strip-types src/lib/postings/search-form.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "lucide-react": "^1.8.0",
@@ -17,6 +20,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@playwright/test": "^1.56.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
