@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { created, ok, paginationMeta } from "@/configuration/http/responses";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import { resolveIdempotencyKey } from "@/configuration/middlewares/idempotency.middleware";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
@@ -31,13 +32,15 @@ export class PaymentsController {
       renterId: auth.sub,
       idempotencyKey: resolveIdempotencyKey(context, body.idempotencyKey),
     });
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Payment session created successfully.",
+    });
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     const result = await this.paymentsService.getPaymentById(this.requirePaymentId(context), auth.sub);
-    return context.json(result);
+    return ok(context, result);
   };
 
   retry = async (context: Context<AppBindings>): Promise<Response> => {
@@ -48,7 +51,9 @@ export class PaymentsController {
       renterId: auth.sub,
       idempotencyKey: resolveIdempotencyKey(context, body.idempotencyKey),
     });
-    return context.json(result);
+    return ok(context, result, {
+      message: "Payment retry requested successfully.",
+    });
   };
 
   createRefund = async (context: Context<AppBindings>): Promise<Response> => {
@@ -61,7 +66,9 @@ export class PaymentsController {
       reason: body.reason ?? null,
       idempotencyKey: resolveIdempotencyKey(context, body.idempotencyKey),
     });
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Refund created successfully.",
+    });
   };
 
   listPayouts = async (context: Context<AppBindings>): Promise<Response> => {
@@ -70,27 +77,35 @@ export class PaymentsController {
     const result = await this.paymentsService.listPayouts(
       this.toListPayoutsInput(auth.sub, this.parseListPayoutsQuery(context)),
     );
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   webhook = async (context: Context<AppBindings>): Promise<Response> => {
     const rawBody = await context.req.text();
     const signatureHeader = context.req.header("x-square-hmacsha256-signature");
     await this.paymentsService.processSquareWebhook(rawBody, signatureHeader);
-    return context.json({ ok: true });
+    return ok(context, { ok: true }, {
+      message: "Payment webhook processed successfully.",
+    });
   };
 
   reconcile = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     const result = await this.paymentsService.reconcilePayment(this.requirePaymentId(context), auth.sub);
-    return context.json(result);
+    return ok(context, result, {
+      message: "Payment reconciled successfully.",
+    });
   };
 
   repair = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     requireMinimumRole(auth, "admin");
     await this.paymentsService.repairPayment(this.requirePaymentId(context));
-    return context.json({ ok: true });
+    return ok(context, { ok: true }, {
+      message: "Payment repair queued successfully.",
+    });
   };
 
   private parseListPayoutsQuery(context: Context<AppBindings>): ListPayoutsQuery {

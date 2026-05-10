@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { ok, paginationMeta } from "@/configuration/http/responses";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { parseRequestBody } from "@/configuration/validation/request";
 import type {
@@ -21,20 +22,24 @@ export class ProfileController {
   list = async (context: Context<AppBindings>): Promise<Response> => {
     const input = this.parseListProfilesInput(context);
     const result = await this.profileService.list(input);
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   getMe = async (context: Context<AppBindings>): Promise<Response> => {
     await requireJwtAuth(context);
     const result = await this.profileService.getByUserId(context.get("auth").sub);
-    return context.json(result);
+    return ok(context, result);
   };
 
   updateMe = async (context: Context<AppBindings>): Promise<Response> => {
     await requireJwtAuth(context);
     const input = await parseRequestBody(context, updateProfileRequestSchema);
     const result = await this.profileService.update(this.toUpdateProfileInput(context, input));
-    return context.json(result);
+    return ok(context, result, {
+      message: "Profile updated successfully.",
+    });
   };
 
   private toUpdateProfileInput(

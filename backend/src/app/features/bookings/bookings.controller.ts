@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { created, ok, paginationMeta } from "@/configuration/http/responses";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import {
@@ -45,7 +46,9 @@ export class BookingsController {
       client: context.get("client"),
       requestId: this.readRequestId(context),
     });
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Booking request created successfully.",
+    });
   };
 
   quoteForPosting = async (context: Context<AppBindings>): Promise<Response> => {
@@ -54,7 +57,7 @@ export class BookingsController {
     const result = await this.bookingsService.quote(
       this.toQuoteInput(this.requirePostingId(context), auth.sub, body),
     );
-    return context.json(result);
+    return ok(context, result);
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
@@ -62,7 +65,9 @@ export class BookingsController {
     const result = await this.bookingsService.listMine(
       this.toListMineInput(auth.sub, this.parseListQuery(context)),
     );
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   listForOwnerPosting = async (context: Context<AppBindings>): Promise<Response> => {
@@ -71,7 +76,9 @@ export class BookingsController {
     const result = await this.bookingsService.listForOwnerPosting(
       this.toListOwnerPostingInput(auth.sub, this.requirePostingId(context), this.parseListQuery(context)),
     );
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
@@ -80,7 +87,7 @@ export class BookingsController {
       this.requireBookingRequestId(context),
       auth.sub,
     );
-    return context.json(result);
+    return ok(context, result);
   };
 
   updateOwn = async (context: Context<AppBindings>): Promise<Response> => {
@@ -89,7 +96,9 @@ export class BookingsController {
     const result = await this.bookingsService.updateOwnPending(
       this.toUpdateInput(this.requireBookingRequestId(context), auth.sub, body),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Booking request updated successfully.",
+    });
   };
 
   approve = async (context: Context<AppBindings>): Promise<Response> => {
@@ -99,7 +108,9 @@ export class BookingsController {
     const result = await this.bookingsService.approve(
       this.toDecisionInput(this.requireBookingRequestId(context), auth.sub, body),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Booking request approved successfully.",
+    });
   };
 
   decline = async (context: Context<AppBindings>): Promise<Response> => {
@@ -109,7 +120,9 @@ export class BookingsController {
     const result = await this.bookingsService.decline(
       this.toDecisionInput(this.requireBookingRequestId(context), auth.sub, body),
     );
-    return context.json(result);
+    return ok(context, result, {
+      message: "Booking request declined successfully.",
+    });
   };
 
   private parseListQuery(context: Context<AppBindings>): ListBookingRequestsQuery {

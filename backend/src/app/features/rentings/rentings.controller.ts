@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { AppBindings } from "@/configuration/http/bindings";
+import { created, ok, paginationMeta } from "@/configuration/http/responses";
 import { requireMinimumRole } from "@/features/auth/authorization";
 import { requireJwtAuth } from "@/configuration/middlewares/jwt-middleware";
 import { RequestValidationError } from "@/configuration/validation/request";
@@ -27,20 +28,24 @@ export class RentingsController {
       client: context.get("client"),
       requestId: this.readRequestId(context),
     });
-    return context.json(result, 201);
+    return created(context, result, {
+      message: "Booking request converted to renting successfully.",
+    });
   };
 
   getById = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     const result = await this.rentingsService.getById(this.requireRentingId(context), auth.sub);
-    return context.json(result);
+    return ok(context, result);
   };
 
   listMine = async (context: Context<AppBindings>): Promise<Response> => {
     const auth = await this.requireAuth(context);
     const query = this.parseListQuery(context);
     const result = await this.rentingsService.listMine(this.toListMineInput(auth.sub, query));
-    return context.json(result);
+    return ok(context, result, {
+      meta: paginationMeta(result),
+    });
   };
 
   private parseListQuery(context: Context<AppBindings>): ListRentingsQuery {

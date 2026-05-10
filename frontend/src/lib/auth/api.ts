@@ -1,9 +1,8 @@
+import { readJson, toApiError, unwrapApiResponse } from "@/lib/api/response";
 import { publicEnv } from "@/lib/env";
 import { getDeviceId, getDevicePlatform } from "@/lib/auth/device";
 import { clearStoredSession, readStoredSession, writeStoredSession } from "@/lib/auth/storage";
 import {
-  ApiError,
-  type ApiErrorResponse,
   type AuthEmailAcceptedResult,
   type AuthResponseBody,
   type ForgotPasswordAcceptedResult,
@@ -110,16 +109,6 @@ function readCsrfToken(): string | undefined {
   return token ? decodeURIComponent(token) : undefined;
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-
-  if (!contentType.includes("application/json")) {
-    return null;
-  }
-
-  return response.json();
-}
-
 async function postJson<TResponse, TBody extends object = object>(
   path: string,
   body: TBody,
@@ -141,16 +130,10 @@ async function postJson<TResponse, TBody extends object = object>(
   const payload = await readJson(response);
 
   if (!response.ok) {
-    const errorPayload = (payload ?? {}) as Partial<ApiErrorResponse>;
-    throw new ApiError(
-      errorPayload.error ?? "Something went wrong.",
-      errorPayload.code ?? "UNKNOWN_ERROR",
-      response.status,
-      errorPayload.details,
-    );
+    throw toApiError(response, payload);
   }
 
-  return payload as TResponse;
+  return unwrapApiResponse<TResponse>(payload);
 }
 
 async function postAuthenticatedJson<TResponse, TBody extends object = object>(
@@ -203,16 +186,10 @@ async function authenticatedJsonWithRetry<TResponse, TBody extends object = obje
   }
 
   if (!response.ok) {
-    const errorPayload = (payload ?? {}) as Partial<ApiErrorResponse>;
-    throw new ApiError(
-      errorPayload.error ?? "Something went wrong.",
-      errorPayload.code ?? "UNKNOWN_ERROR",
-      response.status,
-      errorPayload.details,
-    );
+    throw toApiError(response, payload);
   }
 
-  return payload as TResponse;
+  return unwrapApiResponse<TResponse>(payload);
 }
 
 async function refreshStoredSession(): Promise<AuthResponseBody | null> {
@@ -247,7 +224,7 @@ async function refreshStoredSession(): Promise<AuthResponseBody | null> {
       return null;
     }
 
-    const nextSession = payload as AuthResponseBody;
+    const nextSession = unwrapApiResponse<AuthResponseBody>(payload);
     writeStoredSession(nextSession);
     return nextSession;
   })();

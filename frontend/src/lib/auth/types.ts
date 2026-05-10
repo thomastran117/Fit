@@ -70,10 +70,31 @@ export interface RevokePersonalAccessTokenResult {
   tokenId: string;
 }
 
-export interface ApiErrorResponse {
-  error: string;
+export interface ApiResponseMeta {
+  requestId: string;
+  pagination?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ApiErrorPayload<TDetails = unknown> {
   code: string;
-  details?: unknown;
+  details?: TDetails;
+}
+
+export interface ApiResponse<TData> {
+  success: true;
+  message: string;
+  data: TData;
+  error: null;
+  meta: ApiResponseMeta;
+}
+
+export interface ApiErrorResponse<TDetails = unknown> {
+  success: false;
+  message: string;
+  data: null;
+  error: ApiErrorPayload<TDetails>;
+  meta: ApiResponseMeta;
 }
 
 export class ApiError extends Error {

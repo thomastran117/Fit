@@ -65,10 +65,17 @@ describe("idempotencyMiddleware", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      error: "Conflicting idempotency key headers were provided.",
-      code: "BAD_REQUEST",
-      details: {
-        headers: ["idempotency-key", "x-idempotency-key"],
+      success: false,
+      message: "Conflicting idempotency key headers were provided.",
+      data: null,
+      error: {
+        code: "BAD_REQUEST",
+        details: {
+          headers: ["idempotency-key", "x-idempotency-key"],
+        },
+      },
+      meta: {
+        requestId: expect.any(String),
       },
     });
   });
