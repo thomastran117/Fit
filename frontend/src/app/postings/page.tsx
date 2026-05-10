@@ -153,6 +153,17 @@ function formatPublishedDate(value?: string): string | null {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(date);
 }
 
+function isRenderablePreviewImageUrl(value?: string): value is string {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    return url.hostname !== "example.com";
+  } catch {
+    return false;
+  }
+}
+
 function resolveErrorDetails(
   message: string,
   debug: SearchDebugState | null,
@@ -860,7 +871,9 @@ function SearchResults({
         <div className="mt-4 space-y-3">
           {postings.map((posting) => {
             const publishedDate = formatPublishedDate(posting.publishedAt);
-            const previewImageUrl = posting.primaryThumbnailUrl ?? posting.primaryPhotoUrl;
+            const previewImageUrl = [posting.primaryThumbnailUrl, posting.primaryPhotoUrl].find(
+              isRenderablePreviewImageUrl,
+            );
 
             return (
               <article

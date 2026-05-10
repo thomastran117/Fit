@@ -22,7 +22,7 @@ export function SessionManager({ session, onComplete }: SessionManagerProps) {
 
     async function restoreSession() {
       try {
-        if (!session) {
+        if (!session && authApi.hasRefreshCookieHint()) {
           await authApi.refresh();
         }
       } finally {
