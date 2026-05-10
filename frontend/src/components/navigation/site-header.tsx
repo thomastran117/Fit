@@ -180,7 +180,9 @@ export function SiteHeader() {
     session?.user.role === "owner" || session?.user.role === "admin";
 
   const mobileCtaHref = userCanCreatePosting ? "/postings/create" : "/signup";
-  const mobileCtaLabel = userCanCreatePosting ? "Create posting" : "List a rental";
+  const mobileCtaLabel = userCanCreatePosting
+    ? "Create posting"
+    : "List a rental";
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -192,7 +194,7 @@ export function SiteHeader() {
       return;
     }
 
-    router.push(`/postings?query=${encodeURIComponent(query)}`);
+    router.push(`/postings?q=${encodeURIComponent(query)}`);
   }
 
   async function handleLogout() {
@@ -219,25 +221,29 @@ export function SiteHeader() {
   return (
     <header className={theme.header.shell}>
       <div className={theme.header.container}>
-        <Link href="/" className="shrink-0">
-          <HeaderLogo />
-        </Link>
+        <div className="flex min-w-0 flex-1 items-center gap-5">
+          <Link href="/" className="group shrink-0">
+            <HeaderLogo />
+          </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
-          {navigationLinks.map((link) => {
-            const active = isRouteActive(pathname, link.href);
+          <nav className="hidden min-w-0 items-center gap-0.5 md:flex">
+            {navigationLinks.map((link) => {
+              const active = isRouteActive(pathname, link.href);
 
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={active ? theme.header.navLinkActive : theme.header.navLink}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={
+                    active ? theme.header.navLinkActive : theme.header.navLink
+                  }
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
 
         <form
           onSubmit={handleSearch}
@@ -261,17 +267,17 @@ export function SiteHeader() {
           </div>
         </form>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
           <details className="group relative md:hidden">
             <summary className={theme.header.menuButton}>
               <MenuIcon />
             </summary>
 
-            <div className="fixed left-0 right-0 top-16 z-50 border-b border-slate-200 bg-white shadow-xl shadow-slate-950/10">
+            <div className={theme.header.mobileDropdown}>
               <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
                 <form onSubmit={handleSearch} className="pb-4">
-                  <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 transition focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10">
-                    <div className="text-slate-400">
+                  <div className={theme.header.mobileSearchWrapper}>
+                    <div className={theme.header.searchIcon}>
                       <SearchIcon />
                     </div>
 
@@ -279,13 +285,10 @@ export function SiteHeader() {
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                       placeholder="Search rentals, equipment, spaces..."
-                      className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                      className={theme.header.searchInput}
                     />
 
-                    <button
-                      type="submit"
-                      className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
-                    >
+                    <button type="submit" className={theme.header.searchButton}>
                       Search
                     </button>
                   </div>
@@ -306,8 +309,8 @@ export function SiteHeader() {
                           href={link.href}
                           className={
                             active
-                              ? "rounded-xl bg-violet-50 px-3 py-2.5 text-sm font-semibold text-violet-700 transition"
-                              : "rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                              ? theme.header.mobileNavLinkActive
+                              : theme.header.mobileNavLink
                           }
                         >
                           {link.label}
@@ -322,12 +325,14 @@ export function SiteHeader() {
                     Rentals
                   </p>
 
-                  <Link
-                    href={mobileCtaHref}
-                    className="flex items-center justify-between rounded-xl bg-violet-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
-                  >
+                  <Link href={mobileCtaHref} className={theme.header.mobileCta}>
                     <span>{mobileCtaLabel}</span>
-                    <span aria-hidden="true">→</span>
+                    <span
+                      aria-hidden="true"
+                      className="transition duration-200 group-hover:translate-x-0.5"
+                    >
+                      →
+                    </span>
                   </Link>
                 </div>
 
@@ -387,16 +392,13 @@ export function SiteHeader() {
                       </p>
 
                       <div className="grid grid-cols-2 gap-2">
-                        <Link
-                          href="/login"
-                          className="rounded-xl border border-slate-200 px-3 py-2.5 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                        >
+                        <Link href="/login" className={theme.header.authButton}>
                           Log in
                         </Link>
 
                         <Link
                           href="/signup"
-                          className="rounded-xl bg-slate-950 px-3 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-slate-800"
+                          className={theme.header.authButtonDark}
                         >
                           Sign up
                         </Link>
@@ -409,24 +411,24 @@ export function SiteHeader() {
           </details>
 
           {status === "loading" ? (
-            <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 sm:block">
+            <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 md:block">
               Loading...
             </div>
           ) : status === "authenticated" && session ? (
-              <details className="group relative hidden md:block">
-                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2 shadow-sm transition hover:bg-slate-50">
-                  <UserAvatar
-                    name={session.user.username || session.user.email}
-                    imageUrl={session.user.avatarUrl ?? null}
-                  />
+            <details className="group relative hidden md:block">
+              <summary className={theme.header.desktopAccountTrigger}>
+                <UserAvatar
+                  name={session.user.username || session.user.email}
+                  imageUrl={session.user.avatarUrl ?? null}
+                />
 
-                <div className="hidden min-w-0 text-left sm:block">
+                <div className="hidden min-w-0 text-left lg:block">
                   <p className="max-w-32 truncate text-sm font-medium text-slate-950">
                     {displayName}
                   </p>
                 </div>
 
-                <div className="hidden text-slate-500 transition group-open:rotate-180 sm:block">
+                <div className="hidden text-slate-500 transition duration-200 group-open:rotate-180 lg:block">
                   <ChevronDownIcon />
                 </div>
               </summary>
@@ -483,7 +485,7 @@ export function SiteHeader() {
             <div className="hidden items-center gap-2 md:flex">
               <Link
                 href="/login"
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition duration-200 hover:-translate-y-0.5 ${
                   pathname === "/login"
                     ? "bg-slate-100 text-slate-950"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
