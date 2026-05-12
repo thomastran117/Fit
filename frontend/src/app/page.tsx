@@ -1,136 +1,263 @@
+"use client";
+
 import Link from "next/link";
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  MapPin,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+} from "lucide-react";
 
-const highlights = [
-  { label: "Listings launched", value: "4.2k+" },
-  { label: "Avg. guest response", value: "< 7 min" },
+const stats = [
+  { label: "Active postings", value: "4.2k+" },
   { label: "Cities supported", value: "58" },
+  { label: "Avg. response time", value: "< 7 min" },
 ];
 
-const serviceCards = [
+const categories = [
+  "Apartments",
+  "Equipment",
+  "Studios",
+  "Event spaces",
+  "Vehicles",
+  "Storage",
+];
+
+const featuredPostings = [
   {
-    title: "Beautiful presentation",
-    description:
-      "Show homes, rooms, and stays with a cleaner structure that feels premium without overwhelming visitors.",
-    accent: "bg-indigo-50 text-indigo-600",
+    title: "Downtown studio workspace",
+    location: "Toronto, ON",
+    price: "$48/day",
+    tag: "Workspace",
+    rating: "4.9",
   },
   {
-    title: "Guest-ready support",
-    description:
-      "Bring inquiries, contact details, and expectation-setting into one softer, easier-to-follow experience.",
-    accent: "bg-sky-50 text-sky-600",
+    title: "Camera kit with lighting",
+    location: "Ottawa, ON",
+    price: "$35/day",
+    tag: "Equipment",
+    rating: "4.8",
   },
   {
-    title: "Clear trust pages",
-    description:
-      "Privacy and terms pages stay readable and aligned with the rest of the site instead of feeling bolted on.",
-    accent: "bg-emerald-50 text-emerald-600",
+    title: "Modern event loft",
+    location: "Mississauga, ON",
+    price: "$120/hr",
+    tag: "Venue",
+    rating: "5.0",
   },
 ];
 
-const pillars = [
+const benefits = [
   {
-    title: "Calmer first impressions",
+    title: "Search with less friction",
     description:
-      "The visual style reduces clutter and brings attention to the actions that matter most.",
+      "Find rentals by keyword, location, category, or intent without digging through cluttered listings.",
+    icon: Search,
   },
   {
-    title: "Better page continuity",
+    title: "Compare listings clearly",
     description:
-      "Home, about, services, contact, and legal pages now feel like one product family.",
+      "Review pricing, availability, location, and listing details in a cleaner, more consistent flow.",
+    icon: SlidersHorizontal,
   },
   {
-    title: "Ready for real content",
+    title: "Book with more confidence",
     description:
-      "The structure is polished enough to present now and flexible enough to connect to live data later.",
+      "Trust signals, owner details, and clearer posting information help reduce uncertainty before booking.",
+    icon: ShieldCheck,
   },
 ];
+
+const ownerSteps = [
+  "Create a posting with photos, pricing, and availability.",
+  "Receive interested renters through a cleaner inquiry flow.",
+  "Manage listings and booking activity from your account.",
+];
+
+function SearchIcon() {
+  return <Search className="h-4 w-4" aria-hidden="true" />;
+}
 
 export default function Home() {
-  return (
-    <main className="relative min-h-[calc(100vh-5.5rem)] overflow-hidden bg-[#f8fafc] text-slate-900">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,_rgba(99,102,241,0.14),_transparent_22%),radial-gradient(circle_at_85%_18%,_rgba(56,189,248,0.16),_transparent_20%),radial-gradient(circle_at_50%_100%,_rgba(16,185,129,0.1),_transparent_24%),linear-gradient(180deg,#f8fafc_0%,#f6f8ff_35%,#eef6ff_100%)]" />
-      <div className="absolute left-[-8rem] top-16 h-72 w-72 rounded-full bg-indigo-200/30 blur-3xl" />
-      <div className="absolute right-[-6rem] top-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
-      <div className="absolute bottom-[-8rem] left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-emerald-200/20 blur-3xl" />
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
 
-      <section className="relative px-6 pb-16 pt-12 sm:pb-20 sm:pt-16">
-        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const params = new URLSearchParams();
+
+    if (searchQuery.trim()) {
+      params.set("query", searchQuery.trim());
+    }
+
+    if (locationQuery.trim()) {
+      params.set("location", locationQuery.trim());
+    }
+
+    const queryString = params.toString();
+
+    router.push(queryString ? `/postings?${queryString}` : "/postings");
+  }
+
+  return (
+    <main className="min-h-screen bg-white text-slate-950">
+      <section className="relative overflow-hidden border-b border-slate-200 bg-slate-50">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(124,58,237,0.12),transparent_28%),radial-gradient(circle_at_85%_20%,rgba(99,102,241,0.10),transparent_24%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]" />
+
+        <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:px-8 lg:py-24">
           <div>
-            <div className="inline-flex items-center rounded-full border border-indigo-200/60 bg-white/70 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 shadow-sm backdrop-blur">
-              Rental workspace
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-violet-700 shadow-sm">
+              <Sparkles className="h-3.5 w-3.5" />
+              Rental search made simpler
             </div>
-            <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[1.02] tracking-[-0.05em] text-slate-950 sm:text-6xl">
-              A home page system that looks like it belongs with your auth flow.
+
+            <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-[-0.055em] text-slate-950 sm:text-6xl lg:text-7xl">
+              Find the right rental without the clutter.
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              Rentify now carries the same soft gradients, glassy cards, and cleaner
-              structure from login and signup into the rest of the website.
+
+            <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
+              Search homes, spaces, equipment, and services from one clean
+              marketplace built around faster discovery and clearer posting
+              details.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link
-                href="/contact"
-                className="inline-flex h-14 items-center justify-center rounded-2xl bg-slate-950 px-6 text-sm font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.16)] transition hover:bg-slate-800"
-              >
-                Start a project
-              </Link>
-              <Link
-                href="/services"
-                className="inline-flex h-14 items-center justify-center rounded-2xl border border-white/80 bg-white/80 px-6 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40"
-              >
-                View services
-              </Link>
+
+            <form
+              onSubmit={handleSearch}
+              className="mt-8 rounded-3xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-950/5"
+            >
+              <div className="grid gap-3 lg:grid-cols-[1fr_0.8fr_auto]">
+                <label className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition duration-200 focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10">
+                  <span className="text-slate-400 transition group-focus-within:text-violet-600">
+                    <SearchIcon />
+                  </span>
+                  <span className="sr-only">Search rentals</span>
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="What are you looking for?"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+                </label>
+
+                <label className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition duration-200 focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10">
+                  <MapPin className="h-4 w-4 text-slate-400 transition group-focus-within:text-violet-600" />
+                  <span className="sr-only">Location</span>
+                  <input
+                    value={locationQuery}
+                    onChange={(event) => setLocationQuery(event.target.value)}
+                    placeholder="Location"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/25 active:translate-y-0"
+                >
+                  Search
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-500">
+                Popular:
+              </span>
+
+              {categories.slice(0, 4).map((category) => (
+                <Link
+                  key={category}
+                  href={`/postings?category=${encodeURIComponent(category)}`}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+                >
+                  {category}
+                </Link>
+              ))}
             </div>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              {highlights.map((item) => (
+              {stats.map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-3xl border border-white/75 bg-white/75 p-5 shadow-[0_18px_45px_rgba(79,70,229,0.08)] backdrop-blur"
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
                 >
-                  <p className="text-3xl font-semibold tracking-[-0.05em] text-slate-950">
+                  <p className="text-3xl font-semibold tracking-[-0.04em] text-slate-950">
                     {item.value}
                   </p>
-                  <p className="mt-1 text-sm text-slate-600">{item.label}</p>
+                  <p className="mt-1 text-sm text-slate-500">{item.label}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/75 bg-white/78 p-6 shadow-[0_28px_70px_rgba(79,70,229,0.1)] backdrop-blur-xl sm:p-8">
-            <div className="rounded-[1.75rem] border border-slate-100 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-indigo-600">Featured experience</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                    Shoreline House
-                  </h2>
+          <div className="relative">
+            <div className="absolute -left-8 -top-8 h-32 w-32 rounded-full bg-violet-200/50 blur-3xl" />
+            <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-indigo-200/50 blur-3xl" />
+
+            <div className="relative rounded-[2rem] border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-950/10">
+              <div className="rounded-[1.5rem] bg-slate-950 p-5 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">
+                      Featured rental
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">
+                      Modern loft space
+                    </h2>
+                  </div>
+
+                  <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/15">
+                    Available
+                  </div>
                 </div>
-                <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                  Available
+
+                <div className="mt-6 aspect-[4/3] rounded-3xl bg-[radial-gradient(circle_at_30%_20%,rgba(167,139,250,0.8),transparent_30%),linear-gradient(135deg,#312e81,#111827_55%,#020617)]" />
+
+                <div className="mt-5 grid grid-cols-3 gap-3">
+                  <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                    <p className="text-xs text-slate-300">Price</p>
+                    <p className="mt-1 font-semibold">$120/hr</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                    <p className="text-xs text-slate-300">Rating</p>
+                    <p className="mt-1 font-semibold">5.0</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                    <p className="text-xs text-slate-300">Area</p>
+                    <p className="mt-1 font-semibold">1.2k ft²</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-3xl border border-white/80 bg-white/90 p-5 shadow-[0_12px_40px_rgba(99,102,241,0.08)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Occupancy lift
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <CalendarDays className="h-5 w-5 text-violet-600" />
+                  <p className="mt-3 text-sm font-semibold text-slate-950">
+                    Flexible availability
                   </p>
-                  <p className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-slate-950">
-                    31%
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Clearer presentation and stronger trust pages help guests decide faster.
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Compare dates and rental windows before reaching out.
                   </p>
                 </div>
-                <div className="rounded-3xl border border-white/80 bg-white/90 p-5 shadow-[0_12px_40px_rgba(56,189,248,0.08)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Experience details
+
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <ShieldCheck className="h-5 w-5 text-violet-600" />
+                  <p className="mt-3 text-sm font-semibold text-slate-950">
+                    Clear listing details
                   </p>
-                  <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
-                    <li>Fast answers before booking</li>
-                    <li>Clear terms before arrival</li>
-                    <li>One place for support details</li>
-                  </ul>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Review rules, pricing, and owner details in one place.
+                  </p>
                 </div>
               </div>
             </div>
@@ -138,51 +265,194 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative px-6 py-8 sm:py-10">
-        <div className="mx-auto max-w-7xl">
+      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <p className="text-sm font-semibold text-violet-700">
+              Browse by category
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+              Start with what you need.
+            </h2>
+          </div>
+
+          <Link
+            href="/postings"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700 transition hover:text-violet-800"
+          >
+            Browse all postings
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {categories.map((category) => (
+            <Link
+              key={category}
+              href={`/postings?category=${encodeURIComponent(category)}`}
+              className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl hover:shadow-slate-950/5"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                    {category}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Explore available rentals
+                  </p>
+                </div>
+
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-50 text-violet-700 transition duration-200 group-hover:translate-x-1 group-hover:bg-violet-600 group-hover:text-white">
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
-            <p className="text-sm font-medium text-indigo-600">What this covers</p>
-            <h2 className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.6rem]">
-              The full site now follows the softer auth aesthetic.
+            <p className="text-sm font-semibold text-violet-700">
+              Why Rentify
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+              A cleaner way to discover and manage rentals.
             </h2>
             <p className="mt-4 text-base leading-7 text-slate-600">
-              Instead of a separate marketing style, these pages now inherit the same
-              polished workspace feel as login and signup.
+              Rentify keeps search, comparison, and listing management focused
+              so renters and owners can move faster.
             </p>
           </div>
 
           <div className="mt-10 grid gap-4 lg:grid-cols-3">
-            {serviceCards.map((card) => (
-              <article
-                key={card.title}
-                className="rounded-3xl border border-white/75 bg-white/75 p-5 shadow-[0_18px_45px_rgba(79,70,229,0.08)] backdrop-blur"
-              >
-                <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${card.accent}`}>
-                  <span className="text-sm font-semibold">R</span>
-                </div>
-                <h3 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {card.title}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{card.description}</p>
-              </article>
-            ))}
+            {benefits.map((benefit) => {
+              const Icon = benefit.icon;
+
+              return (
+                <article
+                  key={benefit.title}
+                  className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <h3 className="mt-5 text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                    {benefit.title}
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {benefit.description}
+                  </p>
+                </article>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      <section className="relative px-6 py-10 sm:py-14">
-        <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-3">
-          {pillars.map((pillar) => (
-            <div
-              key={pillar.title}
-              className="rounded-3xl border border-white/75 bg-white/75 p-6 shadow-[0_18px_45px_rgba(79,70,229,0.08)] backdrop-blur"
+      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <p className="text-sm font-semibold text-violet-700">
+              Featured postings
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+              Recently added rentals.
+            </h2>
+          </div>
+
+          <Link
+            href="/postings"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700 transition hover:text-violet-800"
+          >
+            View more
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-8 grid gap-5 lg:grid-cols-3">
+          {featuredPostings.map((posting) => (
+            <article
+              key={posting.title}
+              className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-950/5"
             >
-              <h3 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
-                {pillar.title}
-              </h3>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{pillar.description}</p>
-            </div>
+              <div className="aspect-[4/3] bg-[radial-gradient(circle_at_30%_20%,rgba(124,58,237,0.16),transparent_30%),linear-gradient(135deg,#f8fafc,#ede9fe_55%,#ffffff)]" />
+
+              <div className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                    {posting.tag}
+                  </span>
+
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-600">
+                    <Star className="h-4 w-4 fill-violet-600 text-violet-600" />
+                    {posting.rating}
+                  </span>
+                </div>
+
+                <h3 className="mt-4 text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                  {posting.title}
+                </h3>
+
+                <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                  <MapPin className="h-4 w-4" />
+                  {posting.location}
+                </p>
+
+                <div className="mt-5 flex items-center justify-between">
+                  <p className="text-lg font-semibold text-slate-950">
+                    {posting.price}
+                  </p>
+
+                  <Link
+                    href="/postings"
+                    className="text-sm font-semibold text-violet-700 transition hover:text-violet-800"
+                  >
+                    View details
+                  </Link>
+                </div>
+              </div>
+            </article>
           ))}
+        </div>
+      </section>
+
+      <section className="px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-7xl gap-8 rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-white shadow-2xl shadow-slate-950/10 sm:p-8 lg:grid-cols-[1fr_0.8fr] lg:items-center">
+          <div>
+            <p className="text-sm font-semibold text-violet-300">
+              For owners
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+              Have something to rent out?
+            </h2>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+              Create a clean posting, show renters the important details, and
+              manage interest from one account.
+            </p>
+
+            <Link
+              href="/signup"
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-50"
+            >
+              List a rental
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          <div className="rounded-3xl bg-white/10 p-5 ring-1 ring-white/10">
+            <div className="grid gap-4">
+              {ownerSteps.map((step) => (
+                <div key={step} className="flex gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-violet-300" />
+                  <p className="text-sm leading-6 text-slate-200">{step}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
     </main>
