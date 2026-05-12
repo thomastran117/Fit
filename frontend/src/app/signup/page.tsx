@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { SignupForm } from "@/components/auth/signup-form";
 import { SignupFormCard } from "@/components/auth/signup-form-card";
-import { SignupPageLayout } from "@/components/auth/signup-page-layout";
+import { AuthPageShell } from "@/components/auth/auth-page-shell";
 
 export const metadata: Metadata = {
   title: "Sign Up | Rentify",
@@ -23,10 +23,10 @@ export const metadata: Metadata = {
 
 export default function SignupPage() {
   return (
-    <SignupPageLayout>
+    <AuthPageShell variant="signup">
       <SignupFormCard>
         <SignupForm />
       </SignupFormCard>
-    </SignupPageLayout>
+    </AuthPageShell>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
+import { theme } from "@/styles/theme";
 
 interface AuthCaptchaPanelProps {
   token: string;
@@ -16,22 +17,22 @@ export function AuthCaptchaPanel({
   onReset,
 }: AuthCaptchaPanelProps) {
   return (
-    <div className="rounded-[1.75rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-4">
+    <div className={theme.auth.captchaPanel}>
       <TurnstileWidget value={token} onChange={onChange} />
 
       {token ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+        <div className={`mt-3 flex flex-wrap items-center justify-between gap-3 ${theme.auth.successPanel}`}>
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex h-10 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-4 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+            className="inline-flex h-10 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 transition duration-200 hover:border-violet-200 hover:bg-violet-50"
           >
             Run again
           </button>
         </div>
       ) : null}
 
-      {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
+      {error ? <p className={`mt-2 ${theme.auth.fieldErrorText}`}>{error}</p> : null}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { theme } from "@/styles/theme";
 
 interface LoginFormCardProps {
   children: ReactNode;
@@ -7,13 +8,11 @@ interface LoginFormCardProps {
 
 export function LoginFormCard({ children }: LoginFormCardProps) {
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-white/78 p-6 shadow-[0_30px_80px_rgba(79,70,229,0.10)] backdrop-blur-xl sm:p-8">
+    <div className={theme.auth.card}>
       <div className="mb-8">
-        <p className="text-sm font-medium text-indigo-600">Account access</p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.15rem]">
-          Sign in
-        </h2>
-        <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">
+        <p className={theme.auth.cardEyebrow}>Account access</p>
+        <h2 className={theme.auth.cardTitle}>Sign in</h2>
+        <p className={theme.auth.cardDescription}>
           Access your bookings, listings, and messages from one polished workspace.
         </p>
       </div>
@@ -21,17 +20,12 @@ export function LoginFormCard({ children }: LoginFormCardProps) {
       {children}
 
       <div className="mt-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-slate-200" />
-        <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-          New here?
-        </span>
-        <div className="h-px flex-1 bg-slate-200" />
+        <div className={theme.auth.dividerLine} />
+        <span className={theme.auth.dividerText}>New here?</span>
+        <div className={theme.auth.dividerLine} />
       </div>
 
-      <Link
-        href="/signup"
-        className="mt-6 inline-flex h-14 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-5 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40"
-      >
+      <Link href="/signup" className={`mt-6 ${theme.auth.secondaryButton}`}>
         Create an account
       </Link>
 

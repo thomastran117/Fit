@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/login-form";
 import { LoginFormCard } from "@/components/auth/login-form-card";
-import { LoginPageShell } from "@/components/auth/login-page-shell";
+import { AuthPageShell } from "@/components/auth/auth-page-shell";
 
 export const metadata: Metadata = {
   title: "Login | Rentify",
@@ -32,10 +32,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const nextPath = resolvedSearchParams?.next || "/";
 
   return (
-    <LoginPageShell>
+    <AuthPageShell variant="login">
       <LoginFormCard>
         <LoginForm nextPath={nextPath} />
       </LoginFormCard>
-    </LoginPageShell>
+    </AuthPageShell>
   );
 }

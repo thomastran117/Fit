@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { ForgotPasswordFormCard } from "@/components/auth/forgot-password-form-card";
-import { LoginPageShell } from "@/components/auth/login-page-shell";
+import { AuthPageShell } from "@/components/auth/auth-page-shell";
 
 export const metadata: Metadata = {
   title: "Forgot Password | Rentify",
@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 
 export default function ForgotPasswordPage() {
   return (
-    <LoginPageShell>
+    <AuthPageShell variant="forgot-password">
       <ForgotPasswordFormCard>
         <ForgotPasswordForm />
       </ForgotPasswordFormCard>
-    </LoginPageShell>
+    </AuthPageShell>
   );
 }

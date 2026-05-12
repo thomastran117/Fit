@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/auth-context";
 import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
 import type { AuthResponseBody } from "@/lib/auth/types";
+import { theme } from "@/styles/theme";
 
 interface RequestErrors {
   email?: string;
@@ -313,7 +314,7 @@ export function ForgotPasswordForm() {
 
   if (status === "loading") {
     return (
-      <div className="rounded-full border border-white/70 bg-white/90 px-5 py-3 text-sm font-medium text-slate-600 shadow-lg backdrop-blur">
+      <div className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-600 shadow-sm">
         Preparing your workspace...
       </div>
     );
@@ -327,13 +328,11 @@ export function ForgotPasswordForm() {
     return (
       <form className="space-y-5" onSubmit={handleRequestSubmit}>
         {generalError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {generalError}
-          </div>
+          <div className={theme.auth.errorPanel}>{generalError}</div>
         ) : null}
 
         <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium text-slate-700">
+          <label htmlFor="email" className={theme.auth.fieldLabel}>
             Email
           </label>
           <input
@@ -344,18 +343,18 @@ export function ForgotPasswordForm() {
             placeholder="you@example.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className={`h-14 w-full rounded-2xl border bg-white/90 px-4 text-[15px] text-slate-900 outline-none transition placeholder:text-slate-400 ${
+            className={`h-14 w-full rounded-2xl border bg-white px-4 text-[15px] text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 ${
               requestErrors.email
-                ? "border-rose-300 ring-4 ring-rose-100"
+                ? theme.auth.fieldError
                 : emailHasValue
-                  ? "border-indigo-300 ring-4 ring-indigo-50"
-                  : "border-slate-200 hover:border-indigo-200"
+                  ? theme.auth.fieldActive
+                  : theme.auth.fieldDefault
             }`}
           />
           {requestErrors.email ? (
-            <p className="text-sm text-rose-700">{requestErrors.email}</p>
+            <p className={theme.auth.fieldErrorText}>{requestErrors.email}</p>
           ) : (
-            <p className="text-sm text-slate-500">
+            <p className={theme.auth.fieldText}>
               We will email a reset code if this account can use local password sign-in.
             </p>
           )}
@@ -371,7 +370,7 @@ export function ForgotPasswordForm() {
         <button
           type="submit"
           disabled={requestPending}
-          className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+          className={theme.auth.primaryButton}
         >
           {requestPending ? "Sending code..." : "Send reset code"}
         </button>
@@ -381,7 +380,7 @@ export function ForgotPasswordForm() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-emerald-900">
+      <div className={theme.auth.successPanel}>
         <p className="text-sm font-semibold">Check your inbox</p>
         <p className="mt-2 text-sm leading-6">
           If {email.trim().toLowerCase()} is eligible for local password reset, we sent a 6-digit code.
@@ -390,19 +389,15 @@ export function ForgotPasswordForm() {
 
       <form className="space-y-5" onSubmit={handleResetSubmit}>
         {generalError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {generalError}
-          </div>
+          <div className={theme.auth.errorPanel}>{generalError}</div>
         ) : null}
 
         {resentMessage ? (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-            {resentMessage}
-          </div>
+          <div className={theme.auth.infoPanel}>{resentMessage}</div>
         ) : null}
 
         <div className="space-y-2">
-          <label htmlFor="code" className="text-sm font-medium text-slate-700">
+          <label htmlFor="code" className={theme.auth.fieldLabel}>
             Reset code
           </label>
           <input
@@ -415,19 +410,19 @@ export function ForgotPasswordForm() {
             placeholder="123456"
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            className={`h-14 w-full rounded-2xl border bg-white/90 px-4 text-center text-[22px] tracking-[0.35em] text-slate-900 outline-none transition placeholder:tracking-normal placeholder:text-slate-400 ${
+            className={`h-14 w-full rounded-2xl border bg-white px-4 text-center text-[22px] tracking-[0.35em] text-slate-900 outline-none transition duration-200 placeholder:tracking-normal placeholder:text-slate-400 ${
               resetErrors.code
-                ? "border-rose-300 ring-4 ring-rose-100"
+                ? theme.auth.fieldError
                 : code.length > 0
-                  ? "border-indigo-300 ring-4 ring-indigo-50"
-                  : "border-slate-200 hover:border-indigo-200"
+                  ? theme.auth.fieldActive
+                  : theme.auth.fieldDefault
             }`}
           />
-          {resetErrors.code ? <p className="text-sm text-rose-700">{resetErrors.code}</p> : null}
+          {resetErrors.code ? <p className={theme.auth.fieldErrorText}>{resetErrors.code}</p> : null}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="newPassword" className="text-sm font-medium text-slate-700">
+          <label htmlFor="newPassword" className={theme.auth.fieldLabel}>
             New password
           </label>
           <input
@@ -438,21 +433,21 @@ export function ForgotPasswordForm() {
             placeholder="At least 8 characters"
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
-            className={`h-14 w-full rounded-2xl border bg-white/90 px-4 text-[15px] text-slate-900 outline-none transition placeholder:text-slate-400 ${
+            className={`h-14 w-full rounded-2xl border bg-white px-4 text-[15px] text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 ${
               resetErrors.newPassword
-                ? "border-rose-300 ring-4 ring-rose-100"
+                ? theme.auth.fieldError
                 : newPasswordHasValue
-                  ? "border-sky-300 ring-4 ring-sky-50"
-                  : "border-slate-200 hover:border-sky-200"
+                  ? theme.auth.fieldActive
+                  : theme.auth.fieldDefault
             }`}
           />
           {resetErrors.newPassword ? (
-            <p className="text-sm text-rose-700">{resetErrors.newPassword}</p>
+            <p className={theme.auth.fieldErrorText}>{resetErrors.newPassword}</p>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
+          <label htmlFor="confirmPassword" className={theme.auth.fieldLabel}>
             Confirm new password
           </label>
           <input
@@ -463,23 +458,23 @@ export function ForgotPasswordForm() {
             placeholder="Repeat your new password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
-            className={`h-14 w-full rounded-2xl border bg-white/90 px-4 text-[15px] text-slate-900 outline-none transition placeholder:text-slate-400 ${
+            className={`h-14 w-full rounded-2xl border bg-white px-4 text-[15px] text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 ${
               resetErrors.confirmPassword
-                ? "border-rose-300 ring-4 ring-rose-100"
+                ? theme.auth.fieldError
                 : confirmPasswordHasValue
-                  ? "border-indigo-300 ring-4 ring-indigo-50"
-                  : "border-slate-200 hover:border-indigo-200"
+                  ? theme.auth.fieldActive
+                  : theme.auth.fieldDefault
             }`}
           />
           {resetErrors.confirmPassword ? (
-            <p className="text-sm text-rose-700">{resetErrors.confirmPassword}</p>
+            <p className={theme.auth.fieldErrorText}>{resetErrors.confirmPassword}</p>
           ) : null}
         </div>
 
         <button
           type="submit"
           disabled={resetPending}
-          className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+          className={theme.auth.primaryButton}
         >
           {resetPending ? "Resetting password..." : "Reset password"}
         </button>
@@ -508,7 +503,7 @@ export function ForgotPasswordForm() {
         type="button"
         onClick={handleResend}
         disabled={resending}
-        className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-5 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40 disabled:cursor-not-allowed disabled:opacity-60"
+        className={theme.auth.secondaryButton}
       >
         {resending ? "Sending new code..." : "Resend reset code"}
       </button>

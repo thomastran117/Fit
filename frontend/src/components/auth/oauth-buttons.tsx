@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { publicEnv } from "@/lib/env";
 import { authApi } from "@/lib/auth/api";
 import type { AuthResponseBody, LinkedOAuthProvidersResult } from "@/lib/auth/types";
+import { theme } from "@/styles/theme";
 
 export type OAuthProvider = "google" | "microsoft";
 
@@ -355,7 +356,7 @@ function OAuthProviderButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+      className={theme.auth.oauthButton}
     >
       <span className="flex min-w-0 items-center justify-center gap-3 text-center">
         {config.icon}
@@ -435,10 +436,10 @@ export function AuthOAuthButtons({
     <div className="space-y-4">
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-slate-200" />
+          <div className={`w-full ${theme.auth.dividerLine}`} />
         </div>
         <div className="relative flex justify-center">
-          <span className="bg-white px-3 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+          <span className={`bg-white px-3 ${theme.auth.dividerText}`}>
             {isLinkMode ? "Connect another provider" : "Or continue with"}
           </span>
         </div>

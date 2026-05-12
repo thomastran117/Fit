@@ -101,7 +101,7 @@ export const theme = {
       "rounded-xl bg-slate-950 px-3 py-2.5 text-center text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800",
   },
 
-footer: {
+  footer: {
   shell: "border-t border-slate-200 bg-white",
 
   container:
@@ -124,5 +124,105 @@ footer: {
 
   legalLink:
     "text-sm text-slate-500 transition duration-200 hover:text-violet-700",
+  },
+
+  auth: {
+    page: "relative overflow-hidden bg-slate-50",
+
+    background:
+      "absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(124,58,237,0.12),transparent_28%),radial-gradient(circle_at_82%_18%,rgba(99,102,241,0.10),transparent_24%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]",
+
+    orbPrimary: "absolute -left-20 top-10 h-72 w-72 rounded-full bg-violet-200/45 blur-3xl",
+    orbSecondary: "absolute -right-20 top-24 h-80 w-80 rounded-full bg-indigo-200/35 blur-3xl",
+    orbAccent: "absolute bottom-[-8rem] left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-sky-200/25 blur-3xl",
+
+    container:
+      "relative mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1fr)_minmax(26rem,32rem)] lg:items-start lg:px-8 lg:py-20",
+
+    heroColumn: "order-2 max-w-3xl lg:order-1 lg:pt-6",
+    formColumn: "order-1 lg:order-2 lg:sticky lg:top-24",
+
+    eyebrow:
+      "inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-violet-700 shadow-sm",
+
+    title:
+      "mt-6 max-w-4xl text-4xl font-semibold tracking-[-0.055em] text-slate-950 sm:text-5xl lg:text-6xl",
+
+    description: "mt-5 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg",
+
+    linkRow: "mt-8 flex flex-wrap items-center gap-3",
+
+    utilityLink:
+      "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700",
+
+    textLink: "text-sm font-medium text-violet-700 transition duration-200 hover:text-violet-800",
+
+    featureGrid: "mt-10 grid gap-4 sm:grid-cols-3",
+
+    featureCard:
+      "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl hover:shadow-slate-950/5",
+
+    featureIcon: "flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-700",
+    featureTitle: "mt-4 text-base font-semibold tracking-[-0.02em] text-slate-950",
+    featureDescription: "mt-2 text-sm leading-6 text-slate-600",
+
+    spotlight:
+      "mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-950/5",
+
+    spotlightLabel: "text-sm font-semibold text-violet-700",
+    spotlightTitle: "mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950",
+    spotlightDescription: "mt-3 text-sm leading-7 text-slate-600",
+    spotlightList: "mt-5 grid gap-3",
+    spotlightItem: "flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700",
+
+    card:
+      "rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] sm:p-8",
+
+    cardEyebrow: "text-sm font-medium text-violet-700",
+    cardTitle: "mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.1rem]",
+    cardDescription: "mt-3 max-w-md text-sm leading-6 text-slate-600",
+
+    dividerLine: "h-px flex-1 bg-slate-200",
+    dividerText: "text-xs font-medium uppercase tracking-[0.18em] text-slate-400",
+
+    fieldGroup: "rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-4 sm:p-5",
+    fieldSectionLabel: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500",
+    fieldSectionDescription: "mt-1 text-sm text-slate-600",
+
+    fieldLabel: "text-sm font-medium text-slate-700",
+    fieldShell: "relative rounded-2xl border bg-white transition duration-200",
+    fieldDefault: "border-slate-200 hover:border-violet-200",
+    fieldActive: "border-violet-300 ring-4 ring-violet-100",
+    fieldError: "border-rose-300 ring-4 ring-rose-100",
+    fieldIcon: "pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-violet-600",
+    fieldInput:
+      "h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400",
+    fieldInputWithAction:
+      "h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400",
+    fieldText: "text-sm text-slate-500",
+    fieldErrorText: "text-sm text-rose-700",
+
+    iconButton:
+      "absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
+
+    primaryButton:
+      "inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-violet-600 px-5 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/25 disabled:cursor-not-allowed disabled:opacity-60 disabled:translate-y-0",
+
+    secondaryButton:
+      "inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-900 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50/70 disabled:cursor-not-allowed disabled:opacity-60 disabled:translate-y-0",
+
+    tertiaryLink:
+      "inline-flex h-12 w-full items-center justify-center text-sm font-medium text-violet-700 transition duration-200 hover:text-violet-800",
+
+    oauthButton:
+      "inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60",
+
+    captchaPanel:
+      "rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-4",
+
+    successPanel: "rounded-3xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-emerald-900",
+    infoPanel: "rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800",
+    warningPanel: "rounded-3xl border border-amber-200 bg-amber-50/90 px-5 py-4 text-amber-950",
+    errorPanel: "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700",
   },
 } as const;
