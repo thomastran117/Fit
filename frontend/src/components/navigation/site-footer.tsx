@@ -1,104 +1,180 @@
 import Link from "next/link";
-import { AtSign, ExternalLink, Globe, MessageCircle } from "lucide-react";
+import { Mail, ExternalLink } from "lucide-react";
+import {
+  navigationLinks,
+  SiteHeaderLogo,
+} from "@/components/navigation/header/site-header.shared";
+import { theme } from "@/styles/theme";
 
-const primaryLinks = [
-  { href: "/", label: "Home" },
-  { href: "/about", label: "About" },
-  { href: "/services", label: "Services" },
-  { href: "/contact", label: "Contact" },
-];
+function InstagramIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
+      <rect
+        x="3.5"
+        y="3.5"
+        width="17"
+        height="17"
+        rx="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="4.25" />
+      <circle
+        cx="17.25"
+        cy="6.75"
+        r="0.75"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
 
-const legalLinks = [
-  { href: "/privacy", label: "Privacy" },
-  { href: "/terms-and-conditions", label: "Terms" },
-];
+function FacebookIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
+      <path d="M13.5 21v-7h2.6l.4-3h-3v-1.9c0-.9.3-1.5 1.6-1.5h1.5V5c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 4V11H8v3h2.5v7h3Z" />
+    </svg>
+  );
+}
 
-const socials = [
-  { href: "#", icon: Globe, label: "Website" },
-  { href: "#", icon: MessageCircle, label: "Message" },
-  { href: "#", icon: AtSign, label: "Email" },
-  { href: "#", icon: ExternalLink, label: "External link" },
-];
+const footerLinkGroups = [
+  {
+    title: "Explore",
+    links: navigationLinks,
+  },
+  {
+    title: "Account",
+    links: [
+      { href: "/login", label: "Log in" },
+      { href: "/signup", label: "Sign up" },
+      { href: "/contact", label: "Support" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms-and-conditions", label: "Terms" },
+    ],
+  },
+] as const;
+
+const socialLinks = [
+  {
+    href: "mailto:hello@rentify.co",
+    label: "Email",
+    icon: Mail,
+  },
+  {
+    href: "https://instagram.com",
+    label: "Instagram",
+    icon: InstagramIcon,
+  },
+  {
+    href: "https://facebook.com",
+    label: "Facebook",
+    icon: FacebookIcon,
+  },
+  {
+    href: "https://linkedin.com",
+    label: "LinkedIn",
+    icon: ExternalLink,
+  },
+] as const;
+
+function FooterLinkGroup({
+  title,
+  links,
+}: {
+  title: string;
+  links: ReadonlyArray<{ href: string; label: string }>;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className={theme.footer.sectionTitle}>{title}</p>
+
+      <nav className="mt-3 grid gap-2 sm:mt-4">
+        {links.map((link) => (
+          <Link key={link.href} href={link.href} className={theme.footer.link}>
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+    </div>
+  );
+}
 
 export function SiteFooter() {
-  return (
-    <footer className="mt-16 border-t border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl py-12">
-        <div className="grid gap-10 md:grid-cols-3">
-          <div>
-            <Link href="/" className="inline-flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white">
-                R
-              </div>
+  const currentYear = new Date().getFullYear();
 
-              <div>
-                <p className="text-xl font-semibold text-slate-950">Rentify</p>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                  Modern rentals
-                </p>
-              </div>
+  return (
+    <footer className={theme.footer.shell}>
+      <div className={theme.footer.container}>
+        <div className="grid gap-8 border-b border-slate-200 pb-8 sm:gap-10 sm:pb-10 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
+          <div className="max-w-md">
+            <Link href="/" className="group inline-flex">
+              <SiteHeaderLogo />
             </Link>
 
-            <p className="mt-4 max-w-sm text-sm leading-7 text-slate-500">
-              Rentify helps rental businesses create cleaner, more trustworthy customer
-              experiences online.
+            <p className={theme.footer.description}>
+              Search, compare, and manage rental postings with a cleaner,
+              faster experience.
             </p>
-          </div>
 
-          <div>
-            <p className="text-sm font-semibold text-slate-950">Navigation</p>
-
-            <nav className="mt-4 grid gap-3 text-sm">
-              {primaryLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-slate-500 transition hover:text-slate-950"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-
-          <div>
-            <p className="text-sm font-semibold text-slate-950">Connect</p>
-
-            <a
-              href="mailto:hello@rentify.co"
-              className="mt-4 block text-sm text-slate-500 hover:text-slate-950"
-            >
-              hello@rentify.co
-            </a>
-
-            <div className="mt-5 flex items-center gap-3">
-              {socials.map((social, index) => {
-                const Icon = social.icon;
+            <div className="mt-5 flex items-center gap-2">
+              {socialLinks.map((item) => {
+                const Icon = item.icon;
 
                 return (
-                  <a
-                    key={index}
-                    href={social.href}
-                    aria-label={social.label}
-                    className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-950"
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    aria-label={item.label}
+                    className={theme.footer.socialLink}
                   >
-                    <Icon size={18} />
-                  </a>
+                    <Icon size={17} />
+                  </Link>
                 );
               })}
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-x-8 gap-y-8 sm:grid-cols-3 lg:justify-items-start">
+            {footerLinkGroups.map((group) => (
+              <FooterLinkGroup
+                key={group.title}
+                title={group.title}
+                links={group.links}
+              />
+            ))}
+          </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 border-t border-slate-200 pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>&copy; 2026 Rentify. All rights reserved.</p>
+        <div className={theme.footer.metaBar}>
+          <p>&copy; {currentYear} Rentify. All rights reserved.</p>
 
-          <div className="flex gap-4">
-            {legalLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="hover:text-slate-950">
-                {link.label}
-              </Link>
-            ))}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Link href="/privacy" className={theme.footer.legalLink}>
+              Privacy
+            </Link>
+            <Link href="/terms-and-conditions" className={theme.footer.legalLink}>
+              Terms
+            </Link>
           </div>
         </div>
       </div>

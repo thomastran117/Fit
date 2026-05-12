@@ -100,4 +100,29 @@ export const theme = {
     authButtonDark:
       "rounded-xl bg-slate-950 px-3 py-2.5 text-center text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800",
   },
+
+footer: {
+  shell: "border-t border-slate-200 bg-white",
+
+  container:
+    "mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8",
+
+  sectionTitle:
+    "text-sm font-semibold text-slate-950",
+
+  description:
+    "mt-5 max-w-md text-sm leading-7 text-slate-600",
+
+  link:
+    "text-sm text-slate-600 transition duration-200 hover:text-violet-700",
+
+  socialLink:
+    "flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700",
+
+  metaBar:
+    "flex flex-col gap-4 pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between",
+
+  legalLink:
+    "text-sm text-slate-500 transition duration-200 hover:text-violet-700",
+  },
 } as const;
