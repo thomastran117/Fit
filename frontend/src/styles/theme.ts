@@ -225,4 +225,106 @@ export const theme = {
     warningPanel: "rounded-3xl border border-amber-200 bg-amber-50/90 px-5 py-4 text-amber-950",
     errorPanel: "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700",
   },
+
+  marketplace: {
+    page: "relative overflow-hidden bg-slate-50",
+
+    background:
+      "absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,0.12),transparent_26%),radial-gradient(circle_at_82%_16%,rgba(99,102,241,0.10),transparent_24%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]",
+
+    orbPrimary: "absolute -left-24 top-10 h-80 w-80 rounded-full bg-violet-200/35 blur-3xl",
+    orbSecondary: "absolute -right-20 top-20 h-80 w-80 rounded-full bg-indigo-200/25 blur-3xl",
+
+    container: "relative mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8",
+
+    heroShell:
+      "overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-950/5",
+
+    heroHeader:
+      "border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 sm:p-8",
+
+    heroGrid: "grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start",
+
+    eyebrow:
+      "inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-violet-700 shadow-sm",
+
+    title:
+      "mt-5 max-w-4xl text-4xl font-semibold tracking-[-0.055em] text-slate-950 sm:text-5xl",
+
+    description: "mt-4 max-w-2xl text-base leading-8 text-slate-600",
+
+    utilityList: "grid gap-3",
+    utilityCard: "rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm",
+    utilityLabel: "text-sm font-semibold text-slate-950",
+    utilityDescription: "mt-1 text-sm leading-6 text-slate-600",
+
+    searchBody: "p-6 sm:p-8",
+
+    primarySearchShell:
+      "rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-3 shadow-sm",
+
+    primarySearchGrid: "grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]",
+
+    primaryInputWrap:
+      "group flex h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 transition duration-200 focus-within:border-violet-500 focus-within:ring-4 focus-within:ring-violet-100",
+
+    primaryInputIcon: "text-slate-400 transition duration-200 group-focus-within:text-violet-600",
+
+    primaryInput:
+      "min-w-0 flex-1 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400",
+
+    primaryButton:
+      "inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/25",
+
+    chip:
+      "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700",
+
+    chipActive: "border-violet-200 bg-violet-50 text-violet-700",
+
+    summary:
+      "flex flex-wrap items-center gap-2 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-3",
+
+    summaryEmpty:
+      "rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500",
+
+    summaryPill:
+      "rounded-full border border-violet-100 bg-white px-2.5 py-1 text-xs font-medium text-slate-600",
+
+    input:
+      "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none transition duration-200 placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100",
+
+    fieldLabel: "text-xs font-semibold uppercase tracking-[0.12em] text-slate-500",
+    fieldHint: "text-xs text-slate-400",
+
+    advancedShell: "group rounded-[1.75rem] border border-slate-200 bg-white",
+
+    advancedSummary:
+      "flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5",
+
+    advancedToggle:
+      "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600",
+
+    filterPanel: "rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4",
+
+    resultsShell:
+      "mt-6 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8",
+
+    resultsMeta: "flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500",
+
+    resultsEmpty: "mt-6 rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500",
+
+    resultCard:
+      "group overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white transition duration-200 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl hover:shadow-slate-950/5",
+
+    resultFallback:
+      "absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(124,58,237,0.18),transparent_28%),linear-gradient(135deg,#f8fafc,#ede9fe_55%,#ffffff)] text-xs font-semibold uppercase tracking-[0.24em] text-violet-700/70",
+
+    metaBadge: "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600",
+
+    paginationButton:
+      "rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700",
+
+    paginationButtonDisabled:
+      "rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-300",
+  },
 } as const;
