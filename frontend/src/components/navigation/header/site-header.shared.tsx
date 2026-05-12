@@ -1,0 +1,166 @@
+import { theme } from "@/styles/theme";
+import type { AuthResponseUser } from "@/lib/auth/types";
+
+export interface HeaderNavigationLink {
+  href: string;
+  label: string;
+}
+
+export interface HeaderAccountLink {
+  href: string;
+  label: string;
+  description: string;
+}
+
+export type SiteHeaderAuthStatus = "loading" | "anonymous" | "authenticated";
+export type SiteHeaderUserRole = AuthResponseUser["role"];
+
+export const navigationLinks: HeaderNavigationLink[] = [
+  { href: "/", label: "Home" },
+  { href: "/postings", label: "Browse" },
+  { href: "/about", label: "About" },
+  { href: "/services", label: "Services" },
+  { href: "/contact", label: "Contact" },
+];
+
+export function getAccountLinks(role?: SiteHeaderUserRole): HeaderAccountLink[] {
+  return [
+    ...(role && role !== "user"
+      ? [
+          {
+            href: "/dashboard",
+            label: "Dashboard",
+            description: "Manage listings, bookings, and performance",
+          },
+          {
+            href: "/postings/create",
+            label: "Create posting",
+            description: "List a rental for others to discover",
+          },
+        ]
+      : []),
+    {
+      href: "/account",
+      label: "Manage account",
+      description: "Email, security, and login methods",
+    },
+    {
+      href: "/profile",
+      label: "Profile",
+      description: "Personal details and public-facing info",
+    },
+    {
+      href: "/settings",
+      label: "Settings",
+      description: "Preferences and application settings",
+    },
+  ];
+}
+
+function getInitials(value: string): string {
+  return (
+    value
+      .split(/[\s._-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "R"
+  );
+}
+
+export function getDisplayLabel(email: string, username: string): string {
+  return username.trim() || email.split("@")[0] || "Account";
+}
+
+export function isRouteActive(pathname: string, href: string) {
+  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+}
+
+export function SiteHeaderLogo() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className={theme.header.logoMark}>R</div>
+
+      <div className="min-w-0">
+        <p className="text-lg font-semibold tracking-[-0.04em] text-slate-950">
+          Rentify
+        </p>
+        <p className="hidden text-xs font-medium text-slate-500 sm:block">
+          Find rentals faster
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function MenuIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+interface UserAvatarProps {
+  name: string;
+  imageUrl?: string | null;
+}
+
+export function UserAvatar({ name, imageUrl }: UserAvatarProps) {
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt={`${name} avatar`}
+        className="h-9 w-9 rounded-full object-cover ring-1 ring-slate-200"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white ring-1 ring-slate-200">
+      {getInitials(name)}
+    </div>
+  );
+}

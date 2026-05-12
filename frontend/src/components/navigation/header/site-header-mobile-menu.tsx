@@ -1,0 +1,98 @@
+import type { FormEvent } from "react";
+import Link from "next/link";
+import type { StoredAuthSession } from "@/lib/auth/types";
+import { theme } from "@/styles/theme";
+import {
+  SiteHeaderMobileAccountSection,
+} from "./site-header-account-panels";
+import { SiteHeaderMobileNavGrid } from "./site-header-navigation";
+import { SiteHeaderSearchForm } from "./site-header-search-form";
+import {
+  type HeaderAccountLink,
+  MenuIcon,
+  type SiteHeaderAuthStatus,
+} from "./site-header.shared";
+
+interface SiteHeaderMobileMenuProps {
+  pathname: string;
+  status: SiteHeaderAuthStatus;
+  session: StoredAuthSession | null;
+  displayName: string;
+  accountLinks: HeaderAccountLink[];
+  logoutPending: boolean;
+  onLogout: () => Promise<void>;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  mobileCtaHref: string;
+  mobileCtaLabel: string;
+}
+
+export function SiteHeaderMobileMenu({
+  pathname,
+  status,
+  session,
+  displayName,
+  accountLinks,
+  logoutPending,
+  onLogout,
+  searchQuery,
+  onSearchQueryChange,
+  onSearchSubmit,
+  mobileCtaHref,
+  mobileCtaLabel,
+}: SiteHeaderMobileMenuProps) {
+  return (
+    <details className="group relative md:hidden">
+      <summary className={theme.header.menuButton}>
+        <MenuIcon />
+      </summary>
+
+      <div className={theme.header.mobileDropdown}>
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+          <SiteHeaderSearchForm
+            query={searchQuery}
+            onQueryChange={onSearchQueryChange}
+            onSubmit={onSearchSubmit}
+            variant="mobile"
+          />
+
+          <div className="border-t border-slate-200 py-3">
+            <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Explore
+            </p>
+
+            <SiteHeaderMobileNavGrid pathname={pathname} />
+          </div>
+
+          <div className="border-t border-slate-200 py-3">
+            <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Rentals
+            </p>
+
+            <Link href={mobileCtaHref} className={theme.header.mobileCta}>
+              <span>{mobileCtaLabel}</span>
+              <span
+                aria-hidden="true"
+                className="transition duration-200 group-hover:translate-x-0.5"
+              >
+                &rarr;
+              </span>
+            </Link>
+          </div>
+
+          <div className="border-t border-slate-200 pt-3">
+            <SiteHeaderMobileAccountSection
+              status={status}
+              session={session}
+              displayName={displayName}
+              accountLinks={accountLinks}
+              logoutPending={logoutPending}
+              onLogout={onLogout}
+            />
+          </div>
+        </div>
+      </div>
+    </details>
+  );
+}
