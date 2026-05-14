@@ -8,14 +8,23 @@ const searchFormVariants = {
   desktop: {
     formClassName: theme.header.searchForm,
     wrapperClassName: theme.header.searchWrapper,
+    showKbdHint: true,
+    showSubmit: false,
   },
   mobile: {
     formClassName: "w-full",
     wrapperClassName: theme.header.mobileSearchWrapper,
+    showKbdHint: false,
+    showSubmit: true,
   },
 } as const satisfies Record<
   SearchFormVariant,
-  { formClassName: string; wrapperClassName: string }
+  {
+    formClassName: string;
+    wrapperClassName: string;
+    showKbdHint: boolean;
+    showSubmit: boolean;
+  }
 >;
 
 interface SiteHeaderSearchFormProps {
@@ -48,12 +57,22 @@ export function SiteHeaderSearchForm({
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Search rentals, equipment, spaces..."
           aria-label="Search rentals, equipment, and spaces"
+          inputMode="search"
+          enterKeyHint="search"
           className={theme.header.searchInput}
         />
 
-        <button type="submit" className={theme.header.searchSubmit}>
-          Search
-        </button>
+        {classes.showKbdHint ? (
+          <kbd className={theme.header.searchKbd} aria-hidden="true">
+            ⌘K
+          </kbd>
+        ) : null}
+
+        {classes.showSubmit ? (
+          <button type="submit" className={theme.header.searchSubmit}>
+            Search
+          </button>
+        ) : null}
       </div>
     </form>
   );

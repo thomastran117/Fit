@@ -12,10 +12,10 @@ interface FooterLinkGroupProps {
 
 function FooterLinkGroup({ title, links }: FooterLinkGroupProps) {
   return (
-    <div className="min-w-0">
+    <div>
       <p className={theme.footer.sectionTitle}>{title}</p>
 
-      <nav className="mt-3 grid gap-2 sm:mt-4">
+      <nav className={theme.footer.linkList}>
         {links.map((link) => (
           <Link key={link.href} href={link.href} className={theme.footer.link}>
             {link.label}
@@ -28,7 +28,7 @@ function FooterLinkGroup({ title, links }: FooterLinkGroupProps) {
 
 export function SiteFooterLinkGroups() {
   return (
-    <div className="grid grid-cols-2 gap-x-8 gap-y-8 sm:grid-cols-3 lg:justify-items-start">
+    <div className={theme.footer.linkGroupsWrapper}>
       {footerLinkGroups.map((group) => (
         <FooterLinkGroup
           key={group.title}

@@ -31,6 +31,5 @@ test("homepage renders without backend auth dependencies", async ({ page }) => {
       name: "Search rentals, equipment, and spaces",
     }),
   ).toBeVisible();
-  await expect(page.getByRole("banner").getByRole("button", { name: "Search" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Log in" }).first()).toBeVisible();
 });

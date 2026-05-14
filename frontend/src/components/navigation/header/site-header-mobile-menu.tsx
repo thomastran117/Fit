@@ -63,16 +63,18 @@ export function SiteHeaderMobileMenu({
             </Link>
           </div>
 
-          <div className="border-t border-slate-200 mt-3 pt-3">
-            <SiteHeaderMobileAccountSection
-              status={status}
-              session={session}
-              displayName={displayName}
-              accountLinks={accountLinks}
-              logoutPending={logoutPending}
-              onLogout={onLogout}
-            />
-          </div>
+          {status === "authenticated" && session ? (
+            <div className="border-t border-slate-200 mt-3 pt-3">
+              <SiteHeaderMobileAccountSection
+                status={status}
+                session={session}
+                displayName={displayName}
+                accountLinks={accountLinks}
+                logoutPending={logoutPending}
+                onLogout={onLogout}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </details>

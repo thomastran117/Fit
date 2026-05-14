@@ -32,6 +32,7 @@ export function SiteHeader() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  const desktopSearchInputRef = useRef<HTMLInputElement>(null);
 
   const accountLinks = getAccountLinks(session?.user.role);
   const displayName = session
@@ -65,6 +66,23 @@ export function SiteHeader() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [mobileSearchOpen]);
+
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (window.innerWidth >= 1024 && desktopSearchInputRef.current) {
+          desktopSearchInputRef.current.focus();
+          desktopSearchInputRef.current.select();
+        } else {
+          setMobileSearchOpen(true);
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,20 +122,23 @@ export function SiteHeader() {
   return (
     <header className={theme.header.shell}>
       <div className={theme.header.container}>
-        <Link href="/" className="group shrink-0">
-          <SiteHeaderLogo />
-        </Link>
+        <div className={theme.header.leftCluster}>
+          <Link href="/" className="group shrink-0">
+            <SiteHeaderLogo />
+          </Link>
 
-        <SiteHeaderDesktopNav pathname={pathname} />
-
-        <SiteHeaderSearchForm
-          query={searchQuery}
-          onQueryChange={setSearchQuery}
-          onSubmit={handleSearch}
-          variant="desktop"
-        />
+          <SiteHeaderDesktopNav pathname={pathname} />
+        </div>
 
         <div className={theme.header.rightCluster}>
+          <SiteHeaderSearchForm
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            onSubmit={handleSearch}
+            variant="desktop"
+            inputRef={desktopSearchInputRef}
+          />
+
           <button
             type="button"
             onClick={() => setMobileSearchOpen((open) => !open)}

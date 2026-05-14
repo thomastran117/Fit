@@ -141,10 +141,7 @@ export function SiteHeaderDesktopAccount({
   }
 
   return (
-    <Link
-      href="/login"
-      className={`hidden md:inline-flex ${theme.header.authLinkPrimary}`}
-    >
+    <Link href="/login" className={theme.header.authLinkPrimary}>
       Log in
     </Link>
   );
@@ -189,15 +186,5 @@ export function SiteHeaderMobileAccountSection({
     );
   }
 
-  return (
-    <>
-      <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-        Account
-      </p>
-
-      <Link href="/login" className={`${theme.header.authButtonDark} block`}>
-        Log in
-      </Link>
-    </>
-  );
+  return null;
 }

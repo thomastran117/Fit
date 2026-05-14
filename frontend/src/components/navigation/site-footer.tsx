@@ -9,7 +9,7 @@ export function SiteFooter() {
   return (
     <footer className={theme.footer.shell}>
       <div className={theme.footer.container}>
-        <div className="grid gap-8 border-b border-slate-200 pb-8 sm:gap-10 sm:pb-10 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
+        <div className={theme.footer.topGrid}>
           <SiteFooterBrand />
           <SiteFooterLinkGroups />
         </div>

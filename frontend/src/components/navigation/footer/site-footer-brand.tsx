@@ -5,17 +5,17 @@ import { footerSocialLinks } from "./site-footer.shared";
 
 export function SiteFooterBrand() {
   return (
-    <div className="max-w-md">
+    <div>
       <Link href="/" className="group inline-flex">
         <SiteHeaderLogo />
       </Link>
 
-      <p className={theme.footer.description}>
+      <p className={theme.footer.brandTagline}>
         Search, compare, and manage rental postings with a cleaner, faster
         experience.
       </p>
 
-      <div className="mt-5 flex items-center gap-2">
+      <div className={theme.footer.socialRow}>
         {footerSocialLinks.map((item) => {
           const Icon = item.icon;
 

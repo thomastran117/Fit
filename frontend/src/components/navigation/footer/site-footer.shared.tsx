@@ -58,28 +58,19 @@ export interface FooterLinkGroupData {
 
 export const footerLinkGroups: ReadonlyArray<FooterLinkGroupData> = [
   {
-    title: "Explore",
+    title: "Marketplace",
     links: [
-      { href: "/", label: "Home" },
-      { href: "/postings", label: "Browse" },
+      { href: "/postings", label: "Browse rentals" },
       { href: "/how-it-works", label: "How it works" },
-      { href: "/faq", label: "FAQ" },
+      { href: "/services", label: "Services" },
     ],
   },
   {
     title: "Company",
     links: [
       { href: "/about", label: "About" },
-      { href: "/services", label: "Services" },
+      { href: "/faq", label: "FAQ" },
       { href: "/contact", label: "Contact" },
-    ],
-  },
-  {
-    title: "Support",
-    links: [
-      { href: "/accessibility", label: "Accessibility" },
-      { href: "/contact", label: "Support" },
-      { href: "/login", label: "Log in" },
     ],
   },
   {
@@ -87,6 +78,7 @@ export const footerLinkGroups: ReadonlyArray<FooterLinkGroupData> = [
     links: [
       { href: "/privacy", label: "Privacy" },
       { href: "/terms", label: "Terms" },
+      { href: "/accessibility", label: "Accessibility" },
     ],
   },
 ];
