@@ -18,7 +18,6 @@ export function SessionManager({ session, onComplete }: SessionManagerProps) {
     }
 
     hasAttemptedInitialRestore.current = true;
-    let cancelled = false;
 
     async function restoreSession() {
       try {
@@ -26,17 +25,11 @@ export function SessionManager({ session, onComplete }: SessionManagerProps) {
           await authApi.refresh();
         }
       } finally {
-        if (!cancelled) {
-          onComplete();
-        }
+        onComplete();
       }
     }
 
     void restoreSession();
-
-    return () => {
-      cancelled = true;
-    };
   }, [onComplete, session]);
 
   return null;

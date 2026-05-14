@@ -4,29 +4,29 @@ import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 export const metadata: Metadata = {
   title: "Services | Rentify",
-  description: "Explore Rentify services for rental brand design, guest communication, and policy experiences.",
+  description: "Explore the services Rentify provides for renters, owners, and teams managing listings at scale.",
 };
 
 const serviceGroups = [
   {
-    name: "Brand and site design",
+    name: "Rental search and discovery",
     description:
-      "Home pages, property storytelling, supporting page structure, and visual systems that feel premium and conversion-aware.",
+      "Search across categories, locations, and intent so renters can move from browsing to shortlist faster.",
   },
   {
-    name: "Guest-facing communication",
+    name: "Clear listing presentation",
     description:
-      "Contact experiences, support touchpoints, and information architecture that lowers uncertainty before booking.",
+      "Pricing, availability, photos, and listing details are structured to answer the practical questions before someone reaches out.",
   },
   {
-    name: "Trust and compliance pages",
+    name: "Owner workflow support",
     description:
-      "Privacy and terms content presented in a way that is readable, well-organized, and aligned with the rest of the brand.",
+      "Owners can maintain a cleaner storefront, keep their inventory current, and manage incoming interest from one place.",
   },
   {
-    name: "Operational content systems",
+    name: "Trust, policy, and support layers",
     description:
-      "Scalable patterns for service pages, frequently asked details, and consistent messaging across your portfolio.",
+      "Core pages like FAQ, privacy, terms, accessibility, and contact are part of the product experience, not an afterthought.",
   },
 ];
 
@@ -34,27 +34,41 @@ export default function ServicesPage() {
   return (
     <MarketingPageShell
       eyebrow="Services"
-      title="Flexible service design for modern rental teams."
-      description="Whether you manage one standout property or a growing collection, Rentify helps shape the pages that move visitors from interest to action."
-      accent="rgba(37,99,235,0.2)"
+      title="Marketplace services that support discovery, trust, and day-to-day rental operations."
+      description="Rentify is designed to help renters find the right fit faster while giving owners and operators a cleaner digital experience across search, listing presentation, and support content."
+      accent="rgba(37,99,235,0.18)"
+      ctaLabel="Browse rentals"
+      ctaHref="/postings"
+      secondaryCtaLabel="Contact our team"
+      secondaryCtaHref="/contact"
+      quickLinks={[
+        { href: "/how-it-works", label: "How it works" },
+        { href: "/faq", label: "FAQ" },
+        { href: "/privacy", label: "Privacy" },
+      ]}
+      stats={[
+        { label: "Core service areas", value: "4" },
+        { label: "Audience types", value: "Renters + owners" },
+        { label: "Support coverage", value: "End to end" },
+      ]}
       aside={
         <div className="space-y-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-indigo-600">
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-violet-700">
               Typical scope
             </p>
             <p className="mt-3 text-sm leading-7 text-slate-600">
-              Home, about, services, contact, privacy, terms, and supporting trust
-              layers for your rental brand.
+              Search, discovery, listing detail experiences, owner tooling, and the
+              supporting static pages that help users trust the marketplace.
             </p>
           </div>
-          <div className="rounded-[1.5rem] border border-white/80 bg-white/90 p-4">
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
               Best for
             </p>
             <p className="mt-2 text-sm leading-7 text-slate-900">
-              Boutique operators, furnished rentals, short-stay brands, and teams who
-              want a calmer digital experience.
+              Renters comparing options, hosts presenting listings, and operations
+              teams who need a clearer marketplace front door.
             </p>
           </div>
         </div>
@@ -64,7 +78,7 @@ export default function ServicesPage() {
         {serviceGroups.map((group, index) => (
           <article
             key={group.name}
-            className="rounded-[2rem] border border-white/75 bg-white/75 px-6 py-7 shadow-[0_18px_45px_rgba(79,70,229,0.08)] backdrop-blur"
+            className="rounded-[2rem] border border-slate-200 bg-white px-6 py-7 shadow-sm"
           >
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
               Service 0{index + 1}
@@ -77,25 +91,25 @@ export default function ServicesPage() {
         ))}
       </section>
 
-      <section className="mt-14 rounded-[2.5rem] border border-white/75 bg-white/78 px-7 py-9 shadow-[0_28px_70px_rgba(79,70,229,0.1)] backdrop-blur-xl sm:px-9">
+      <section className="mt-14 rounded-[2.5rem] border border-slate-200 bg-slate-50 px-7 py-9 shadow-sm sm:px-9">
         <div className="grid gap-7 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-indigo-600">
-              Need a tailored scope
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-violet-700">
+              Need a hand
             </p>
             <h2 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-slate-950">
-              We can shape the experience around your portfolio and workflow.
+              We can help you figure out the right path on the marketplace.
             </h2>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
-              If you already know which pages you need, or you want help deciding what
-              matters most, we can use the contact page as a starting point.
+              If you are trying to find a rental, list an asset, or understand how a
+              policy affects your booking flow, the contact page is the next stop.
             </p>
           </div>
           <Link
             href="/contact"
-            className="inline-flex h-14 items-center justify-center rounded-2xl bg-slate-950 px-6 text-sm font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.16)] transition hover:bg-slate-800"
+            className="inline-flex h-14 items-center justify-center rounded-2xl bg-violet-600 px-6 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/25"
           >
-            Discuss your project
+            Contact support
           </Link>
         </div>
       </section>

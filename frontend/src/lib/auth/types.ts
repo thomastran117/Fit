@@ -98,14 +98,21 @@ export interface ApiErrorResponse<TDetails = unknown> {
 }
 
 export class ApiError extends Error {
+  public readonly code: string;
+  public readonly status: number;
+  public readonly details?: unknown;
+
   constructor(
     message: string,
-    public readonly code: string,
-    public readonly status: number,
-    public readonly details?: unknown,
+    code: string,
+    status: number,
+    details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+    this.details = details;
   }
 }
 

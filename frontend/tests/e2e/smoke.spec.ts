@@ -18,10 +18,18 @@ test("homepage renders without backend auth dependencies", async ({ page }) => {
 
   await expect(
     page.getByRole("heading", {
-      name: "A home page system that looks like it belongs with your auth flow.",
+      name: "Find the right rental without the clutter.",
     }),
   ).toBeVisible();
-  await expect(page.getByRole("banner").getByRole("link", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: "Rentify" })).toBeVisible();
   await expect(page.getByRole("banner").getByRole("link", { name: "Browse" })).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: "How it works" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByRole("textbox", {
+      name: "Search rentals, equipment, and spaces",
+    }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "Log in" }).first()).toBeVisible();
 });

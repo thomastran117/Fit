@@ -10,6 +10,7 @@ import { useAuth } from "@/components/auth/auth-context";
 import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
 import type { AuthResponseBody } from "@/lib/auth/types";
+import { theme } from "@/styles/theme";
 
 interface LoginErrors {
   email?: string;
@@ -273,24 +274,24 @@ function LoginField({
 }: LoginFieldProps) {
   return (
     <div className="space-y-2">
-      <label htmlFor={id} className="text-sm font-medium text-slate-700">
+      <label htmlFor={id} className={theme.auth.fieldLabel}>
         {label}
       </label>
 
       <div
-        className={`relative rounded-2xl border bg-white/90 transition ${
+        className={`${theme.auth.fieldShell} ${
           error
-            ? "border-rose-300 ring-4 ring-rose-100"
+            ? theme.auth.fieldError
             : hasValue
               ? iconClassName
-              : "border-slate-200 hover:border-indigo-200"
+              : theme.auth.fieldDefault
         }`}
       >
         {icon}
         {children}
       </div>
 
-      {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+      {error ? <p className={theme.auth.fieldErrorText}>{error}</p> : null}
     </div>
   );
 }
@@ -369,7 +370,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
   if (status === "loading") {
     return (
-      <div className="rounded-full border border-white/70 bg-white/90 px-5 py-3 text-sm font-medium text-slate-600 shadow-lg backdrop-blur">
+      <div className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-600 shadow-sm">
         Preparing your workspace...
       </div>
     );
@@ -400,18 +401,14 @@ export function LoginForm({ nextPath }: LoginFormProps) {
       <AuthOAuthButtons onSuccess={handleOAuthSuccess} onError={setGeneralError} />
 
       <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-slate-200" />
-        <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-          Or use email
-        </span>
-        <div className="h-px flex-1 bg-slate-200" />
+        <div className={theme.auth.dividerLine} />
+        <span className={theme.auth.dividerText}>Or use email</span>
+        <div className={theme.auth.dividerLine} />
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
         {generalError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {generalError}
-          </div>
+          <div className={theme.auth.errorPanel}>{generalError}</div>
         ) : null}
 
         <LoginField
@@ -419,9 +416,9 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           label="Email"
           error={errors.email}
           hasValue={emailHasValue}
-          iconClassName="border-indigo-300 ring-4 ring-indigo-50"
+          iconClassName={theme.auth.fieldActive}
           icon={
-            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+            <div className={theme.auth.fieldIcon}>
               <MailIcon />
             </div>
           }
@@ -434,34 +431,31 @@ export function LoginForm({ nextPath }: LoginFormProps) {
             placeholder="you@example.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+            className={theme.auth.fieldInput}
           />
         </LoginField>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="password" className="text-sm font-medium text-slate-700">
+            <label htmlFor="password" className={theme.auth.fieldLabel}>
               Password
             </label>
 
-            <Link
-              href="/forgot-password"
-              className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
-            >
+            <Link href="/forgot-password" className={theme.auth.textLink}>
               Forgot password?
             </Link>
           </div>
 
           <div
-            className={`relative rounded-2xl border bg-white/90 transition ${
+            className={`${theme.auth.fieldShell} ${
               errors.password
-                ? "border-rose-300 ring-4 ring-rose-100"
+                ? theme.auth.fieldError
                 : passwordHasValue
-                  ? "border-sky-300 ring-4 ring-sky-50"
-                  : "border-slate-200 hover:border-sky-200"
+                  ? theme.auth.fieldActive
+                  : theme.auth.fieldDefault
             }`}
           >
-            <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-500">
+            <div className={theme.auth.fieldIcon}>
               <LockIcon />
             </div>
 
@@ -473,7 +467,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
               placeholder="Enter your password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="h-14 w-full rounded-2xl bg-transparent pl-12 pr-14 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+              className={theme.auth.fieldInputWithAction}
             />
 
             <button
@@ -481,13 +475,13 @@ export function LoginForm({ nextPath }: LoginFormProps) {
               aria-label={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
               onClick={() => setShowPassword((current) => !current)}
-              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              className={theme.auth.iconButton}
             >
               {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
             </button>
           </div>
 
-          {errors.password ? <p className="text-sm text-rose-700">{errors.password}</p> : null}
+          {errors.password ? <p className={theme.auth.fieldErrorText}>{errors.password}</p> : null}
         </div>
 
         <AuthCaptchaPanel
@@ -500,7 +494,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+          className={theme.auth.primaryButton}
         >
           {pending ? "Signing in..." : "Sign in"}
         </button>

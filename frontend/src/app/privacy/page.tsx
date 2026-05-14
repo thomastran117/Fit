@@ -33,29 +33,43 @@ export default function PrivacyPage() {
   return (
     <MarketingPageShell
       eyebrow="Privacy policy"
-      title="A readable privacy page that supports trust, not confusion."
-      description="This sample privacy page is structured to feel clear and calm while still covering the main expectations around collection, use, sharing, and retention."
+      title="Our privacy policy is written to explain what Rentify collects and why."
+      description="This page outlines how information is handled across account access, support flows, browsing activity, owner tools, and any messages you choose to send through the platform."
       accent="rgba(37,99,235,0.18)"
       aside={
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-indigo-600">
+          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-violet-700">
             Last updated
           </p>
           <p className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-slate-950">
-            April 17, 2026
+            May 13, 2026
           </p>
           <p className="mt-4 text-sm leading-7 text-slate-600">
-            Replace this content with your finalized legal language before going live.
+            Review and adapt this content with counsel before using it as your final
+            published policy.
           </p>
         </div>
       }
       ctaLabel="Contact about privacy"
+      ctaHref="/contact"
+      secondaryCtaLabel="Read terms"
+      secondaryCtaHref="/terms"
+      quickLinks={[
+        { href: "/accessibility", label: "Accessibility" },
+        { href: "/faq", label: "FAQ" },
+        { href: "/contact", label: "Contact" },
+      ]}
+      stats={[
+        { label: "Policy sections", value: "4" },
+        { label: "Applies to", value: "Site + accounts" },
+        { label: "Updated", value: "2026" },
+      ]}
     >
       <section className="grid gap-5">
         {privacySections.map((section) => (
           <article
             key={section.title}
-            className="rounded-[2rem] border border-white/75 bg-white/75 px-6 py-7 shadow-[0_18px_45px_rgba(79,70,229,0.08)] backdrop-blur"
+            className="rounded-[2rem] border border-slate-200 bg-white px-6 py-7 shadow-sm"
           >
             <h2 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950">
               {section.title}

@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/auth-context";
 import { useAuthCaptchaToken } from "@/lib/auth/captcha-store";
 import { authApi } from "@/lib/auth/api";
 import type { SignupVerificationPendingResult } from "@/lib/auth/types";
+import { theme } from "@/styles/theme";
 
 interface ApiErrorShape {
   status?: number;
@@ -199,7 +200,7 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
 
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 px-5 py-4 text-emerald-900">
+      <div className={theme.auth.successPanel}>
         <p className="text-sm font-semibold">Check your inbox</p>
         <p className="mt-2 text-sm leading-6">
           If {result.email} needs verification, we sent a 6-digit code.
@@ -211,19 +212,15 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
 
       <form className="space-y-5" onSubmit={handleVerify}>
         {generalError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {generalError}
-          </div>
+          <div className={theme.auth.errorPanel}>{generalError}</div>
         ) : null}
 
         {resentMessage ? (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-            {resentMessage}
-          </div>
+          <div className={theme.auth.infoPanel}>{resentMessage}</div>
         ) : null}
 
         <div className="space-y-2">
-          <label htmlFor="verificationCode" className="text-sm font-medium text-slate-700">
+          <label htmlFor="verificationCode" className={theme.auth.fieldLabel}>
             Verification code
           </label>
 
@@ -239,18 +236,18 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
             onChange={(event) =>
               setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
             }
-            className={`h-14 w-full rounded-2xl border bg-white/90 px-4 text-center text-[22px] tracking-[0.35em] text-slate-900 outline-none transition placeholder:tracking-normal placeholder:text-slate-400 ${
+            className={`h-14 w-full rounded-2xl border bg-white px-4 text-center text-[22px] tracking-[0.35em] text-slate-900 outline-none transition duration-200 placeholder:tracking-normal placeholder:text-slate-400 ${
               codeError
-                ? "border-rose-300 ring-4 ring-rose-100"
+                ? theme.auth.fieldError
                 : code.length > 0
-                  ? "border-indigo-300 ring-4 ring-indigo-50"
-                  : "border-slate-200 hover:border-indigo-200"
+                  ? theme.auth.fieldActive
+                  : theme.auth.fieldDefault
             }`}
           />
 
-          {codeError ? <p className="text-sm text-rose-700">{codeError}</p> : null}
+          {codeError ? <p className={theme.auth.fieldErrorText}>{codeError}</p> : null}
           {!codeError ? (
-            <p className="text-sm text-slate-500">
+            <p className={theme.auth.fieldText}>
               Enter the 6-digit code from your email to finish creating your account.
             </p>
           ) : null}
@@ -259,7 +256,7 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(99,102,241,0.28)] transition hover:scale-[0.995] hover:shadow-[0_20px_44px_rgba(99,102,241,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+          className={theme.auth.primaryButton}
         >
           {pending ? "Verifying..." : "Verify email"}
         </button>
@@ -282,15 +279,12 @@ export function SignupVerificationPanel({ result }: SignupVerificationPanelProps
         type="button"
         onClick={handleResend}
         disabled={resending}
-        className="inline-flex h-14 w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-5 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40 disabled:cursor-not-allowed disabled:opacity-60"
+        className={theme.auth.secondaryButton}
       >
         {resending ? "Sending new code..." : "Resend code"}
       </button>
 
-      <Link
-        href="/login"
-        className="inline-flex h-12 w-full items-center justify-center text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
-      >
+      <Link href="/login" className={theme.auth.tertiaryLink}>
         Back to sign in
       </Link>
     </div>
