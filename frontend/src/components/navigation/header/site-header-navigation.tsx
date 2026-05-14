@@ -13,7 +13,7 @@ export function SiteHeaderDesktopNav({
   pathname,
 }: SiteHeaderDesktopNavProps) {
   return (
-    <nav className="hidden min-w-0 items-center gap-0.5 md:flex">
+    <nav className={theme.header.desktopNav}>
       {navigationLinks.map((link) => {
         const active = isRouteActive(pathname, link.href);
 
@@ -39,7 +39,7 @@ export function SiteHeaderMobileNavGrid({
   pathname,
 }: SiteHeaderMobileNavGridProps) {
   return (
-    <div className="grid grid-cols-2 gap-1 sm:grid-cols-5">
+    <div className="grid grid-cols-2 gap-1">
       {navigationLinks.map((link) => {
         const active = isRouteActive(pathname, link.href);
 

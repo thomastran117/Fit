@@ -1,4 +1,3 @@
-import type { FormEvent } from "react";
 import Link from "next/link";
 import type { StoredAuthSession } from "@/lib/auth/types";
 import { theme } from "@/styles/theme";
@@ -6,7 +5,6 @@ import {
   SiteHeaderMobileAccountSection,
 } from "./site-header-account-panels";
 import { SiteHeaderMobileNavGrid } from "./site-header-navigation";
-import { SiteHeaderSearchForm } from "./site-header-search-form";
 import {
   type HeaderAccountLink,
   MenuIcon,
@@ -21,9 +19,6 @@ interface SiteHeaderMobileMenuProps {
   accountLinks: HeaderAccountLink[];
   logoutPending: boolean;
   onLogout: () => Promise<void>;
-  searchQuery: string;
-  onSearchQueryChange: (value: string) => void;
-  onSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
   mobileCtaHref: string;
   mobileCtaLabel: string;
 }
@@ -36,40 +31,27 @@ export function SiteHeaderMobileMenu({
   accountLinks,
   logoutPending,
   onLogout,
-  searchQuery,
-  onSearchQueryChange,
-  onSearchSubmit,
   mobileCtaHref,
   mobileCtaLabel,
 }: SiteHeaderMobileMenuProps) {
   return (
     <details className="group relative md:hidden">
-      <summary className={theme.header.menuButton}>
+      <summary
+        className={theme.header.iconButton}
+        aria-label="Open menu"
+      >
         <MenuIcon />
       </summary>
 
       <div className={theme.header.mobileDropdown}>
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
-          <SiteHeaderSearchForm
-            query={searchQuery}
-            onQueryChange={onSearchQueryChange}
-            onSubmit={onSearchSubmit}
-            variant="mobile"
-          />
+          <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Explore
+          </p>
 
-          <div className="border-t border-slate-200 py-3">
-            <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Explore
-            </p>
+          <SiteHeaderMobileNavGrid pathname={pathname} />
 
-            <SiteHeaderMobileNavGrid pathname={pathname} />
-          </div>
-
-          <div className="border-t border-slate-200 py-3">
-            <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Rentals
-            </p>
-
+          <div className="border-t border-slate-200 mt-3 pt-3">
             <Link href={mobileCtaHref} className={theme.header.mobileCta}>
               <span>{mobileCtaLabel}</span>
               <span
@@ -81,7 +63,7 @@ export function SiteHeaderMobileMenu({
             </Link>
           </div>
 
-          <div className="border-t border-slate-200 pt-3">
+          <div className="border-t border-slate-200 mt-3 pt-3">
             <SiteHeaderMobileAccountSection
               status={status}
               session={session}

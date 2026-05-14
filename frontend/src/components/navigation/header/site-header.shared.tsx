@@ -16,9 +16,8 @@ export type SiteHeaderAuthStatus = "loading" | "anonymous" | "authenticated";
 export type SiteHeaderUserRole = AuthResponseUser["role"];
 
 export const navigationLinks: HeaderNavigationLink[] = [
-  { href: "/", label: "Home" },
   { href: "/postings", label: "Browse" },
-  { href: "/about", label: "About" },
+  { href: "/how-it-works", label: "How it works" },
   { href: "/services", label: "Services" },
   { href: "/contact", label: "Contact" },
 ];
@@ -78,29 +77,27 @@ export function isRouteActive(pathname: string, href: string) {
 
 export function SiteHeaderLogo() {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2.5">
       <div className={theme.header.logoMark}>R</div>
-
-      <div className="min-w-0">
-        <p className="text-lg font-semibold tracking-[-0.04em] text-slate-950">
-          Rentify
-        </p>
-        <p className="hidden text-xs font-medium text-slate-500 sm:block">
-          Find rentals faster
-        </p>
-      </div>
+      <p className="text-lg font-semibold tracking-[-0.03em] text-slate-950">
+        Rentify
+      </p>
     </div>
   );
 }
 
-export function SearchIcon() {
+interface IconProps {
+  className?: string;
+}
+
+export function SearchIcon({ className = "h-4 w-4" }: IconProps = {}) {
   return (
     <svg
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.8"
-      className="h-4 w-4"
+      className={className}
       aria-hidden="true"
     >
       <path
@@ -108,6 +105,21 @@ export function SearchIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+export function CloseIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
     </svg>
   );
 }

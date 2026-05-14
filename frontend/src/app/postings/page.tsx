@@ -17,6 +17,13 @@ import {
   type PublicPostingSearchParams,
   type PublicPostingSearchResult,
 } from "@/lib/postings/search";
+import {
+  formatPostingPrice,
+  formatPublishedDate,
+  humanizePostingValue,
+  isRenderablePreviewImageUrl,
+} from "@/lib/postings/public-format";
+import { AvailabilityBadge } from "@/components/postings/availability-badge";
 import { theme } from "@/styles/theme";
 
 export const metadata: Metadata = {
@@ -118,10 +125,6 @@ function isPostingSort(value: string | undefined): value is PostingSort {
   return sortOptions.some((option) => option.value === value);
 }
 
-function humanize(value: string): string {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function buildSearchHref(
   input: PublicPostingSearchParams & { page: number; pageSize: number; sort: PostingSort },
 ): string {
@@ -152,35 +155,6 @@ function buildSearchHref(
   if (input.endAt) searchParams.set("endAt", input.endAt);
 
   return `/postings?${searchParams.toString()}`;
-}
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatPublishedDate(value?: string): string | null {
-  if (!value) return null;
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return null;
-
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(date);
-}
-
-function isRenderablePreviewImageUrl(value?: string): value is string {
-  if (!value) return false;
-
-  try {
-    const url = new URL(value);
-    return url.hostname !== "example.com";
-  } catch {
-    return false;
-  }
 }
 
 function resolveErrorDetails(
@@ -297,9 +271,9 @@ function ActiveFilters({
   const filters: string[] = [];
 
   if (q) filters.push(`Search: ${q}`);
-  if (family) filters.push(humanize(family));
-  if (subtype) filters.push(humanize(subtype));
-  if (availabilityStatus) filters.push(humanize(availabilityStatus));
+  if (family) filters.push(humanizePostingValue(family));
+  if (subtype) filters.push(humanizePostingValue(subtype));
+  if (availabilityStatus) filters.push(humanizePostingValue(availabilityStatus));
   if (minDailyPrice !== undefined || maxDailyPrice !== undefined) {
     filters.push(
       `Price: ${minDailyPrice ?? 0} - ${maxDailyPrice !== undefined ? maxDailyPrice : "Any"}`,
@@ -563,7 +537,7 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
                       })}
                       active={family === option}
                     >
-                      {humanize(option)}
+                      {humanizePostingValue(option)}
                     </FilterChip>
                   ))}
                 </div>
@@ -653,7 +627,7 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
                     <option value="">Any availability</option>
                     {availabilityStatusOptions.map((status) => (
                       <option key={status} value={status}>
-                        {humanize(status)}
+                        {humanizePostingValue(status)}
                       </option>
                     ))}
                   </select>
@@ -711,7 +685,7 @@ export default async function PostingsPage({ searchParams }: PostingsPageProps) 
                           <option value="">Any subtype</option>
                           {subtypeOptions.map((entry) => (
                             <option key={entry} value={entry}>
-                              {humanize(entry)}
+                              {humanizePostingValue(entry)}
                             </option>
                           ))}
                         </select>
@@ -1008,10 +982,10 @@ function SearchResults({
                       <div>
                         <div className="flex flex-wrap gap-2">
                           <span className={theme.marketplace.metaBadge}>
-                            {humanize(posting.variant.family)}
+                            {humanizePostingValue(posting.variant.family)}
                           </span>
                           <span className={theme.marketplace.metaBadge}>
-                            {humanize(posting.variant.subtype)}
+                            {humanizePostingValue(posting.variant.subtype)}
                           </span>
                         </div>
 
@@ -1023,7 +997,7 @@ function SearchResults({
                       <div className="flex flex-wrap items-center gap-2">
                         <AvailabilityBadge status={posting.availabilityStatus} />
                         <span className="text-lg font-semibold text-slate-950">
-                          {formatPrice(posting.pricing.daily.amount, posting.pricing.currency)}
+                          {formatPostingPrice(posting.pricing.daily.amount, posting.pricing.currency)}
                           <span className="text-xs font-normal text-slate-500"> / day</span>
                         </span>
                       </div>
@@ -1052,6 +1026,18 @@ function SearchResults({
                         ))}
                       </div>
                     ) : null}
+
+                    <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                      <p className="text-xs text-slate-500">
+                        Review pricing, availability, and listing details.
+                      </p>
+                      <Link
+                        href={`/postings/${posting.id}`}
+                        className={theme.marketplace.paginationButton}
+                      >
+                        View details
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </article>
@@ -1084,25 +1070,5 @@ function SearchResults({
         )}
       </div>
     </>
-  );
-}
-
-function AvailabilityBadge({ status }: { status: "available" | "limited" | "unavailable" }) {
-  const styles = {
-    available: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    limited: "border-amber-200 bg-amber-50 text-amber-700",
-    unavailable: "border-slate-200 bg-slate-100 text-slate-500",
-  };
-
-  const labels = {
-    available: "Available",
-    limited: "Limited",
-    unavailable: "Unavailable",
-  };
-
-  return (
-    <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
   );
 }

@@ -1,5 +1,16 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { MarketingHeroSearch } from "@/components/marketing/marketing-hero-search";
+
+interface MarketingPageStat {
+  label: string;
+  value: string;
+}
+
+interface MarketingPageQuickLink {
+  href: string;
+  label: string;
+}
 
 interface MarketingPageShellProps {
   eyebrow: string;
@@ -10,6 +21,10 @@ interface MarketingPageShellProps {
   aside?: ReactNode;
   ctaLabel?: string;
   ctaHref?: string;
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
+  quickLinks?: ReadonlyArray<MarketingPageQuickLink>;
+  stats?: ReadonlyArray<MarketingPageStat>;
 }
 
 export function MarketingPageShell({
@@ -21,58 +36,100 @@ export function MarketingPageShell({
   aside,
   ctaLabel = "Talk to our team",
   ctaHref = "/contact",
+  secondaryCtaLabel = "Browse rentals",
+  secondaryCtaHref = "/postings",
+  quickLinks = [],
+  stats = [],
 }: MarketingPageShellProps) {
   return (
-    <main className="relative overflow-hidden bg-[#f8fafc] text-slate-900">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_16%,_rgba(99,102,241,0.14),_transparent_22%),radial-gradient(circle_at_82%_18%,_rgba(56,189,248,0.16),_transparent_20%),radial-gradient(circle_at_50%_100%,_rgba(16,185,129,0.1),_transparent_26%),linear-gradient(180deg,#f8fafc_0%,#f6f8ff_35%,#eef6ff_100%)]" />
-      <div className="absolute left-[-8rem] top-16 h-72 w-72 rounded-full bg-indigo-200/30 blur-3xl" />
-      <div className="absolute right-[-6rem] top-20 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
-      <div className="absolute bottom-[-8rem] left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-emerald-200/20 blur-3xl" />
+    <main className="min-h-screen bg-white text-slate-950">
+      <section className="relative overflow-hidden border-b border-slate-200 bg-slate-50">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(124,58,237,0.12),transparent_28%),radial-gradient(circle_at_85%_20%,rgba(99,102,241,0.10),transparent_24%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]" />
+        <div className="absolute -left-14 top-10 h-44 w-44 rounded-full bg-violet-200/45 blur-3xl" />
+        <div className="absolute -right-14 top-14 h-56 w-56 rounded-full bg-indigo-200/40 blur-3xl" />
 
-      <section className="relative isolate border-b border-white/60 px-6 pb-20 pt-14 sm:pb-24 sm:pt-20">
-        <div
-          className="absolute inset-x-0 top-0 -z-10 h-[28rem]"
-          style={{
-            backgroundImage: `radial-gradient(circle at top left, ${accent}, transparent 54%)`,
-          }}
-          aria-hidden="true"
-        />
-        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[minmax(0,1.2fr)_22rem] lg:items-end">
+        <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-end lg:px-8 lg:py-24">
           <div>
-            <p className="inline-flex items-center rounded-full border border-indigo-200/60 bg-white/70 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 shadow-sm backdrop-blur">
+            <p className="inline-flex items-center rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-violet-700 shadow-sm">
               {eyebrow}
             </p>
-            <h1 className="mt-5 max-w-4xl text-5xl leading-none font-semibold tracking-[-0.055em] text-slate-950 sm:text-6xl lg:text-7xl">
+            <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-[-0.055em] text-slate-950 sm:text-6xl lg:text-7xl">
               {title}
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
+            <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
               {description}
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <MarketingHeroSearch />
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               <Link
                 href={ctaHref}
-                className="rounded-2xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.16)] transition hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/25"
               >
                 {ctaLabel}
               </Link>
               <Link
-                href="/services"
-                className="rounded-2xl border border-white/80 bg-white/80 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                href={secondaryCtaHref}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
               >
-                Explore services
+                {secondaryCtaLabel}
               </Link>
             </div>
+
+            {quickLinks.length ? (
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-slate-500">Quick links:</span>
+                {quickLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+
+            {stats.length ? (
+              <div className="mt-10 grid gap-4 sm:grid-cols-3">
+                {stats.map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm backdrop-blur"
+                  >
+                    <p className="text-3xl font-semibold tracking-[-0.04em] text-slate-950">
+                      {item.value}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {aside ? (
-            <aside className="rounded-[2rem] border border-white/75 bg-white/78 p-6 shadow-[0_28px_70px_rgba(79,70,229,0.1)] backdrop-blur-xl">
-              {aside}
+            <aside className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white/95 p-6 shadow-2xl shadow-slate-950/10 backdrop-blur sm:p-7">
+              <div
+                className="pointer-events-none absolute inset-x-6 top-0 h-24 rounded-b-[1.75rem] opacity-60 blur-2xl"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, ${accent}, rgba(255,255,255,0) 72%)`,
+                }}
+                aria-hidden="true"
+              />
+              <div
+                className="pointer-events-none absolute inset-x-10 top-0 h-px"
+                style={{
+                  backgroundImage: `linear-gradient(90deg, rgba(255,255,255,0), ${accent}, rgba(255,255,255,0))`,
+                }}
+                aria-hidden="true"
+              />
+              <div className="relative">{aside}</div>
             </aside>
           ) : null}
         </div>
       </section>
 
-      <div className="relative px-6 py-14 sm:py-18">
+      <div className="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-7xl">{children}</div>
       </div>
     </main>

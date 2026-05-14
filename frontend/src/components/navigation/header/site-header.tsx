@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useAuth } from "@/components/auth/auth-context";
 import { authApi } from "@/lib/auth/api";
 import { ApiError } from "@/lib/auth/types";
@@ -12,8 +17,10 @@ import { SiteHeaderMobileMenu } from "./site-header-mobile-menu";
 import { SiteHeaderDesktopNav } from "./site-header-navigation";
 import { SiteHeaderSearchForm } from "./site-header-search-form";
 import {
+  CloseIcon,
   getAccountLinks,
   getDisplayLabel,
+  SearchIcon,
   SiteHeaderLogo,
 } from "./site-header.shared";
 
@@ -23,6 +30,8 @@ export function SiteHeader() {
   const { status, session, clearSession } = useAuth();
   const [logoutPending, setLogoutPending] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
 
   const accountLinks = getAccountLinks(session?.user.role);
   const displayName = session
@@ -36,8 +45,30 @@ export function SiteHeader() {
     ? "Create posting"
     : "List a rental";
 
+  useEffect(() => {
+    if (mobileSearchOpen) {
+      mobileSearchInputRef.current?.focus();
+    }
+  }, [mobileSearchOpen]);
+
+  useEffect(() => {
+    if (!mobileSearchOpen) {
+      return;
+    }
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMobileSearchOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [mobileSearchOpen]);
+
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setMobileSearchOpen(false);
 
     const query = searchQuery.trim();
 
@@ -73,13 +104,11 @@ export function SiteHeader() {
   return (
     <header className={theme.header.shell}>
       <div className={theme.header.container}>
-        <div className="flex min-w-0 flex-1 items-center gap-5">
-          <Link href="/" className="group shrink-0">
-            <SiteHeaderLogo />
-          </Link>
+        <Link href="/" className="group shrink-0">
+          <SiteHeaderLogo />
+        </Link>
 
-          <SiteHeaderDesktopNav pathname={pathname} />
-        </div>
+        <SiteHeaderDesktopNav pathname={pathname} />
 
         <SiteHeaderSearchForm
           query={searchQuery}
@@ -88,21 +117,16 @@ export function SiteHeader() {
           variant="desktop"
         />
 
-        <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
-          <SiteHeaderMobileMenu
-            pathname={pathname}
-            status={status}
-            session={session}
-            displayName={displayName}
-            accountLinks={accountLinks}
-            logoutPending={logoutPending}
-            onLogout={handleLogout}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            onSearchSubmit={handleSearch}
-            mobileCtaHref={mobileCtaHref}
-            mobileCtaLabel={mobileCtaLabel}
-          />
+        <div className={theme.header.rightCluster}>
+          <button
+            type="button"
+            onClick={() => setMobileSearchOpen((open) => !open)}
+            className={`${theme.header.iconButton} lg:hidden`}
+            aria-label={mobileSearchOpen ? "Close search" : "Open search"}
+            aria-expanded={mobileSearchOpen}
+          >
+            {mobileSearchOpen ? <CloseIcon /> : <SearchIcon className="h-5 w-5" />}
+          </button>
 
           <SiteHeaderDesktopAccount
             pathname={pathname}
@@ -113,8 +137,32 @@ export function SiteHeader() {
             logoutPending={logoutPending}
             onLogout={handleLogout}
           />
+
+          <SiteHeaderMobileMenu
+            pathname={pathname}
+            status={status}
+            session={session}
+            displayName={displayName}
+            accountLinks={accountLinks}
+            logoutPending={logoutPending}
+            onLogout={handleLogout}
+            mobileCtaHref={mobileCtaHref}
+            mobileCtaLabel={mobileCtaLabel}
+          />
         </div>
       </div>
+
+      {mobileSearchOpen ? (
+        <div className={theme.header.mobileSearchPanel}>
+          <SiteHeaderSearchForm
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            onSubmit={handleSearch}
+            variant="mobile"
+            inputRef={mobileSearchInputRef}
+          />
+        </div>
+      ) : null}
     </header>
   );
 }

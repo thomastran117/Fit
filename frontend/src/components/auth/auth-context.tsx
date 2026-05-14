@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -40,6 +41,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
   const [isInitialSessionRestorePending, setIsInitialSessionRestorePending] = useState(true);
 
+  const handleInitialRestoreComplete = useCallback(() => {
+    setIsInitialSessionRestorePending(false);
+  }, []);
+
   const status: AuthStatus =
     session === undefined || isInitialSessionRestorePending
       ? "loading"
@@ -65,9 +70,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     <AuthContext.Provider value={value}>
       <SessionManager
         session={session}
-        onComplete={() => {
-          setIsInitialSessionRestorePending(false);
-        }}
+        onComplete={handleInitialRestoreComplete}
       />
       {children}
     </AuthContext.Provider>

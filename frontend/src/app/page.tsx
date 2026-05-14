@@ -54,6 +54,49 @@ const featuredPostings = [
   },
 ];
 
+const sitePages = [
+  {
+    title: "How it works",
+    description: "See the renter and owner journey in one clean overview.",
+    href: "/how-it-works",
+  },
+  {
+    title: "Services",
+    description: "Explore the product capabilities that support search, listings, and trust.",
+    href: "/services",
+  },
+  {
+    title: "About",
+    description: "Learn what Rentify is trying to improve about rental discovery.",
+    href: "/about",
+  },
+  {
+    title: "FAQ",
+    description: "Get practical answers to common marketplace questions.",
+    href: "/faq",
+  },
+  {
+    title: "Contact",
+    description: "Reach support for renter questions, owner setup, or partnerships.",
+    href: "/contact",
+  },
+  {
+    title: "Accessibility",
+    description: "Read our accessibility commitment and request support when needed.",
+    href: "/accessibility",
+  },
+  {
+    title: "Privacy",
+    description: "Understand how data is handled across the site and account flows.",
+    href: "/privacy",
+  },
+  {
+    title: "Terms",
+    description: "Review the marketplace rules, responsibilities, and limitations.",
+    href: "/terms",
+  },
+];
+
 const benefits = [
   {
     title: "Search with less friction",
@@ -234,7 +277,7 @@ export default function Home() {
                   </div>
                   <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
                     <p className="text-xs text-slate-300">Area</p>
-                    <p className="mt-1 font-semibold">1.2k ft²</p>
+                    <p className="mt-1 font-semibold">1.2k sq ft</p>
                   </div>
                 </div>
               </div>
@@ -417,6 +460,48 @@ export default function Home() {
               </div>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div>
+            <p className="text-sm font-semibold text-violet-700">
+              Core pages
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+              The rest of the site now carries the same design system.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+              From about and contact to legal and accessibility pages, the core
+              marketing surface is now part of the same polished web experience.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {sitePages.map((page) => (
+              <Link
+                key={page.href}
+                href={page.href}
+                className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl hover:shadow-slate-950/5"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                      {page.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {page.description}
+                    </p>
+                  </div>
+
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-700 transition duration-200 group-hover:translate-x-1 group-hover:bg-violet-600 group-hover:text-white">
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 

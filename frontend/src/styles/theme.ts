@@ -35,70 +35,82 @@ export const theme = {
       "sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl transition-shadow duration-200 supports-[backdrop-filter]:bg-white/80",
 
     container:
-      "mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8",
+      "mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:gap-6 lg:px-8",
 
     logoMark:
-      "flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold tracking-[0.12em] text-white shadow-sm shadow-violet-600/20 transition duration-200 group-hover:scale-105 group-hover:shadow-md group-hover:shadow-violet-600/25",
+      "flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-sm font-bold tracking-[0.12em] text-white shadow-sm shadow-violet-600/20 transition duration-200 group-hover:scale-105 group-hover:shadow-md group-hover:shadow-violet-600/25",
+
+    desktopNav:
+      "hidden shrink-0 items-center gap-1 md:flex",
 
     navLink:
-      "rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-slate-950",
+      "relative rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition duration-200 hover:text-slate-950",
 
     navLinkActive:
-      "rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition duration-200 hover:-translate-y-0.5",
+      "relative rounded-md px-3 py-2 text-sm font-semibold text-violet-700 after:absolute after:inset-x-3 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-violet-600",
+
+    searchForm:
+      "hidden min-w-0 flex-1 lg:flex lg:max-w-[22rem] xl:max-w-[26rem]",
 
     searchWrapper:
-      "group flex h-11 w-full min-w-[360px] max-w-xl items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 transition duration-200 focus-within:scale-[1.01] focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10 xl:min-w-[440px]",
+      "group flex h-10 w-full min-w-0 items-center gap-2.5 rounded-full border border-slate-200 bg-slate-50 px-4 transition duration-200 focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10",
+
+    mobileSearchPanel:
+      "border-t border-slate-200 bg-white px-4 py-3 sm:px-6 lg:hidden",
 
     mobileSearchWrapper:
-      "group flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 transition duration-200 focus-within:scale-[1.01] focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10",
+      "group flex h-11 w-full items-center gap-2.5 rounded-full border border-slate-200 bg-slate-50 px-4 transition duration-200 focus-within:border-violet-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-500/10",
 
     searchIcon:
       "text-slate-400 transition duration-200 group-focus-within:text-violet-600",
 
     searchInput:
-      "min-w-0 flex-1 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400",
+      "min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-400",
 
-    searchButton:
-      "rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/25 active:translate-y-0",
+    searchSubmit:
+      "shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-violet-600/20 transition duration-200 hover:bg-violet-700",
 
-    secondaryAction:
-      "rounded-lg px-3 py-2 text-sm font-semibold text-violet-700 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-50",
+    rightCluster:
+      "ml-auto flex shrink-0 items-center gap-1.5 md:gap-2 lg:ml-0",
 
-    menuButton:
-      "flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-sm transition duration-200 hover:scale-105 hover:bg-slate-50 active:scale-95",
+    iconButton:
+      "flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full text-slate-700 transition duration-200 hover:bg-slate-100 active:scale-95",
 
     mobileDropdown:
-      "fixed left-0 right-0 top-16 z-50 border-b border-slate-200 bg-white shadow-xl shadow-slate-950/10 animate-mobile-dropdown-in",
+      "fixed left-0 right-0 top-16 z-50 max-h-[calc(100vh-4rem)] overflow-y-auto border-b border-slate-200 bg-white shadow-xl shadow-slate-950/10 animate-mobile-dropdown-in",
 
     dropdown:
-      "absolute right-0 top-[calc(100%+0.75rem)] w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10 animate-dropdown-in",
+      "absolute right-0 top-[calc(100%+0.5rem)] w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10 animate-dropdown-in",
 
     dropdownHighlight:
       "rounded-xl border border-violet-100 bg-violet-50 p-3",
 
     dropdownItem:
-      "rounded-xl px-3 py-2.5 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-100",
+      "block rounded-xl px-3 py-2 transition duration-200 hover:bg-slate-100",
 
     logoutButton:
-      "cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm font-medium text-rose-700 transition duration-200 hover:-translate-y-0.5 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60",
+      "w-full cursor-pointer rounded-xl px-3 py-2 text-left text-sm font-medium text-rose-700 transition duration-200 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60",
 
     mobileNavLink:
-      "rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-100 hover:text-slate-950",
+      "rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition duration-200 hover:bg-slate-100 hover:text-slate-950",
 
     mobileNavLinkActive:
-      "rounded-xl bg-violet-50 px-3 py-2.5 text-sm font-semibold text-violet-700 transition duration-200 hover:-translate-y-0.5",
+      "rounded-xl bg-violet-50 px-3 py-2.5 text-sm font-semibold text-violet-700",
 
     mobileCta:
-      "group flex items-center justify-between rounded-xl bg-violet-600 px-3 py-2.5 text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md hover:shadow-violet-600/20 active:translate-y-0",
+      "group flex items-center justify-between rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition duration-200 hover:bg-violet-700",
 
     desktopAccountTrigger:
-      "flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2 shadow-sm transition duration-200 hover:scale-[1.02] hover:bg-slate-50 active:scale-[0.98]",
+      "flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full transition duration-200 hover:ring-4 hover:ring-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200",
 
-    authButton:
-      "rounded-xl border border-slate-200 px-3 py-2.5 text-center text-sm font-medium text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50",
+    avatarSkeleton:
+      "h-9 w-9 animate-pulse rounded-full bg-slate-200",
 
     authButtonDark:
       "rounded-xl bg-slate-950 px-3 py-2.5 text-center text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800",
+
+    authLinkPrimary:
+      "rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition duration-200 hover:bg-slate-800",
   },
 
   footer: {

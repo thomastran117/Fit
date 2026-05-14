@@ -1,5 +1,4 @@
 import { ExternalLink, Mail } from "lucide-react";
-import { navigationLinks } from "@/components/navigation/header/site-header.shared";
 
 function InstagramIcon({ size = 17 }: { size?: number }) {
   return (
@@ -60,21 +59,34 @@ export interface FooterLinkGroupData {
 export const footerLinkGroups: ReadonlyArray<FooterLinkGroupData> = [
   {
     title: "Explore",
-    links: navigationLinks,
+    links: [
+      { href: "/", label: "Home" },
+      { href: "/postings", label: "Browse" },
+      { href: "/how-it-works", label: "How it works" },
+      { href: "/faq", label: "FAQ" },
+    ],
   },
   {
-    title: "Account",
+    title: "Company",
     links: [
-      { href: "/login", label: "Log in" },
-      { href: "/signup", label: "Sign up" },
+      { href: "/about", label: "About" },
+      { href: "/services", label: "Services" },
+      { href: "/contact", label: "Contact" },
+    ],
+  },
+  {
+    title: "Support",
+    links: [
+      { href: "/accessibility", label: "Accessibility" },
       { href: "/contact", label: "Support" },
+      { href: "/login", label: "Log in" },
     ],
   },
   {
     title: "Legal",
     links: [
       { href: "/privacy", label: "Privacy" },
-      { href: "/terms-and-conditions", label: "Terms" },
+      { href: "/terms", label: "Terms" },
     ],
   },
 ];

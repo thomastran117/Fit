@@ -16,8 +16,11 @@ export function SiteFooterMetaBar({
         <Link href="/privacy" className={theme.footer.legalLink}>
           Privacy
         </Link>
-        <Link href="/terms-and-conditions" className={theme.footer.legalLink}>
+        <Link href="/terms" className={theme.footer.legalLink}>
           Terms
+        </Link>
+        <Link href="/accessibility" className={theme.footer.legalLink}>
+          Accessibility
         </Link>
       </div>
     </div>

@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { StoredAuthSession } from "@/lib/auth/types";
 import { theme } from "@/styles/theme";
 import {
-  ChevronDownIcon,
   type HeaderAccountLink,
   type SiteHeaderAuthStatus,
   UserAvatar,
@@ -99,31 +98,22 @@ export function SiteHeaderDesktopAccount({
   onLogout,
 }: SiteHeaderDesktopAccountProps) {
   if (status === "loading") {
-    return (
-      <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 md:block">
-        Loading...
-      </div>
-    );
+    return <div className={theme.header.avatarSkeleton} aria-hidden="true" />;
   }
 
   if (status === "authenticated" && session) {
+    const avatarName = session.user.username || session.user.email;
+
     return (
-      <details className="group relative hidden md:block">
-        <summary className={theme.header.desktopAccountTrigger}>
+      <details className="group relative">
+        <summary
+          className={theme.header.desktopAccountTrigger}
+          aria-label={`${displayName} account menu`}
+        >
           <UserAvatar
-            name={session.user.username || session.user.email}
+            name={avatarName}
             imageUrl={session.user.avatarUrl ?? null}
           />
-
-          <div className="hidden min-w-0 text-left lg:block">
-            <p className="max-w-32 truncate text-sm font-medium text-slate-950">
-              {displayName}
-            </p>
-          </div>
-
-          <div className="hidden text-slate-500 transition duration-200 group-open:rotate-180 lg:block">
-            <ChevronDownIcon />
-          </div>
         </summary>
 
         <div className={theme.header.dropdown}>
@@ -146,23 +136,17 @@ export function SiteHeaderDesktopAccount({
     );
   }
 
-  return (
-    <div className="hidden items-center gap-2 md:flex">
-      <Link
-        href="/login"
-        className={`rounded-lg px-3 py-2 text-sm font-medium transition duration-200 hover:-translate-y-0.5 ${
-          pathname === "/login"
-            ? "bg-slate-100 text-slate-950"
-            : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-        }`}
-      >
-        Log in
-      </Link>
+  if (pathname === "/login") {
+    return null;
+  }
 
-      <Link href="/signup" className={theme.header.secondaryAction}>
-        Sign up
-      </Link>
-    </div>
+  return (
+    <Link
+      href="/login"
+      className={`hidden md:inline-flex ${theme.header.authLinkPrimary}`}
+    >
+      Log in
+    </Link>
   );
 }
 
@@ -199,7 +183,7 @@ export function SiteHeaderMobileAccountSection({
           descriptionClassName="mt-0.5 text-xs text-slate-500"
           logoutPending={logoutPending}
           onLogout={onLogout}
-          wrapperClassName="grid gap-1 sm:grid-cols-2"
+          wrapperClassName="grid gap-1"
         />
       </>
     );
@@ -211,15 +195,9 @@ export function SiteHeaderMobileAccountSection({
         Account
       </p>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Link href="/login" className={theme.header.authButton}>
-          Log in
-        </Link>
-
-        <Link href="/signup" className={theme.header.authButtonDark}>
-          Sign up
-        </Link>
-      </div>
+      <Link href="/login" className={`${theme.header.authButtonDark} block`}>
+        Log in
+      </Link>
     </>
   );
 }
